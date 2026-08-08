@@ -1910,12 +1910,25 @@ function saveCloudSubjectsStore(store) {
     localStorage.setItem('mgm_cloud_subjects', JSON.stringify(store));
 }
 
-function sendSubjectToCloud(action, deptCode, yearStr, subjName) {
+function getElectiveFlagsStore() {
+    try {
+        return JSON.parse(localStorage.getItem('mgm_elective_flags') || '{}');
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveElectiveFlagsStore(store) {
+    localStorage.setItem('mgm_elective_flags', JSON.stringify(store));
+}
+
+function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective) {
     const payload = {
         action: action,
         stream: deptCode,
         year: yearStr,
-        subject: subjName
+        subject: subjName,
+        isElective: isElective === true || isElective === 'true'
     };
     const targetUrl = getWebhookUrl(deptCode);
 
@@ -1957,6 +1970,7 @@ function sendSubjectToCloud(action, deptCode, yearStr, subjName) {
             stream: deptCode,
             year: yearStr,
             subject: subjName,
+            isElective: payload.isElective ? 'true' : 'false',
             callback: cbName
         });
 
@@ -1995,6 +2009,12 @@ function fetchCloudSubjects() {
 
             if (data.deletedSubjects) {
                 saveDeletedSubjectsStore(data.deletedSubjects);
+            }
+
+            if (data.electiveSubjects) {
+                const flags = getElectiveFlagsStore();
+                Object.assign(flags, data.electiveSubjects);
+                saveElectiveFlagsStore(flags);
             }
 
             const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
@@ -2118,9 +2138,19 @@ function updateSubjectDropdowns(subjects, defaultSubject) {
     });
 }
 
-function isElectiveOrLanguageSubject(subjectVal) {
+function isElectiveOrLanguageSubject(subjectVal, deptCode, yearStr) {
     if (!subjectVal) return false;
-    return /\b(kannada|hindi|sanskrit|devops|wcms|ost|open source|digital fluency|cyber security|e-filing|efiling|journalism|optional english|human rights|elective|lab|practical)\b/i.test(subjectVal);
+    const dept = deptCode || currentDept || 'BCA';
+    const yr = yearStr || (directYearSelect ? directYearSelect.value : 'First Year');
+    const key = (dept + '_' + yr + '_' + subjectVal.trim()).toLowerCase();
+
+    const flags = getElectiveFlagsStore();
+    if (flags[key] !== undefined) {
+        return Boolean(flags[key]);
+    }
+
+    // Default fallback regex (EXCLUDING lab & practical)
+    return /\b(kannada|hindi|sanskrit|devops|wcms|ost|open source|digital fluency|cyber security|e-filing|efiling|journalism|optional english|human rights|elective)\b/i.test(subjectVal);
 }
 
 function checkLanguageElectiveAutoCombined(subjectVal, sectionSelectElem) {
@@ -2452,6 +2482,8 @@ function initSubjectManager() {
                 return;
             }
             const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
+            const isElecCheckbox = document.getElementById('newSubjectIsElectiveCheckbox');
+            const isElecChecked = isElecCheckbox ? isElecCheckbox.checked : false;
 
             const store = getCustomSubjectsStore();
             if (!store[currentDept]) store[currentDept] = {};
@@ -2462,14 +2494,20 @@ function initSubjectManager() {
                 saveCustomSubjectsStore(store);
             }
 
-            sendSubjectToCloud('add_subject', currentDept, activeYear, val)
+            const key = (currentDept + '_' + activeYear + '_' + val.trim()).toLowerCase();
+            const flags = getElectiveFlagsStore();
+            flags[key] = isElecChecked;
+            saveElectiveFlagsStore(flags);
+
+            sendSubjectToCloud('add_subject', currentDept, activeYear, val, isElecChecked)
                 .catch(e => console.warn('Subject add cloud sync error:', e));
 
             newSubjectInput.value = '';
+            if (isElecCheckbox) isElecCheckbox.checked = false;
             renderSubjectChips();
             const yearSubjects = getSubjectsForActiveYear(currentDept, activeYear);
             updateSubjectDropdowns(yearSubjects, val);
-            showCustomToast('⚡ Subject Synced to All Devices!', `"${val}" added to ${currentDept} ${activeYear} across the college.`);
+            showCustomToast('⚡ Subject Synced to All Devices!', `"${val}" added as ${isElecChecked ? 'Combined Elective' : 'Section Subject'}.`);
         });
     }
 
@@ -2509,7 +2547,43 @@ function renderSubjectChips() {
     subjects.forEach(subj => {
         const chip = document.createElement('div');
         chip.className = 'subject-chip-tag';
-        chip.textContent = subj;
+        chip.style.display = 'inline-flex';
+        chip.style.alignItems = 'center';
+        chip.style.gap = '6px';
+
+        const isElec = isElectiveOrLanguageSubject(subj, currentDept, activeYear);
+
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = subj;
+        chip.appendChild(nameSpan);
+
+        const badgeBtn = document.createElement('button');
+        badgeBtn.type = 'button';
+        badgeBtn.style.cssText = 'font-size: 0.68rem; padding: 2px 6px; border-radius: 12px; cursor: pointer; border: 1px solid rgba(255,255,255,0.2); font-weight: 600; line-height: 1; margin: 0;';
+        if (isElec) {
+            badgeBtn.textContent = '⚡ Combined';
+            badgeBtn.style.background = 'rgba(234, 179, 8, 0.2)';
+            badgeBtn.style.color = '#eab308';
+        } else {
+            badgeBtn.textContent = '📌 Section';
+            badgeBtn.style.background = 'rgba(59, 130, 246, 0.2)';
+            badgeBtn.style.color = '#60a5fa';
+        }
+        badgeBtn.title = 'Click to toggle between Combined Elective (across sections) and Section-Specific';
+        badgeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const nextState = !isElec;
+            const key = (currentDept + '_' + activeYear + '_' + subj.trim()).toLowerCase();
+            const flags = getElectiveFlagsStore();
+            flags[key] = nextState;
+            saveElectiveFlagsStore(flags);
+            sendSubjectToCloud('add_subject', currentDept, activeYear, subj, nextState);
+            renderSubjectChips();
+            const yearSubjects = getSubjectsForActiveYear(currentDept, activeYear);
+            updateSubjectDropdowns(yearSubjects, subj);
+            showCustomToast('⚡ Subject Mode Updated', `"${subj}" set to ${nextState ? 'Combined Elective' : 'Section Subject'}.`);
+        });
+        chip.appendChild(badgeBtn);
 
         const delBtn = document.createElement('button');
         delBtn.className = 'subject-chip-del';
