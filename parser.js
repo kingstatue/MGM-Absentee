@@ -27,7 +27,7 @@ const COMMON_SUBJECTS = [
 
     // B.A. Subjects
     'History', 'Political Science', 'Sociology', 'Economics', 'Journalism', 
-    'Optional English', 'Kannada', 'Hindi', 'Sanskrit', 'Human Rights',
+    'Optional English', 'Kannada', 'Hindi', 'Sanskrit', 'Sanskrith', 'Human Rights',
 
     // B.Sc. Subjects
     'Physics', 'Chemistry', 'Botany', 'Zoology', 'Electronics', 'Statistics', 
@@ -95,11 +95,27 @@ function parseAttendanceSpeech(text, activeDept) {
         year = 'First Year';
     }
 
-    // 2. Extract Section
-    const isLangOrElectiveSubj = /\b(kannada|hindi|sanskrit|devops|wcms|ost|open source|digital fluency|cyber security|e-filing|efiling|journalism|optional english|human rights|elective)\b/i.test(lowerText)
-        || (subject && /\b(kannada|hindi|sanskrit|devops|wcms|ost|open source|digital fluency|cyber security|e-filing|efiling|journalism|optional english|human rights|elective)\b/i.test(subject));
+    // 2. Extract Subject (Extracted before Section to check elective status accurately)
+    let subject = '';
+    for (const subj of COMMON_SUBJECTS) {
+        const safeSubj = escapeRegex(subj.toLowerCase());
+        if (new RegExp(`(?:\\b|\\s)${safeSubj}(?:\\b|\\s)`, 'i').test(lowerText) || lowerText.includes(subj.toLowerCase())) {
+            subject = subj;
+            break;
+        }
+    }
+    if (!subject) {
+        const subjPhrase = lowerText.match(/(?:subject|course)\s+([a-z0-9\s]+?)(?=\s+(?:slot|period|roll|section|year|absent)|$)/i);
+        if (subjPhrase && subjPhrase[1]) {
+            subject = capitalizeWords(subjPhrase[1].trim());
+        }
+    }
 
-    if (isLangOrElectiveSubj) {
+    // 3. Extract Section
+    const ELECTIVE_LANG_REGEX = /\b(kannada|kanada|kan|hindi|hindhi|hin|sanskrit|sanskrith|sansk|sans|devops|wcms|ost|open\s*source|digital\s*fluency|cyber\s*security|e-?filing|journalism|optional\s*english|human\s*rights|elective)\b/i;
+    const isLangOrElectiveSubj = ELECTIVE_LANG_REGEX.test(lowerText) || (subject && ELECTIVE_LANG_REGEX.test(subject));
+
+    if (isLangOrElectiveSubj && !/\b(sec\s*[a-c]|section\s*[a-c])\b/i.test(lowerText)) {
         section = 'ALL';
     } else {
         const sectionMatch = lowerText.match(/(?:section|sec|class)\s*([a-c]|all|combined)\b/i) || lowerText.match(/\b([a-c]|all|combined)\s*(?:section|sec)\b/i);
@@ -115,7 +131,7 @@ function parseAttendanceSpeech(text, activeDept) {
         }
     }
 
-    // 3. Extract Slot (1 to 8 or explicit time range)
+    // 4. Extract Slot (1 to 8 or explicit time range)
     let slot = '';
     for (const timePattern of SLOT_TIME_PATTERNS) {
         if (timePattern.regex.test(lowerText)) {
@@ -138,22 +154,6 @@ function parseAttendanceSpeech(text, activeDept) {
                     }
                 }
             }
-        }
-    }
-
-    // 4. Extract Subject
-    let subject = '';
-    for (const subj of COMMON_SUBJECTS) {
-        const safeSubj = escapeRegex(subj.toLowerCase());
-        if (new RegExp(`(?:\\b|\\s)${safeSubj}(?:\\b|\\s)`, 'i').test(lowerText) || lowerText.includes(subj.toLowerCase())) {
-            subject = subj;
-            break;
-        }
-    }
-    if (!subject) {
-        const subjPhrase = lowerText.match(/(?:subject|course)\s+([a-z0-9\s]+?)(?=\s+(?:slot|period|roll|section|year|absent)|$)/i);
-        if (subjPhrase && subjPhrase[1]) {
-            subject = capitalizeWords(subjPhrase[1].trim());
         }
     }
 

@@ -697,6 +697,7 @@ function autoProcessSpeech(text) {
     directSectionSelect.value = parsedData.section || 'A';
     setSubjectValue(directSubjectInput, parsedData.subject || deptConfig.defaultSubject);
     directSlotSelect.value = parsedData.slot ? parsedData.slot.toString() : '1';
+    checkLanguageElectiveAutoCombined(directSubjectInput.value, directSectionSelect, directYearSelect);
 
     const directMultiSlotWrapper = document.getElementById('directMultiSlotContainer');
     const directMultiSlotBreakdown = document.getElementById('directMultiSlotBreakdown');
@@ -2142,32 +2143,64 @@ function isElectiveOrLanguageSubject(subjectVal, deptCode, yearStr) {
     if (!subjectVal) return false;
     const dept = deptCode || currentDept || 'BCA';
     const yr = yearStr || (directYearSelect ? directYearSelect.value : 'First Year');
-    const key = (dept + '_' + yr + '_' + subjectVal.trim()).toLowerCase();
+    const cleanSubj = subjectVal.trim().toLowerCase();
 
+    // 1. Check exact key (Dept + Year + Subject)
+    const key = (dept + '_' + yr + '_' + cleanSubj).toLowerCase();
     const flags = getElectiveFlagsStore();
     if (flags[key] !== undefined) {
         return Boolean(flags[key]);
     }
 
-    // Default fallback regex (EXCLUDING lab & practical)
-    return /\b(kannada|hindi|sanskrit|devops|wcms|ost|open source|digital fluency|cyber security|e-filing|efiling|journalism|optional english|human rights|elective)\b/i.test(subjectVal);
+    // 2. Check general subject name key across any dept/year or store
+    for (let fKey in flags) {
+        if (fKey === cleanSubj || fKey.endsWith('_' + cleanSubj)) {
+            return Boolean(flags[fKey]);
+        }
+    }
+
+    // 3. Fallback regex matching languages & electives (EXCLUDING lab & practical)
+    return /\b(kannada|kanada|kan|hindi|hindhi|hin|sanskrit|sanskrith|sansk|sans|devops|wcms|ost|open\s*source|digital\s*fluency|cyber\s*security|e-?filing|journalism|optional\s*english|human\s*rights|elective)\b/i.test(subjectVal);
 }
 
-function checkLanguageElectiveAutoCombined(subjectVal, sectionSelectElem) {
+function checkLanguageElectiveAutoCombined(subjectVal, sectionSelectElem, yearSelectElem) {
     if (!subjectVal || !sectionSelectElem) return;
-    if (isElectiveOrLanguageSubject(subjectVal)) {
+    const yrVal = yearSelectElem ? yearSelectElem.value : (directYearSelect ? directYearSelect.value : 'First Year');
+    const isElec = isElectiveOrLanguageSubject(subjectVal, currentDept, yrVal);
+
+    if (isElec) {
         if (sectionSelectElem.value !== 'ALL') {
             sectionSelectElem.value = 'ALL';
             showCustomToast(
-                'ℹ️ Elective Subject Auto-Combined',
+                'ℹ️ Combined Elective / Language Auto-Selected',
                 `"${subjectVal}" is a combined elective across sections. Automatically set to Combined (ALL).`
             );
         }
     } else {
-        // Core subjects (e.g. Maths, Java, DBMS) must NOT be Combined (ALL). Reset to Section A.
+        // Core/Lab subjects (e.g. Maths, Java Lab) must NOT be Combined (ALL). Reset to Section A.
         if (sectionSelectElem.value === 'ALL') {
             sectionSelectElem.value = 'A';
         }
+    }
+}
+
+function setSubjectValue(selectEl, subjectVal) {
+    if (!selectEl || !subjectVal || !selectEl.options) return;
+    let matchingOpt = Array.from(selectEl.options).find(o => o.value && o.value.toLowerCase() === subjectVal.toLowerCase());
+    if (matchingOpt) {
+        selectEl.value = matchingOpt.value;
+    } else {
+        const customOpt = document.createElement('option');
+        customOpt.value = subjectVal;
+        customOpt.textContent = subjectVal;
+        selectEl.appendChild(customOpt);
+        selectEl.value = subjectVal;
+    }
+
+    if (selectEl === directSubjectInput && directSectionSelect) {
+        checkLanguageElectiveAutoCombined(subjectVal, directSectionSelect, directYearSelect);
+    } else if (selectEl === subjectInput && sectionSelect) {
+        checkLanguageElectiveAutoCombined(subjectVal, sectionSelect, yearSelect);
     }
 }
 
@@ -2315,11 +2348,11 @@ document.addEventListener('DOMContentLoaded', () => {
     [dateInput, yearSelect, sectionSelect, subjectInput, slotSelect].forEach(elem => {
         if (elem) {
             elem.addEventListener('change', () => {
-                if (elem === subjectInput || elem === sectionSelect) checkLanguageElectiveAutoCombined(subjectInput.value, sectionSelect);
+                if (elem === subjectInput || elem === sectionSelect) checkLanguageElectiveAutoCombined(subjectInput.value, sectionSelect, yearSelect);
                 updateModalDoubleEntryCheck();
             });
             elem.addEventListener('input', () => {
-                if (elem === subjectInput || elem === sectionSelect) checkLanguageElectiveAutoCombined(subjectInput.value, sectionSelect);
+                if (elem === subjectInput || elem === sectionSelect) checkLanguageElectiveAutoCombined(subjectInput.value, sectionSelect, yearSelect);
                 updateModalDoubleEntryCheck();
             });
         }
@@ -2328,11 +2361,11 @@ document.addEventListener('DOMContentLoaded', () => {
     [directDateInput, directYearSelect, directSectionSelect, directSubjectInput, directSlotSelect].forEach(elem => {
         if (elem) {
             elem.addEventListener('change', () => {
-                if (elem === directSubjectInput || elem === directSectionSelect) checkLanguageElectiveAutoCombined(directSubjectInput.value, directSectionSelect);
+                if (elem === directSubjectInput || elem === directSectionSelect) checkLanguageElectiveAutoCombined(directSubjectInput.value, directSectionSelect, directYearSelect);
                 updateDirectDoubleEntryCheck();
             });
             elem.addEventListener('input', () => {
-                if (elem === directSubjectInput || elem === directSectionSelect) checkLanguageElectiveAutoCombined(directSubjectInput.value, directSectionSelect);
+                if (elem === directSubjectInput || elem === directSectionSelect) checkLanguageElectiveAutoCombined(directSubjectInput.value, directSectionSelect, directYearSelect);
                 updateDirectDoubleEntryCheck();
             });
         }
