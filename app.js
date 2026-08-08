@@ -2141,43 +2141,54 @@ function updateSubjectDropdowns(subjects, defaultSubject) {
 
 function isElectiveOrLanguageSubject(subjectVal, deptCode, yearStr) {
     if (!subjectVal) return false;
-    const dept = deptCode || currentDept || 'BCA';
-    const yr = yearStr || (directYearSelect ? directYearSelect.value : 'First Year');
     const cleanSubj = subjectVal.trim().toLowerCase();
 
-    // 1. Check exact key (Dept + Year + Subject)
+    const dept = deptCode || currentDept || 'BCA';
+    const yr = yearStr || (directYearSelect ? directYearSelect.value : 'First Year');
     const key = (dept + '_' + yr + '_' + cleanSubj).toLowerCase();
+
     const flags = getElectiveFlagsStore();
+    // 1. Check exact key (Dept + Year + Subject)
     if (flags[key] !== undefined) {
         return Boolean(flags[key]);
     }
 
-    // 2. Check general subject name key across any dept/year or store
+    // 2. Check general subject name key across any store entry (exact or fuzzy language root)
     for (let fKey in flags) {
-        if (fKey === cleanSubj || fKey.endsWith('_' + cleanSubj)) {
+        const fSubj = fKey.includes('_') ? fKey.split('_').pop() : fKey;
+        if (fSubj === cleanSubj || fKey.endsWith('_' + cleanSubj) || 
+            (fSubj.startsWith('sansk') && cleanSubj.startsWith('sansk')) || 
+            (fSubj.startsWith('kan') && cleanSubj.startsWith('kan')) || 
+            (fSubj.startsWith('hin') && cleanSubj.startsWith('hin'))) {
             return Boolean(flags[fKey]);
         }
     }
 
-    // 3. Fallback regex matching languages & electives (EXCLUDING lab & practical)
-    return /\b(kannada|kanada|kan|hindi|hindhi|hin|sanskrit|sanskrith|sansk|sans|devops|wcms|ost|open\s*source|digital\s*fluency|cyber\s*security|e-?filing|journalism|optional\s*english|human\s*rights|elective)\b/i.test(subjectVal);
+    // Explicit Labs / Practicals are ALWAYS section-specific unless explicitly overridden in flags above
+    if (/\b(lab|practical)\b/i.test(cleanSubj)) {
+        return false;
+    }
+
+    // 3. Fallback regex matching languages & electives
+    return /\b(kannada|kanada|kanad|kan|hindi|hindhi|hind|hin|sanskrit|sanskrith|sanskritha|sanskrut|sanskrutha|sanskritam|sansk|sans|devops|wcms|ost|open\s*source|digital\s*fluency|cyber\s*security|e-?filing|journalism|optional\s*english|human\s*rights|elective)\b/i.test(cleanSubj);
 }
 
-function checkLanguageElectiveAutoCombined(subjectVal, sectionSelectElem, yearSelectElem) {
+function checkLanguageElectiveAutoCombined(subjectVal, sectionSelectElem, yearSelectElem, forceToast) {
     if (!subjectVal || !sectionSelectElem) return;
     const yrVal = yearSelectElem ? yearSelectElem.value : (directYearSelect ? directYearSelect.value : 'First Year');
     const isElec = isElectiveOrLanguageSubject(subjectVal, currentDept, yrVal);
 
     if (isElec) {
-        if (sectionSelectElem.value !== 'ALL') {
-            sectionSelectElem.value = 'ALL';
+        const wasNotAll = sectionSelectElem.value !== 'ALL';
+        sectionSelectElem.value = 'ALL';
+        if (wasNotAll || forceToast) {
             showCustomToast(
                 'ℹ️ Combined Elective / Language Auto-Selected',
                 `"${subjectVal}" is a combined elective across sections. Automatically set to Combined (ALL).`
             );
         }
     } else {
-        // Core/Lab subjects (e.g. Maths, Java Lab) must NOT be Combined (ALL). Reset to Section A.
+        // Non-elective (Core/Lab): Must NOT be set to ALL. Reset to Section A.
         if (sectionSelectElem.value === 'ALL') {
             sectionSelectElem.value = 'A';
         }
@@ -2201,26 +2212,6 @@ function setSubjectValue(selectEl, subjectVal) {
         checkLanguageElectiveAutoCombined(subjectVal, directSectionSelect, directYearSelect);
     } else if (selectEl === subjectInput && sectionSelect) {
         checkLanguageElectiveAutoCombined(subjectVal, sectionSelect, yearSelect);
-    }
-}
-
-function setSubjectValue(selectEl, subjectVal) {
-    if (!selectEl || !subjectVal || !selectEl.options) return;
-    let matchingOpt = Array.from(selectEl.options).find(o => o.value && o.value.toLowerCase() === subjectVal.toLowerCase());
-    if (matchingOpt) {
-        selectEl.value = matchingOpt.value;
-    } else {
-        const customOpt = document.createElement('option');
-        customOpt.value = subjectVal;
-        customOpt.textContent = subjectVal;
-        selectEl.appendChild(customOpt);
-        selectEl.value = subjectVal;
-    }
-
-    if (selectEl === directSubjectInput && directSectionSelect) {
-        checkLanguageElectiveAutoCombined(subjectVal, directSectionSelect);
-    } else if (selectEl === subjectInput && sectionSelect) {
-        checkLanguageElectiveAutoCombined(subjectVal, sectionSelect);
     }
 }
 

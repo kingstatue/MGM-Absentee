@@ -27,7 +27,7 @@ const COMMON_SUBJECTS = [
 
     // B.A. Subjects
     'History', 'Political Science', 'Sociology', 'Economics', 'Journalism', 
-    'Optional English', 'Kannada', 'Hindi', 'Sanskrit', 'Sanskrith', 'Human Rights',
+    'Optional English', 'Kannada', 'Hindi', 'Sanskrit', 'Sanskrith', 'Sanskritha', 'Sanskrutha', 'Sanskritam', 'Human Rights',
 
     // B.Sc. Subjects
     'Physics', 'Chemistry', 'Botany', 'Zoology', 'Electronics', 'Statistics', 
@@ -112,7 +112,7 @@ function parseAttendanceSpeech(text, activeDept) {
     }
 
     // 3. Extract Section
-    const ELECTIVE_LANG_REGEX = /\b(kannada|kanada|kan|hindi|hindhi|hin|sanskrit|sanskrith|sansk|sans|devops|wcms|ost|open\s*source|digital\s*fluency|cyber\s*security|e-?filing|journalism|optional\s*english|human\s*rights|elective)\b/i;
+    const ELECTIVE_LANG_REGEX = /\b(kannada|kanada|kanad|kan|hindi|hindhi|hind|hin|sanskrit|sanskrith|sanskritha|sanskrut|sanskrutha|sanskritam|sansk|sans|devops|wcms|ost|open\s*source|digital\s*fluency|cyber\s*security|e-?filing|journalism|optional\s*english|human\s*rights|elective)\b/i;
     const isLangOrElectiveSubj = ELECTIVE_LANG_REGEX.test(lowerText) || (subject && ELECTIVE_LANG_REGEX.test(subject));
 
     if (isLangOrElectiveSubj && !/\b(sec\s*[a-c]|section\s*[a-c])\b/i.test(lowerText)) {
