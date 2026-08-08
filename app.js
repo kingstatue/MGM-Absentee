@@ -1911,8 +1911,20 @@ function saveCloudSubjectsStore(store) {
 }
 
 function sendSubjectToCloud(action, deptCode, yearStr, subjName) {
+    const payload = {
+        action: action,
+        stream: deptCode,
+        year: yearStr,
+        subject: subjName
+    };
+    const targetUrl = getWebhookUrl(deptCode);
+
+    // 1. Dual-Engine Engine A: Submit via Hidden Form POST
+    // Bypasses mobile CORS & 302 fetch body-drop issues on iOS/Android, working on both v16.4 and v16.5 Apps Script
+    submitViaHiddenForm(targetUrl, payload).catch(e => console.warn('[SubjectSync] Hidden form submission error:', e));
+
+    // 2. Dual-Engine Engine B: Submit via JSONP Script Tag GET
     return new Promise((resolve) => {
-        const targetUrl = getWebhookUrl(deptCode);
         const cbName = 'mgmSubjSync_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
         let scriptEl = null;
         let completed = false;
@@ -1928,14 +1940,8 @@ function sendSubjectToCloud(action, deptCode, yearStr, subjName) {
             if (completed) return;
             completed = true;
             cleanup();
-            console.warn('[SubjectSync] JSONP request timed out. Retrying via dual-engine POST...');
-            postWithRetry(targetUrl, {
-                action: action,
-                stream: deptCode,
-                year: yearStr,
-                subject: subjName
-            }).then(() => resolve(true)).catch(() => resolve(false));
-        }, 6000);
+            resolve(true);
+        }, 5000);
 
         window[cbName] = function (data) {
             if (completed) return;
@@ -1961,13 +1967,7 @@ function sendSubjectToCloud(action, deptCode, yearStr, subjName) {
             completed = true;
             clearTimeout(timeout);
             cleanup();
-            console.warn('[SubjectSync] Script tag error. Retrying via dual-engine POST...');
-            postWithRetry(targetUrl, {
-                action: action,
-                stream: deptCode,
-                year: yearStr,
-                subject: subjName
-            }).then(() => resolve(true)).catch(() => resolve(false));
+            resolve(true);
         };
         document.body.appendChild(scriptEl);
     });
