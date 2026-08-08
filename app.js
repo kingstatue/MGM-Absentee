@@ -1910,6 +1910,69 @@ function saveCloudSubjectsStore(store) {
     localStorage.setItem('mgm_cloud_subjects', JSON.stringify(store));
 }
 
+function sendSubjectToCloud(action, deptCode, yearStr, subjName) {
+    return new Promise((resolve) => {
+        const targetUrl = getWebhookUrl(deptCode);
+        const cbName = 'mgmSubjSync_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+        let scriptEl = null;
+        let completed = false;
+
+        const cleanup = () => {
+            if (scriptEl && scriptEl.parentNode) {
+                try { scriptEl.parentNode.removeChild(scriptEl); } catch (e) {}
+            }
+            try { delete window[cbName]; } catch (e) {}
+        };
+
+        const timeout = setTimeout(() => {
+            if (completed) return;
+            completed = true;
+            cleanup();
+            console.warn('[SubjectSync] JSONP request timed out. Retrying via dual-engine POST...');
+            postWithRetry(targetUrl, {
+                action: action,
+                stream: deptCode,
+                year: yearStr,
+                subject: subjName
+            }).then(() => resolve(true)).catch(() => resolve(false));
+        }, 6000);
+
+        window[cbName] = function (data) {
+            if (completed) return;
+            completed = true;
+            clearTimeout(timeout);
+            cleanup();
+            console.log('[SubjectSync] Cloud response received via JSONP:', data);
+            resolve(data && data.result === 'success');
+        };
+
+        const params = new URLSearchParams({
+            action: action,
+            stream: deptCode,
+            year: yearStr,
+            subject: subjName,
+            callback: cbName
+        });
+
+        scriptEl = document.createElement('script');
+        scriptEl.src = targetUrl + (targetUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
+        scriptEl.onerror = function () {
+            if (completed) return;
+            completed = true;
+            clearTimeout(timeout);
+            cleanup();
+            console.warn('[SubjectSync] Script tag error. Retrying via dual-engine POST...');
+            postWithRetry(targetUrl, {
+                action: action,
+                stream: deptCode,
+                year: yearStr,
+                subject: subjName
+            }).then(() => resolve(true)).catch(() => resolve(false));
+        };
+        document.body.appendChild(scriptEl);
+    });
+}
+
 function fetchCloudSubjects() {
     const targetUrl = getWebhookUrl(currentDept);
     const cbName = 'mgmSubjectsCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
@@ -1928,9 +1991,6 @@ function fetchCloudSubjects() {
         if (data && data.result === 'success') {
             if (data.customSubjects) {
                 saveCloudSubjectsStore(data.customSubjects);
-                const customStore = getCustomSubjectsStore();
-                customStore[currentDept] = data.customSubjects[currentDept] || {};
-                saveCustomSubjectsStore(customStore);
             }
 
             if (data.deletedSubjects) {
@@ -1993,12 +2053,8 @@ function deleteSubject(deptCode, yearStr, subjName) {
         saveDeletedSubjectsStore(deletedStore);
     }
 
-    postWithRetry(getWebhookUrl(deptCode), {
-        action: 'delete_subject',
-        stream: deptCode,
-        year: yearStr,
-        subject: subjName
-    }).catch(e => console.warn('Subject delete cloud sync error:', e));
+    sendSubjectToCloud('delete_subject', deptCode, yearStr, subjName)
+        .catch(e => console.warn('Subject delete cloud sync error:', e));
 
     showCustomToast('🗑️ Subject Deleted Across College', `"${subjName}" removed from ${deptCode} ${yearStr} on all devices.`);
 }
@@ -2406,12 +2462,8 @@ function initSubjectManager() {
                 saveCustomSubjectsStore(store);
             }
 
-            postWithRetry(getWebhookUrl(currentDept), {
-                action: 'add_subject',
-                stream: currentDept,
-                year: activeYear,
-                subject: val
-            }).catch(e => console.warn('Subject add cloud sync error:', e));
+            sendSubjectToCloud('add_subject', currentDept, activeYear, val)
+                .catch(e => console.warn('Subject add cloud sync error:', e));
 
             newSubjectInput.value = '';
             renderSubjectChips();
