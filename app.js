@@ -2009,16 +2009,26 @@ function fetchCloudSubjects() {
             }
 
             if (data.deletedSubjects) {
-                const customStore = getCustomSubjectsStore();
-                const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
-                const deptCustom = (customStore[currentDept] && customStore[currentDept][activeYear]) ? customStore[currentDept][activeYear] : [];
-
-                if (data.deletedSubjects[currentDept] && data.deletedSubjects[currentDept][activeYear]) {
-                    data.deletedSubjects[currentDept][activeYear] = data.deletedSubjects[currentDept][activeYear].filter(d =>
-                        !deptCustom.some(c => c.toLowerCase() === d.toLowerCase())
-                    );
-                }
                 saveDeletedSubjectsStore(data.deletedSubjects);
+
+                // Purge cloud-deleted subjects from local device customStore & cloudStore
+                const customStore = getCustomSubjectsStore();
+                let customChanged = false;
+                for (let dDept in data.deletedSubjects) {
+                    for (let dYr in data.deletedSubjects[dDept]) {
+                        const delList = data.deletedSubjects[dDept][dYr] || [];
+                        if (customStore[dDept] && customStore[dDept][dYr]) {
+                            const beforeLen = customStore[dDept][dYr].length;
+                            customStore[dDept][dYr] = customStore[dDept][dYr].filter(s =>
+                                !delList.some(d => d.toLowerCase() === s.toLowerCase())
+                            );
+                            if (customStore[dDept][dYr].length !== beforeLen) customChanged = true;
+                        }
+                    }
+                }
+                if (customChanged) {
+                    saveCustomSubjectsStore(customStore);
+                }
             }
 
             if (data.electiveSubjects) {
