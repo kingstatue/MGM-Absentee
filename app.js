@@ -2009,6 +2009,15 @@ function fetchCloudSubjects() {
             }
 
             if (data.deletedSubjects) {
+                const customStore = getCustomSubjectsStore();
+                const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
+                const deptCustom = (customStore[currentDept] && customStore[currentDept][activeYear]) ? customStore[currentDept][activeYear] : [];
+
+                if (data.deletedSubjects[currentDept] && data.deletedSubjects[currentDept][activeYear]) {
+                    data.deletedSubjects[currentDept][activeYear] = data.deletedSubjects[currentDept][activeYear].filter(d =>
+                        !deptCustom.some(c => c.toLowerCase() === d.toLowerCase())
+                    );
+                }
                 saveDeletedSubjectsStore(data.deletedSubjects);
             }
 
@@ -2516,6 +2525,13 @@ function initSubjectManager() {
             if (!store[currentDept][activeYear].some(s => s.toLowerCase() === val.toLowerCase())) {
                 store[currentDept][activeYear].push(val);
                 saveCustomSubjectsStore(store);
+            }
+
+            // Un-delete subject if previously in local deleted store
+            const deletedStore = getDeletedSubjectsStore();
+            if (deletedStore[currentDept] && deletedStore[currentDept][activeYear]) {
+                deletedStore[currentDept][activeYear] = deletedStore[currentDept][activeYear].filter(s => s.toLowerCase() !== val.toLowerCase());
+                saveDeletedSubjectsStore(deletedStore);
             }
 
             const key = (currentDept + '_' + activeYear + '_' + val.trim()).toLowerCase();
