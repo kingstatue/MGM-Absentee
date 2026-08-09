@@ -2622,15 +2622,63 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderHistoryList();
 
-    // PWA Service Worker
+    // PWA Service Worker with Auto Update & Force Refresh Capability
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js')
-                .then(reg => console.log('[PWA] Service Worker Registered:', reg.scope))
+            navigator.serviceWorker.register('./sw.js?v=v26.0')
+                .then(reg => {
+                    console.log('[PWA] Service Worker Registered:', reg.scope);
+                    reg.update(); // Force check for SW update on every app launch
+
+                    reg.onupdatefound = () => {
+                        const installingWorker = reg.installing;
+                        if (installingWorker) {
+                            installingWorker.onstatechange = () => {
+                                if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    showCustomToast(
+                                        '⚡ App Updated to Latest Version!',
+                                        'Reloading with latest department structures...'
+                                    );
+                                    setTimeout(() => {
+                                        window.location.reload(true);
+                                    }, 1000);
+                                }
+                            };
+                        }
+                    };
+                })
                 .catch(err => console.warn('[PWA] Service Worker Registration failed:', err));
+        });
+
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!refreshing) {
+                refreshing = true;
+                window.location.reload(true);
+            }
         });
     }
 });
+
+function forceAppUpdate() {
+    showCustomToast('🔄 Updating Mobile App...', 'Purging cache and loading latest features...');
+    if ('caches' in window) {
+        caches.keys().then(names => {
+            return Promise.all(names.map(name => caches.delete(name)));
+        }).then(() => {
+            if (navigator.serviceWorker) {
+                navigator.serviceWorker.getRegistrations().then(regs => {
+                    regs.forEach(reg => reg.unregister());
+                    setTimeout(() => window.location.reload(true), 600);
+                });
+            } else {
+                setTimeout(() => window.location.reload(true), 600);
+            }
+        });
+    } else {
+        setTimeout(() => window.location.reload(true), 600);
+    }
+}
 
 function populateModalSectionOptions() {
     const secSelect = document.getElementById('newSubjectSectionSelect');

@@ -19,7 +19,7 @@
   <meta name="apple-mobile-web-app-title" content="Absentee Informer">
   <link rel="apple-touch-icon" href="icon-192.png">
 
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=v26.0">
 </head>
 <body>
 
@@ -671,13 +671,18 @@
     </div>
 
     <footer class="app-footer" style="text-align: center; padding: 18px 20px; margin-top: 30px; font-size: 0.85rem; color: var(--text-muted); border-top: 1px solid var(--border-color, rgba(255,255,255,0.08)); border-radius: 8px;">
-      Designed by <strong style="color: var(--primary-light, #818cf8);">Kingstatue</strong> for <strong>MGM College, Udupi</strong>
+      <div>Designed by <strong style="color: var(--primary-light, #818cf8);">Kingstatue</strong> for <strong>MGM College, Udupi</strong></div>
+      <div style="margin-top: 8px;">
+        <button type="button" onclick="forceAppUpdate()" class="btn-secondary" style="padding: 4px 12px; font-size: 0.78rem; display: inline-flex; align-items: center; gap: 4px; border-radius: 6px; cursor: pointer;">
+          🔄 Force Update App & Clear Mobile Cache
+        </button>
+      </div>
     </footer>
   </main>
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js"></script>
-  <script src="app.js"></script>
+  <script src="parser.js?v=v26.0"></script>
+  <script src="app.js?v=v26.0"></script>
 </body>
 </html>
