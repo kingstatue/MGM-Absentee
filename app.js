@@ -937,7 +937,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
     const existingEntry = history.find(item => {
         if ((item.stream || 'BCA') !== cleanStream) return false;
         if (item.date !== cleanDate) return false;
-        if (item.year !== cleanYear) return false;
+        if (item.year !== yearVal) return false;
         if (parseInt(item.slot, 10) !== cleanSlot) return false;
 
         const sec1 = item.section || 'A';
@@ -945,7 +945,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         if (!isSectionOverlap(sec1, sec2)) return false;
 
         const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || sec1.toLowerCase().includes('combin');
-        const isComb2 = sec2 === 'ALL' || sec2.toUpperCase() === 'ALL' || sec2.toLowerCase().includes('combin');
+        const isComb2 = sectionVal === 'ALL' || (sectionVal || '').toUpperCase() === 'ALL' || (sectionVal || '').toLowerCase().includes('combin');
         const isElec1 = isElectiveOrLanguageSubject(item.subject);
         const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
 
@@ -973,6 +973,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         const prevSubj = existingEntry ? existingEntry.subject : (sheetConflict.subject || cleanSubject);
         const prevRolls = existingEntry ? existingEntry.rollNumbers : (sheetConflict.rollNumbers || 'NIL');
 
+        // Always show interactive conflict dialog with 3 explicit choices (Merge, Overwrite, Cancel)
         const userChoice = await showSlotConflictDialog({
             date: cleanDate,
             year: yearVal,
