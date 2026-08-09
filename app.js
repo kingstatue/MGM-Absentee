@@ -2466,15 +2466,10 @@ function fetchCloudSubjects() {
             }
 
             if (data.customSubjects) {
-                const clearedStore = getClearedDeptsStore();
-                // Filter out ANY deleted subjects BEFORE saving to cloudSubjectsStore so page refreshes never resurrect deleted subjects!
+                // Sheet is source of truth. Only hide subjects listed in deletedStore (tombstones).
+                // Do NOT use clearedStore here — it blocked NEW subjects added from other devices.
                 const cleanedCloudSubjects = {};
                 for (let deptKey in data.customSubjects) {
-                    if (clearedStore[deptKey]) {
-                        // User cleared this department: do not resurrect old cloud subjects!
-                        cleanedCloudSubjects[deptKey] = {};
-                        continue;
-                    }
                     cleanedCloudSubjects[deptKey] = {};
                     for (let yrKey in data.customSubjects[deptKey]) {
                         const subjs = data.customSubjects[deptKey][yrKey] || [];
@@ -2499,6 +2494,8 @@ function fetchCloudSubjects() {
             const config = DEPT_CONFIG[currentDept];
             updateSubjectDropdowns(yearSubjects, config ? config.defaultSubject : null);
             renderSubjectChips();
+        } else if (data && (data.error === 'Unauthorized' || data.result === 'error')) {
+            console.warn('[Subjects] Cloud fetch failed:', data.message || data.error);
         }
     };
 
@@ -3318,8 +3315,12 @@ function initSubjectManager() {
 
             upsertLocalSubject(currentDept, activeYear, val, targetSection, isElecChecked, oldName || null);
 
-            // Keep "cleared" guard if set — do NOT unlock old cloud subjects just because one new subject was added.
-            // Kannada (etc.) lives in local custom store and is pushed to the sheet as ADD.
+            // Allow cloud sync again for this dept (old subjects stay hidden via deletedStore tombstones)
+            const clearedStore = getClearedDeptsStore();
+            if (clearedStore[currentDept]) {
+                delete clearedStore[currentDept];
+                saveClearedDeptsStore(clearedStore);
+            }
 
             const cloudAction = oldName ? 'rename_subject' : 'add_subject';
             sendSubjectToCloud(cloudAction, currentDept, activeYear, val, isElecChecked, targetSection, oldName || '')
@@ -3376,6 +3377,7 @@ function initSubjectManager() {
                 });
                 saveDeletedSubjectsStore(deletedStore);
 
+                // Prefer sheet tombstones; cleared flag is only a local hint and no longer blocks fetch
                 const clearedStore = getClearedDeptsStore();
                 clearedStore[dept] = true;
                 saveClearedDeptsStore(clearedStore);
