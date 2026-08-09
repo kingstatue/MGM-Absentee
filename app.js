@@ -2129,30 +2129,40 @@ function saveDeletedSubjectsStore(store) {
 }
 
 function deleteSubject(deptCode, yearStr, subjName) {
+    if (!subjName) return;
+    const targetName = typeof subjName === 'string' ? subjName.trim() : extractSubjNameAndSection(subjName).name.trim();
+    if (!targetName) return;
+
     const customStore = getCustomSubjectsStore();
     if (customStore[deptCode] && customStore[deptCode][yearStr]) {
-        customStore[deptCode][yearStr] = customStore[deptCode][yearStr].filter(s => s.toLowerCase() !== subjName.toLowerCase());
+        customStore[deptCode][yearStr] = customStore[deptCode][yearStr].filter(s => {
+            const item = extractSubjNameAndSection(s);
+            return item.name.trim().toLowerCase() !== targetName.toLowerCase();
+        });
         saveCustomSubjectsStore(customStore);
     }
 
     const cloudStore = getCloudSubjectsStore();
     if (cloudStore[deptCode] && cloudStore[deptCode][yearStr]) {
-        cloudStore[deptCode][yearStr] = cloudStore[deptCode][yearStr].filter(s => s.toLowerCase() !== subjName.toLowerCase());
+        cloudStore[deptCode][yearStr] = cloudStore[deptCode][yearStr].filter(s => {
+            const item = extractSubjNameAndSection(s);
+            return item.name.trim().toLowerCase() !== targetName.toLowerCase();
+        });
         saveCloudSubjectsStore(cloudStore);
     }
 
     const deletedStore = getDeletedSubjectsStore();
     if (!deletedStore[deptCode]) deletedStore[deptCode] = {};
     if (!deletedStore[deptCode][yearStr]) deletedStore[deptCode][yearStr] = [];
-    if (!deletedStore[deptCode][yearStr].some(s => s.toLowerCase() === subjName.toLowerCase())) {
-        deletedStore[deptCode][yearStr].push(subjName);
+    if (!deletedStore[deptCode][yearStr].some(s => s.toLowerCase() === targetName.toLowerCase())) {
+        deletedStore[deptCode][yearStr].push(targetName);
         saveDeletedSubjectsStore(deletedStore);
     }
 
-    sendSubjectToCloud('delete_subject', deptCode, yearStr, subjName)
+    sendSubjectToCloud('delete_subject', deptCode, yearStr, targetName)
         .catch(e => console.warn('Subject delete cloud sync error:', e));
 
-    showCustomToast('🗑️ Subject Deleted Across College', `"${subjName}" removed from ${deptCode} ${yearStr} on all devices.`);
+    showCustomToast('🗑️ Subject Deleted Across College', `"${targetName}" removed from ${deptCode} ${yearStr} on all devices.`);
 }
 
 function extractSubjNameAndSection(subj) {
@@ -2891,10 +2901,12 @@ function renderSubjectChips() {
         chip.appendChild(badgeBtn);
 
         const delBtn = document.createElement('button');
+        delBtn.type = 'button';
         delBtn.className = 'subject-chip-del';
         delBtn.innerHTML = '&times;';
         delBtn.title = 'Delete "' + subj + '"';
         delBtn.addEventListener('click', (e) => {
+            e.preventDefault();
             e.stopPropagation();
             deleteSubject(currentDept, activeYear, subj);
             renderSubjectChips();
