@@ -95,46 +95,74 @@ function getWebhookUrl(deptCode) {
 function getAuthPayload() {
     let pass = '';
     try { pass = sessionStorage.getItem('mgm_auth_pass') || ''; } catch (e) {}
-    // Mobile browsers / PWAs often wipe sessionStorage when the app is killed —
-    // fall back to remembered pass so subject sync keeps working.
+    // Mobile browsers / PWAs often wipe sessionStorage when the app is killed.
     if (!pass) {
         try {
-            pass = localStorage.getItem('mgm_remember_pass') || '';
+            pass = localStorage.getItem('mgm_session_pass') ||
+                localStorage.getItem('mgm_remember_pass') || '';
             if (pass) sessionStorage.setItem('mgm_auth_pass', pass);
         } catch (e) {}
     }
     return {
         authPasscode: pass,
         authRole: localStorage.getItem('mgm_role') || currentRole || 'TEACHER',
-        authStream: currentDept || 'BCA'
+        // Prefer the stream the passcode was validated for (fixes sync after dept switch / wrong card)
+        authStream: localStorage.getItem('mgm_auth_stream') || currentDept || 'BCA'
     };
 }
 
 function setAuthSession(passcode, role, deptCode, remember) {
     const pass = (passcode || '').trim();
     try { sessionStorage.setItem('mgm_auth_pass', pass); } catch (e) {}
-    // Always persist locally so mobile/PWA kill does not drop auth mid-class.
-    // "Remember" still controls pre-fill on the login screen.
-    try { localStorage.setItem('mgm_remember_pass', pass); } catch (e) {}
+    // Always keep a durable session copy for API calls (mobile PWA).
+    // "Remember" only controls auto-login / prefill — do NOT wipe session on uncheck.
+    try { localStorage.setItem('mgm_session_pass', pass); } catch (e) {}
+    if (deptCode) {
+        try { localStorage.setItem('mgm_auth_stream', deptCode); } catch (e) {}
+        currentDept = deptCode;
+    }
     if (remember) {
+        try { localStorage.setItem('mgm_remember_pass', pass); } catch (e) {}
         try { localStorage.setItem('mgm_remember_checked', '1'); } catch (e) {}
+    } else {
+        try { localStorage.removeItem('mgm_remember_pass'); } catch (e) {}
+        try { localStorage.removeItem('mgm_remember_checked'); } catch (e) {}
     }
     if (role) {
         currentRole = role;
         localStorage.setItem('mgm_role', role);
     }
-    if (deptCode) currentDept = deptCode;
 }
 
 function clearAuthSession() {
     try { sessionStorage.removeItem('mgm_auth_pass'); } catch (e) {}
+    try { localStorage.removeItem('mgm_session_pass'); } catch (e) {}
     try { localStorage.removeItem('mgm_remember_pass'); } catch (e) {}
+    try { localStorage.removeItem('mgm_auth_stream'); } catch (e) {}
 }
 
 function restoreAuthSessionFromRemember() {
     try {
-        const remembered = localStorage.getItem('mgm_remember_pass');
+        const remembered = localStorage.getItem('mgm_session_pass') ||
+            localStorage.getItem('mgm_remember_pass') || '';
         if (remembered) sessionStorage.setItem('mgm_auth_pass', remembered);
+    } catch (e) {}
+}
+
+/** Keep local offline fallback in sync after a successful server login. */
+function syncLocalPasscodeFromLogin(deptCode, role, passcode) {
+    const pass = (passcode || '').trim();
+    if (!pass || !deptCode) return;
+    try {
+        const raw = JSON.parse(localStorage.getItem('mgm_custom_passcodes') || '{}');
+        if (role === 'ADMIN') {
+            raw.ADMIN = pass;
+        } else if (role === 'HOD') {
+            raw['hod' + deptCode] = pass;
+        } else if (role === 'TEACHER') {
+            raw['teacher' + deptCode] = pass;
+        }
+        localStorage.setItem('mgm_custom_passcodes', JSON.stringify(raw));
     } catch (e) {}
 }
 
@@ -150,7 +178,7 @@ function appendAuthToParams(params) {
     return params;
 }
 
-/** Confirm login passcode against Apps Script (falls back to local if offline). */
+/** Confirm login passcode against Apps Script (falls back to local ONLY when truly offline). */
 function authenticateWithServer(deptCode, passcode) {
     return new Promise((resolve) => {
         const targetUrl = getWebhookUrl(deptCode);
@@ -169,11 +197,30 @@ function authenticateWithServer(deptCode, passcode) {
             resolve(result);
         };
 
-        const timeout = setTimeout(() => finish({ ok: false, offline: true }), 4000);
+        // College Wi‑Fi / mobile can be slow — do NOT treat timeout as offline
+        // (that caused "Invalid passcode" for a newly changed server pass).
+        const timeout = setTimeout(() => {
+            if (navigator.onLine) {
+                finish({
+                    ok: false,
+                    offline: false,
+                    slow: true,
+                    message: 'Server is slow or busy. Please tap Login again.'
+                });
+            } else {
+                finish({ ok: false, offline: true });
+            }
+        }, 10000);
 
         window[cbName] = function (data) {
             if (data && data.result === 'success') {
-                finish({ ok: true, role: data.role || 'TEACHER', offline: false });
+                finish({
+                    ok: true,
+                    role: data.role || 'TEACHER',
+                    stream: data.stream || deptCode || 'BCA',
+                    matchedOtherStream: !!data.matchedOtherStream,
+                    offline: false
+                });
             } else {
                 finish({
                     ok: false,
@@ -193,7 +240,18 @@ function authenticateWithServer(deptCode, passcode) {
 
         scriptEl = document.createElement('script');
         scriptEl.src = targetUrl + (targetUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
-        scriptEl.onerror = function () { finish({ ok: false, offline: true }); };
+        scriptEl.onerror = function () {
+            if (navigator.onLine) {
+                finish({
+                    ok: false,
+                    offline: false,
+                    slow: true,
+                    message: 'Could not reach login server. Check Wi‑Fi and tap Login again.'
+                });
+            } else {
+                finish({ ok: false, offline: true });
+            }
+        };
         document.body.appendChild(scriptEl);
     });
 }
@@ -1932,29 +1990,90 @@ function initDepartmentManager() {
         deptLoginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const passcode = (deptPasscode.value || '').trim();
+            if (!passcode) {
+                if (loginAlertBox) {
+                    loginAlertBox.style.display = 'block';
+                    loginAlertBox.textContent = 'Please enter your passcode.';
+                }
+                return;
+            }
+
+            // Always read the currently highlighted dept card (avoids stale BCA default)
+            const activeCard = document.querySelector('.dept-card.active');
+            if (activeCard && activeCard.getAttribute('data-dept')) {
+                selectedDept = activeCard.getAttribute('data-dept');
+            }
+
             const passcodes = getPasscodeStore();
             const config = DEPT_CONFIG[selectedDept];
             const teacherPass = (passcodes.teacher && passcodes.teacher[selectedDept]) || config.passcode;
             const hodPass = (passcodes.hod && passcodes.hod[selectedDept]) || ('hod' + selectedDept.toLowerCase());
             const adminPass = passcodes.ADMIN || 'admin2026';
+            const loginBtn = document.getElementById('deptLoginBtn');
+            const loginBtnLabel = loginBtn ? loginBtn.querySelector('span') : null;
+            const rememberChecked = !!(rememberDeptCheck && rememberDeptCheck.checked);
+            const setLoginBusy = (busy, label) => {
+                if (loginBtn) loginBtn.disabled = !!busy;
+                if (loginBtnLabel) loginBtnLabel.textContent = label;
+            };
+
+            setLoginBusy(true, 'Verifying…');
+            if (loginAlertBox) {
+                loginAlertBox.style.display = 'block';
+                loginAlertBox.textContent = navigator.onLine
+                    ? 'Checking passcode with server…'
+                    : 'Offline — checking saved passcode on this device…';
+            }
 
             let role = null;
-            const serverAuth = navigator.onLine
-                ? await authenticateWithServer(selectedDept, passcode)
-                : { ok: false, offline: true };
+            let loginDept = selectedDept;
+            let serverAuth = { ok: false, offline: !navigator.onLine };
+            try {
+                if (navigator.onLine) {
+                    serverAuth = await authenticateWithServer(selectedDept, passcode);
+                } else {
+                    serverAuth = { ok: false, offline: true };
+                }
+            } catch (err) {
+                serverAuth = {
+                    ok: false,
+                    offline: !navigator.onLine,
+                    message: 'Login check failed. Please try again.'
+                };
+            }
 
             if (serverAuth.ok) {
                 role = serverAuth.role;
+                if (serverAuth.stream && DEPT_CONFIG[serverAuth.stream]) {
+                    loginDept = serverAuth.stream;
+                }
+                syncLocalPasscodeFromLogin(loginDept, role, passcode);
             } else if (serverAuth.offline) {
-                // Offline fallback: local passcode store
-                if (passcode === adminPass) role = 'ADMIN';
-                else if (passcode === hodPass) role = 'HOD';
-                else if (passcode === teacherPass) role = 'TEACHER';
+                // Truly offline — match pass against any local dept (same as server behaviour)
+                if (passcode === adminPass) {
+                    role = 'ADMIN';
+                    loginDept = selectedDept;
+                } else {
+                    const depts = ['BCA', 'BCM', 'BA', 'BSC'];
+                    for (let i = 0; i < depts.length; i++) {
+                        const d = depts[i];
+                        const tPass = (passcodes.teacher && passcodes.teacher[d]) || DEPT_CONFIG[d].passcode;
+                        const hPass = (passcodes.hod && passcodes.hod[d]) || ('hod' + d.toLowerCase());
+                        if (passcode === hPass) { role = 'HOD'; loginDept = d; break; }
+                        if (passcode === tPass) { role = 'TEACHER'; loginDept = d; break; }
+                    }
+                }
+                if (!role && loginAlertBox) {
+                    loginAlertBox.style.display = 'block';
+                    loginAlertBox.textContent = 'Offline and passcode not recognized on this device. Connect to Wi‑Fi and try again.';
+                }
             } else {
                 if (loginAlertBox) {
                     loginAlertBox.style.display = 'block';
-                    loginAlertBox.textContent = serverAuth.message || ('Invalid Passcode for ' + config.name + '.');
+                    loginAlertBox.textContent = serverAuth.message ||
+                        ('Invalid passcode for ' + config.name + '. Tap the correct department card (BCA / B.Com / BA / B.Sc.), then try again.');
                 }
+                setLoginBusy(false, 'Login to Absentee Informer');
                 deptPasscode.focus();
                 return;
             }
@@ -1962,22 +2081,31 @@ function initDepartmentManager() {
             if (!role) {
                 if (loginAlertBox) {
                     loginAlertBox.style.display = 'block';
-                    loginAlertBox.textContent = 'Invalid Passcode for ' + config.name + '. Please try again.';
+                    loginAlertBox.textContent = 'Invalid passcode. Tap the correct department card, then try again.';
                 }
+                setLoginBusy(false, 'Login to Absentee Informer');
                 deptPasscode.focus();
                 return;
             }
 
-            setAuthSession(passcode, role, selectedDept, !!(rememberDeptCheck && rememberDeptCheck.checked));
+            selectedDept = loginDept;
+            // Highlight the dept that the passcode actually belongs to
+            document.querySelectorAll('.dept-card').forEach(c => {
+                c.classList.toggle('active', c.getAttribute('data-dept') === loginDept);
+            });
+
+            setAuthSession(passcode, role, loginDept, rememberChecked);
+            subjectsAuthPrompted = false;
             isHODAuthenticated = (role === 'HOD' || role === 'ADMIN');
             if (loginAlertBox) loginAlertBox.style.display = 'none';
 
-            if (rememberDeptCheck && rememberDeptCheck.checked) {
-                localStorage.setItem('mgm_dept', selectedDept);
+            if (rememberChecked) {
+                localStorage.setItem('mgm_dept', loginDept);
             } else {
                 localStorage.removeItem('mgm_dept');
-                try { localStorage.removeItem('mgm_remember_pass'); } catch (e) {}
             }
+
+            setLoginBusy(false, 'Login to Absentee Informer');
 
             if (role === 'TEACHER' && pendingHODTabSwitch) {
                 if (loginAlertBox) {
@@ -1988,7 +2116,7 @@ function initDepartmentManager() {
                 return;
             }
 
-            applyDepartment(selectedDept);
+            applyDepartment(loginDept);
             applyRoleUI();
             deptLoginModal.classList.remove('active');
             deptPasscode.value = '';
@@ -2005,6 +2133,12 @@ function initDepartmentManager() {
             isHODAuthenticated = false;
             wipeHODPortalState();
             if (loginAlertBox) loginAlertBox.style.display = 'none';
+            // Pre-select the current department card so B.Com login isn't checked as BCA
+            document.querySelectorAll('.dept-card').forEach(c => {
+                const d = c.getAttribute('data-dept');
+                c.classList.toggle('active', d === currentDept);
+                if (d === currentDept) selectedDept = currentDept;
+            });
             deptLoginModal.classList.add('active');
         });
     }
@@ -2030,7 +2164,7 @@ function initDepartmentManager() {
         });
     }
 
-    // Auto Login from localStorage
+    // Auto Login from localStorage — then re-check against server if passcode was changed
     const savedDept = localStorage.getItem('mgm_dept');
     if (savedDept && DEPT_CONFIG[savedDept]) {
         restoreAuthSessionFromRemember();
@@ -2039,6 +2173,36 @@ function initDepartmentManager() {
         applyDepartment(savedDept);
         applyRoleUI();
         deptLoginModal.classList.remove('active');
+
+        const savedPass = getAuthPayload().authPasscode;
+        if (savedPass && navigator.onLine) {
+            authenticateWithServer(savedDept, savedPass).then((res) => {
+                if (res && res.ok) {
+                    syncLocalPasscodeFromLogin(savedDept, res.role || currentRole, savedPass);
+                    if (res.role) {
+                        currentRole = res.role;
+                        localStorage.setItem('mgm_role', res.role);
+                        isHODAuthenticated = (res.role === 'HOD' || res.role === 'ADMIN');
+                        applyRoleUI();
+                    }
+                    return;
+                }
+                if (res && !res.offline && !res.slow) {
+                    // Old remembered pass rejected after server passcode change
+                    clearAuthSession();
+                    localStorage.removeItem('mgm_dept');
+                    isHODAuthenticated = false;
+                    if (loginAlertBox) {
+                        loginAlertBox.style.display = 'block';
+                        loginAlertBox.textContent =
+                            'Passcode was changed. Please enter the new passcode to continue.';
+                    }
+                    if (deptPasscode) deptPasscode.value = '';
+                    deptLoginModal.classList.add('active');
+                }
+                // slow/offline: keep session; sync will retry
+            }).catch(() => {});
+        }
     } else {
         deptLoginModal.classList.add('active');
         applyDepartment('BCA');
@@ -2268,6 +2432,9 @@ function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sec
     });
 }
 
+let subjectsFetchInFlight = false;
+let subjectsAuthPrompted = false;
+
 if (typeof window !== 'undefined') {
     setInterval(() => {
         fetchCloudSubjects();
@@ -2284,21 +2451,35 @@ if (typeof window !== 'undefined' && window.addEventListener) {
 
 function fetchCloudSubjects() {
     if (typeof document === 'undefined' || !document.createElement) return;
+    if (subjectsFetchInFlight) return;
+
+    const authPass = (getAuthPayload().authPasscode || '').trim();
+    if (!authPass) {
+        // No session yet (login screen) — skip silently
+        return;
+    }
+
+    subjectsFetchInFlight = true;
     const targetUrl = getWebhookUrl(currentDept);
     const cbName = 'mgmSubjectsCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
     let scriptEl = null;
 
-    const timeout = setTimeout(() => {
-        if (scriptEl && scriptEl.parentNode) scriptEl.parentNode.removeChild(scriptEl);
-        try { delete window[cbName]; } catch (e) {}
-    }, 8000);
-
-    window[cbName] = function (data) {
+    const finishFetch = () => {
+        subjectsFetchInFlight = false;
         clearTimeout(timeout);
         try { delete window[cbName]; } catch (e) {}
         if (scriptEl && scriptEl.parentNode) scriptEl.parentNode.removeChild(scriptEl);
+    };
+
+    const timeout = setTimeout(() => {
+        finishFetch();
+    }, 8000);
+
+    window[cbName] = function (data) {
+        finishFetch();
 
         if (data && data.result === 'success') {
+            subjectsAuthPrompted = false;
             const deletedStore = getDeletedSubjectsStore();
 
             if (data.deletedSubjects) {
@@ -2398,9 +2579,27 @@ function fetchCloudSubjects() {
                 renderSubjectChips();
             }
         } else if (data && (data.error === 'Unauthorized' || data.result === 'error')) {
-            console.warn('[Subjects] Cloud fetch failed:', data.message || data.error);
-            if (String(data.error || data.message || '').toLowerCase().indexOf('unauthor') !== -1) {
-                showCustomToast('Login required for subject sync', 'Open the app and enter passcode again on this device.');
+            const msg = String(data.message || data.error || '');
+            const isUnauth = /unauthor|invalid passcode|missing auth/i.test(msg) ||
+                String(data.error || '').toLowerCase() === 'unauthorized';
+            console.warn('[Subjects] Cloud fetch failed:', msg);
+            if (isUnauth && !subjectsAuthPrompted) {
+                subjectsAuthPrompted = true;
+                showCustomToast(
+                    'Passcode expired or changed',
+                    'Please log in again with the current passcode (tap department badge).'
+                );
+                // Force re-login so mobile is not stuck with a dead old session
+                try {
+                    const modal = document.getElementById('deptLoginModal');
+                    const alertBox = document.getElementById('loginAlertBox');
+                    if (alertBox) {
+                        alertBox.style.display = 'block';
+                        alertBox.textContent =
+                            'Passcode expired or was changed. Enter the new passcode to sync subjects.';
+                    }
+                    if (modal) modal.classList.add('active');
+                } catch (e) {}
             }
         }
     };
@@ -2414,9 +2613,7 @@ function fetchCloudSubjects() {
     scriptEl = document.createElement('script');
     scriptEl.src = targetUrl + (targetUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
     scriptEl.onerror = function () {
-        clearTimeout(timeout);
-        try { delete window[cbName]; } catch (e) {}
-        if (scriptEl && scriptEl.parentNode) scriptEl.parentNode.removeChild(scriptEl);
+        finishFetch();
     };
     document.body.appendChild(scriptEl);
 }
@@ -3469,7 +3666,7 @@ function initSubjectManager() {
 
 // Version upgrade check to purge stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
-    const APP_VER = 'v27.9_prod_ready';
+    const APP_VER = 'v27.11_auth_stream';
     if (localStorage.getItem('mgm_app_ver') !== APP_VER) {
         localStorage.removeItem('mgm_cloud_subjects');
         localStorage.setItem('mgm_app_ver', APP_VER);
