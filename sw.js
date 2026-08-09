@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mgm-absentee-informer-v35-elective-combined';
+const CACHE_NAME = 'mgm-absentee-informer-v36-subject-scopes';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -16,7 +16,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[PWA SW] Pre-caching offline assets v35');
+      console.log('[PWA SW] Pre-caching offline assets v36');
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );

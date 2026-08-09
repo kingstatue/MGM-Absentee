@@ -2331,8 +2331,8 @@ function saveElectiveFlagsStore(store) {
     localStorage.setItem('mgm_elective_flags', JSON.stringify(store));
 }
 
-function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sectionStr, oldSubjectName) {
-    const targetSec = sectionStr || 'ALL';
+function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sectionStr, oldSubjectName, oldSectionStr) {
+    const targetSec = sectionStr || 'COMMON';
     const payload = withAuth({
         action: action,
         stream: deptCode,
@@ -2340,14 +2340,13 @@ function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sec
         section: targetSec,
         subject: subjName,
         oldSubject: oldSubjectName || '',
-        isElective: isElective === true || isElective === 'true'
+        oldSection: oldSectionStr || '',
+        isElective: isElective === true || isElective === 'true' || normalizeSectionCode(targetSec) === 'ALL'
     });
     const targetUrl = getWebhookUrl(deptCode);
 
-    // 1. Dual-Engine Engine A: Submit via Hidden Form POST
     submitViaHiddenForm(targetUrl, payload).catch(e => console.warn('[SubjectSync] Hidden form submission error:', e));
 
-    // 2. Dual-Engine Engine B: Submit via JSONP Script Tag GET
     return new Promise((resolve) => {
         const cbName = 'mgmSubjSync_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
         let scriptEl = null;
@@ -2383,6 +2382,7 @@ function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sec
             section: targetSec,
             subject: subjName,
             oldSubject: oldSubjectName || '',
+            oldSection: oldSectionStr || '',
             isElective: payload.isElective ? 'true' : 'false',
             callback: cbName
         });
@@ -2576,31 +2576,39 @@ function saveDeletedSubjectsStore(store) {
     localStorage.setItem('mgm_deleted_subjects', JSON.stringify(store));
 }
 
-function beginSubjectEdit(subjName) {
+function beginSubjectEdit(subjName, sectionHint) {
     const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
     const newSubjectInput = document.getElementById('newSubjectInput');
     const addSubjectBtn = document.getElementById('addSubjectBtn');
     const oldNameInput = document.getElementById('editingSubjectOldName');
+    const oldSecInput = document.getElementById('editingSubjectOldSection');
     const electiveCheck = document.getElementById('newSubjectElectiveCheck');
     const secSelect = document.getElementById('newSubjectSectionSelect');
     const hint = document.getElementById('subjectEditHint');
 
-    const tagInfo = getSubjectSectionTagInfo(currentDept, activeYear, subjName);
-    const key = (currentDept + '_' + activeYear + '_' + String(subjName).trim()).toLowerCase();
-    const flags = getElectiveFlagsStore();
-    const isElec = flags[key] === true || tagInfo.section === 'ALL';
+    const item = typeof subjName === 'object' ? extractSubjNameAndSection(subjName) : { name: subjName, section: sectionHint || 'COMMON' };
+    const tagInfo = formatSectionTagLabel(item.section || sectionHint || 'COMMON');
+    const isElec = normalizeSectionCode(item.section) === 'ALL';
 
-    if (oldNameInput) oldNameInput.value = subjName;
+    if (oldNameInput) oldNameInput.value = item.name;
+    if (oldSecInput) oldSecInput.value = item.section || 'COMMON';
     if (newSubjectInput) {
-        newSubjectInput.value = subjName;
+        newSubjectInput.value = item.name;
         newSubjectInput.focus();
     }
     if (addSubjectBtn) addSubjectBtn.textContent = 'Save';
-    if (secSelect) secSelect.value = tagInfo.section || 'ALL';
+    populateModalSectionOptions();
+    if (secSelect) {
+        const want = canonicalSectionStorage(item.section || 'COMMON');
+        if (Array.from(secSelect.options).some(o => o.value === want)) secSelect.value = want;
+        else if (Array.from(secSelect.options).some(o => normalizeSectionCode(o.value) === normalizeSectionCode(want))) {
+            secSelect.value = Array.from(secSelect.options).find(o => normalizeSectionCode(o.value) === normalizeSectionCode(want)).value;
+        }
+    }
     if (electiveCheck) electiveCheck.checked = !!isElec;
     if (hint) {
         hint.style.display = 'block';
-        hint.textContent = 'Editing "' + subjName + '". Change name/section/elective, then tap Save. Tap Clear form to cancel.';
+        hint.textContent = 'Editing "' + item.name + '" (' + tagInfo.label + '). Change name/scope, then Save.';
     }
 }
 
@@ -2608,9 +2616,11 @@ function clearSubjectEditForm() {
     const newSubjectInput = document.getElementById('newSubjectInput');
     const addSubjectBtn = document.getElementById('addSubjectBtn');
     const oldNameInput = document.getElementById('editingSubjectOldName');
+    const oldSecInput = document.getElementById('editingSubjectOldSection');
     const electiveCheck = document.getElementById('newSubjectElectiveCheck');
     const hint = document.getElementById('subjectEditHint');
     if (oldNameInput) oldNameInput.value = '';
+    if (oldSecInput) oldSecInput.value = '';
     if (newSubjectInput) newSubjectInput.value = '';
     if (addSubjectBtn) addSubjectBtn.textContent = '+ Add';
     if (electiveCheck) electiveCheck.checked = false;
@@ -2620,21 +2630,38 @@ function clearSubjectEditForm() {
     }
 }
 
-function upsertLocalSubject(deptCode, yearStr, name, section, isElective, oldName) {
+function canonicalSectionStorage(sec) {
+    const n = normalizeSectionCode(sec);
+    if (n === 'C_AIML') return 'C (AIML)';
+    if (n === 'C_TP') return 'C (TP)';
+    if (n === 'C_AF') return 'C (AF)';
+    if (n === 'COMMON') return 'COMMON';
+    if (n === 'ALL') return 'ALL';
+    if (n === 'A_B') return 'A_B';
+    return n;
+}
+
+function upsertLocalSubject(deptCode, yearStr, name, section, isElective, oldName, oldSection) {
     const store = getCustomSubjectsStore();
     if (!store[deptCode]) store[deptCode] = {};
     if (!store[deptCode][yearStr]) store[deptCode][yearStr] = [];
+    const secNorm = section || 'A_B';
+    const oldSec = oldSection || secNorm;
 
-    if (oldName && oldName.toLowerCase() !== name.toLowerCase()) {
+    if (oldName) {
         store[deptCode][yearStr] = store[deptCode][yearStr].filter(s => {
             const item = extractSubjNameAndSection(s);
-            return item.name.trim().toLowerCase() !== oldName.toLowerCase();
+            const nameMatch = item.name.trim().toLowerCase() === oldName.toLowerCase();
+            const secMatch = sectionsEqualForSubject(item.section, oldSec);
+            return !(nameMatch && secMatch);
         });
         const cloudStore = getCloudSubjectsStore();
         if (cloudStore[deptCode] && cloudStore[deptCode][yearStr]) {
             cloudStore[deptCode][yearStr] = cloudStore[deptCode][yearStr].filter(s => {
                 const item = extractSubjNameAndSection(s);
-                return item.name.trim().toLowerCase() !== oldName.toLowerCase();
+                const nameMatch = item.name.trim().toLowerCase() === oldName.toLowerCase();
+                const secMatch = sectionsEqualForSubject(item.section, oldSec);
+                return !(nameMatch && secMatch);
             });
             saveCloudSubjectsStore(cloudStore);
         }
@@ -2643,35 +2670,44 @@ function upsertLocalSubject(deptCode, yearStr, name, section, isElective, oldNam
         saveElectiveFlagsStore(flags);
     }
 
-    const subjObj = { name: name, section: section };
-    const existingIdx = store[deptCode][yearStr].findIndex(s =>
-        (typeof s === 'string' ? s.toLowerCase() : (s.name || s.subject || '').toLowerCase()) === name.toLowerCase()
-    );
+    const subjObj = { name: name, section: secNorm };
+    const existingIdx = store[deptCode][yearStr].findIndex(s => {
+        const item = extractSubjNameAndSection(s);
+        return item.name.trim().toLowerCase() === name.toLowerCase() &&
+            sectionsEqualForSubject(item.section, secNorm);
+    });
     if (existingIdx !== -1) store[deptCode][yearStr][existingIdx] = subjObj;
     else store[deptCode][yearStr].push(subjObj);
     saveCustomSubjectsStore(store);
 
     const flags = getElectiveFlagsStore();
-    flags[(deptCode + '_' + yearStr + '_' + name).toLowerCase()] = !!isElective;
+    flags[(deptCode + '_' + yearStr + '_' + name).toLowerCase()] = !!isElective || normalizeSectionCode(secNorm) === 'ALL';
     saveElectiveFlagsStore(flags);
 
     const deletedStore = getDeletedSubjectsStore();
     if (deletedStore[deptCode] && deletedStore[deptCode][yearStr]) {
-        deletedStore[deptCode][yearStr] = deletedStore[deptCode][yearStr].filter(s => s.toLowerCase() !== name.toLowerCase());
+        const dk = subjectScopeKey(name, secNorm);
+        deletedStore[deptCode][yearStr] = deletedStore[deptCode][yearStr].filter(s =>
+            s !== dk && s.toLowerCase() !== name.toLowerCase()
+        );
         saveDeletedSubjectsStore(deletedStore);
     }
 }
 
-function deleteSubject(deptCode, yearStr, subjName) {
+function deleteSubject(deptCode, yearStr, subjName, sectionHint) {
     if (!subjName) return;
-    const targetName = typeof subjName === 'string' ? subjName.trim() : extractSubjNameAndSection(subjName).name.trim();
+    const itemIn = typeof subjName === 'string' ? { name: subjName.trim(), section: sectionHint || '' } : extractSubjNameAndSection(subjName);
+    const targetName = itemIn.name.trim();
     if (!targetName) return;
+    const targetSec = sectionHint || itemIn.section || '';
 
     const customStore = getCustomSubjectsStore();
     if (customStore[deptCode] && customStore[deptCode][yearStr]) {
         customStore[deptCode][yearStr] = customStore[deptCode][yearStr].filter(s => {
             const item = extractSubjNameAndSection(s);
-            return item.name.trim().toLowerCase() !== targetName.toLowerCase();
+            if (item.name.trim().toLowerCase() !== targetName.toLowerCase()) return true;
+            if (targetSec) return !sectionsEqualForSubject(item.section, targetSec);
+            return false;
         });
         saveCustomSubjectsStore(customStore);
     }
@@ -2680,7 +2716,9 @@ function deleteSubject(deptCode, yearStr, subjName) {
     if (cloudStore[deptCode] && cloudStore[deptCode][yearStr]) {
         cloudStore[deptCode][yearStr] = cloudStore[deptCode][yearStr].filter(s => {
             const item = extractSubjNameAndSection(s);
-            return item.name.trim().toLowerCase() !== targetName.toLowerCase();
+            if (item.name.trim().toLowerCase() !== targetName.toLowerCase()) return true;
+            if (targetSec) return !sectionsEqualForSubject(item.section, targetSec);
+            return false;
         });
         saveCloudSubjectsStore(cloudStore);
     }
@@ -2688,12 +2726,13 @@ function deleteSubject(deptCode, yearStr, subjName) {
     const deletedStore = getDeletedSubjectsStore();
     if (!deletedStore[deptCode]) deletedStore[deptCode] = {};
     if (!deletedStore[deptCode][yearStr]) deletedStore[deptCode][yearStr] = [];
-    if (!deletedStore[deptCode][yearStr].some(s => s.toLowerCase() === targetName.toLowerCase())) {
-        deletedStore[deptCode][yearStr].push(targetName);
+    const dk = subjectScopeKey(targetName, targetSec || 'ALL');
+    if (!deletedStore[deptCode][yearStr].includes(dk)) {
+        deletedStore[deptCode][yearStr].push(dk);
         saveDeletedSubjectsStore(deletedStore);
     }
 
-    sendSubjectToCloud('delete_subject', deptCode, yearStr, targetName)
+    sendSubjectToCloud('delete_subject', deptCode, yearStr, targetName, false, targetSec || 'ALL')
         .catch(e => console.warn('Subject delete cloud sync error:', e));
 
     showCustomToast('Subject Deleted Across College', '"' + targetName + '" removed from ' + deptCode + ' ' + yearStr + ' on all devices.');
@@ -2708,7 +2747,8 @@ function extractSubjNameAndSection(subj) {
 function normalizeSectionCode(sec) {
     if (!sec) return 'ALL';
     const s = String(sec).trim().toUpperCase();
-    if (s === 'ALL' || s === 'COMBINED' || s === 'ANY') return 'ALL';
+    if (s === 'ALL' || s === 'COMBINED' || s === 'ANY' || s === 'ELECTIVE') return 'ALL';
+    if (s === 'COMMON' || s === 'SECTION COMMON' || s === 'ALL CLASSES' || s === 'SHARED') return 'COMMON';
     if (s === 'A_B' || s === 'A&B' || s === 'A AND B' || s === 'AB') return 'A_B';
     if (s === 'C (AIML)' || s === 'C AIML' || s === 'AIML') return 'C_AIML';
     if (s === 'C (TP)' || s === 'C TP' || s === 'TP') return 'C_TP';
@@ -2718,34 +2758,37 @@ function normalizeSectionCode(sec) {
 }
 
 /**
- * Section visibility rules:
- * - Combined (ALL): ONLY subjects tagged ALL (Kannada/Hindi/Sanskrit electives)
- * - Sec A / B: A_B (+ A/B) only — electives do NOT appear (enter under Combined)
- * - Sec C / C(AIML): AIML only — electives do NOT appear
- * - A_B manage tag: A_B / A / B — not electives, not AIML
+ * Scope rules:
+ * - ALL (Combined elective): Combined attendance only (Kannada/Hindi/Sanskrit)
+ * - COMMON (all classes, not elective): Sec A, B, C — NOT Combined (English, CONST, FOC…)
+ * - A_B: Sec A / B only
+ * - C_AIML: Sec C (AIML) only
  */
 function isCustomSubjectMatchingSection(subjObj, targetSec) {
     const sSec = normalizeSectionCode(subjObj.section || 'ALL');
     const target = normalizeSectionCode(targetSec || 'A');
 
-    // Combined: languages/electives only (students distributed across sections)
     if (target === 'ALL') {
         return sSec === 'ALL';
     }
 
-    // Electives must NOT appear under Sec A/B/C — staff must use Combined
+    // Combined electives never show under A/B/C
     if (sSec === 'ALL') {
         return false;
     }
 
+    // Common core subjects: every concrete class section, not Combined
+    if (sSec === 'COMMON') {
+        return target === 'A' || target === 'B' || target === 'C' ||
+            target === 'C_AIML' || target === 'C_TP' || target === 'C_AF' || target === 'A_B';
+    }
+
     if (sSec === target) return true;
 
-    // BCA 1st year UI uses value "C" for AIML; subjects may be stored as "C (AIML)"
     if ((sSec === 'C_AIML' && target === 'C') || (sSec === 'C' && target === 'C_AIML')) {
         return true;
     }
 
-    // General A/B share the A_B subject pool
     if (sSec === 'A_B' && (target === 'A' || target === 'B')) {
         return true;
     }
@@ -2759,6 +2802,14 @@ function isCustomSubjectMatchingSection(subjObj, targetSec) {
     if (target === 'C_AIML') return sSec === 'C_AIML' || sSec === 'C';
 
     return false;
+}
+
+function subjectScopeKey(name, section) {
+    return String(name || '').trim().toLowerCase() + '::' + normalizeSectionCode(section);
+}
+
+function sectionsEqualForSubject(a, b) {
+    return normalizeSectionCode(a) === normalizeSectionCode(b);
 }
 
 function subjectListFingerprint(subjects) {
@@ -2816,10 +2867,18 @@ function getSubjectsForActiveYear(deptCode, yearStr, sectionStr) {
         baseSubjects = [...(config.subjects || [])];
     }
 
+    const deletedStore = getDeletedSubjectsStore();
+    const deletedList = ((deletedStore[deptCode] || {})[yearStr]) || [];
+    const isDeletedEntry = (name, section) => {
+        const dk = subjectScopeKey(name, section);
+        return deletedList.some(d => d === dk || d.toLowerCase() === String(name).toLowerCase());
+    };
+
     const mergeList = (list) => {
         (list || []).forEach(subj => {
             const item = extractSubjNameAndSection(subj);
             if (!item.name) return;
+            if (isDeletedEntry(item.name, item.section)) return;
             if (isCustomSubjectMatchingSection(item, sec)) {
                 if (!baseSubjects.some(s => s.toLowerCase() === item.name.toLowerCase())) {
                     baseSubjects.push(item.name);
@@ -2834,23 +2893,25 @@ function getSubjectsForActiveYear(deptCode, yearStr, sectionStr) {
     const customStore = getCustomSubjectsStore();
     mergeList((customStore[deptCode] || {})[yearStr] || []);
 
-    const deletedStore = getDeletedSubjectsStore();
-    const deletedList = ((deletedStore[deptCode] || {})[yearStr]) || [];
-    baseSubjects = baseSubjects.filter(subj => !deletedList.some(d => d.toLowerCase() === subj.toLowerCase()));
-
     return baseSubjects;
 }
 
-/** All subjects for the year (manage chips) — not filtered by attendance section. */
+/** All subject entries for manage chips (name + section; same name can exist in different scopes). */
 function getAllSubjectsForYearManage(deptCode, yearStr) {
-    const names = [];
+    const entries = [];
     const seen = new Set();
+    const deletedStore = getDeletedSubjectsStore();
+    const deletedList = ((deletedStore[deptCode] || {})[yearStr]) || [];
+
     const add = (subj) => {
         const item = extractSubjNameAndSection(subj);
-        const key = item.name.trim().toLowerCase();
-        if (!key || seen.has(key)) return;
-        seen.add(key);
-        names.push(item.name.trim());
+        const name = item.name.trim();
+        if (!name) return;
+        const dk = subjectScopeKey(name, item.section);
+        if (deletedList.some(d => d === dk || d.toLowerCase() === name.toLowerCase())) return;
+        if (seen.has(dk)) return;
+        seen.add(dk);
+        entries.push({ name: name, section: item.section || 'A_B' });
     };
 
     const cloudStore = getCloudSubjectsStore();
@@ -2858,9 +2919,7 @@ function getAllSubjectsForYearManage(deptCode, yearStr) {
     const customStore = getCustomSubjectsStore();
     ((customStore[deptCode] || {})[yearStr] || []).forEach(add);
 
-    const deletedStore = getDeletedSubjectsStore();
-    const deletedList = ((deletedStore[deptCode] || {})[yearStr]) || [];
-    return names.filter(n => !deletedList.some(d => d.toLowerCase() === n.toLowerCase()));
+    return entries;
 }
 
 function updateSubjectDropdowns(subjects, defaultSubject) {
@@ -3331,33 +3390,46 @@ function populateModalSectionOptions() {
     const year = directYearSelect ? directYearSelect.value : 'First Year';
     const isFirstYear = year === 'First Year' || year === '1' || year === '1st Year';
 
-    // Concrete sections first — ALL is only for Elective checkbox path
     let options = [];
-    let defaultVal = 'A';
+    let defaultVal = 'COMMON';
 
     if (dept === 'BCA') {
         if (isFirstYear) {
-            options.push({ val: 'A_B', label: 'Section A & B (General BCA)' });
-            options.push({ val: 'C (AIML)', label: 'Section C (AIML)' });
-            defaultVal = 'A_B';
+            options = [
+                { val: 'A_B', label: '1) A & B only (General BCA)' },
+                { val: 'C (AIML)', label: '2) C (AIML) only' },
+                { val: 'COMMON', label: '3) Common to all classes (English, CONST, FOC…) — not Combined' },
+                { val: 'ALL', label: '4) Combined elective (Kannada / Hindi / Sanskrit)' }
+            ];
+            defaultVal = 'COMMON';
         } else {
-            options.push({ val: 'A', label: 'Section A' });
-            options.push({ val: 'B', label: 'Section B' });
-            options.push({ val: 'C', label: 'Section C' });
-            defaultVal = 'A';
+            options = [
+                { val: 'A', label: 'Section A only' },
+                { val: 'B', label: 'Section B only' },
+                { val: 'C', label: 'Section C only' },
+                { val: 'COMMON', label: 'Common to all classes — not Combined' },
+                { val: 'ALL', label: 'Combined elective (languages)' }
+            ];
+            defaultVal = 'COMMON';
         }
     } else if (dept === 'BCM' || dept === 'BCOM') {
-        options.push({ val: 'A_B', label: 'Section A & B (General B.Com)' });
-        options.push({ val: 'C (TP)', label: 'Section C (TP - Tax Procedure)' });
-        options.push({ val: 'C (AF)', label: 'Section C (AF - Accounting & Finance)' });
-        defaultVal = 'A_B';
+        options = [
+            { val: 'A_B', label: '1) A & B only (General B.Com)' },
+            { val: 'C (TP)', label: '2) C (TP) only' },
+            { val: 'C (AF)', label: '3) C (AF) only' },
+            { val: 'COMMON', label: '4) Common to all classes — not Combined' },
+            { val: 'ALL', label: '5) Combined elective (languages)' }
+        ];
+        defaultVal = 'COMMON';
     } else {
-        options.push({ val: 'A', label: 'Section A' });
-        options.push({ val: 'B', label: 'Section B' });
-        options.push({ val: 'C', label: 'Section C' });
+        options = [
+            { val: 'A', label: 'Section A only' },
+            { val: 'B', label: 'Section B only' },
+            { val: 'C', label: 'Section C only' },
+            { val: 'COMMON', label: 'Common to all classes — not Combined' },
+            { val: 'ALL', label: 'Combined elective (languages)' }
+        ];
     }
-
-    options.push({ val: 'ALL', label: 'All Sections (only with Elective checked)' });
 
     options.forEach(o => {
         const opt = document.createElement('option');
@@ -3414,24 +3486,18 @@ function initSubjectManager() {
             }
             const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
             const secSelectModal = document.getElementById('newSubjectSectionSelect');
-            const electiveCheck = document.getElementById('newSubjectElectiveCheck');
             const oldNameInput = document.getElementById('editingSubjectOldName');
+            const oldSecInput = document.getElementById('editingSubjectOldSection');
             const oldName = oldNameInput ? oldNameInput.value.trim() : '';
-            let targetSection = secSelectModal ? secSelectModal.value : 'A_B';
-            const isElecChecked = !!(electiveCheck && electiveCheck.checked);
-
-            if (isElecChecked) {
-                targetSection = 'ALL';
-            } else if (normalizeSectionCode(targetSection) === 'ALL') {
-                alert('For All Sections subjects, tick "Elective / Language".\nOtherwise choose Section A & B or Section C (AIML).');
-                return;
-            }
+            const oldSection = oldSecInput ? oldSecInput.value.trim() : '';
+            let targetSection = canonicalSectionStorage(secSelectModal ? secSelectModal.value : 'COMMON');
+            const isElecChecked = normalizeSectionCode(targetSection) === 'ALL';
 
             const targetSectionText = secSelectModal && secSelectModal.options[secSelectModal.selectedIndex]
                 ? secSelectModal.options[secSelectModal.selectedIndex].text
                 : targetSection;
 
-            upsertLocalSubject(currentDept, activeYear, val, targetSection, isElecChecked, oldName || null);
+            upsertLocalSubject(currentDept, activeYear, val, targetSection, isElecChecked, oldName || null, oldSection || null);
 
             // Allow cloud sync again for this dept (old subjects stay hidden via deletedStore tombstones)
             const clearedStore = getClearedDeptsStore();
@@ -3441,7 +3507,7 @@ function initSubjectManager() {
             }
 
             const cloudAction = oldName ? 'rename_subject' : 'add_subject';
-            sendSubjectToCloud(cloudAction, currentDept, activeYear, val, isElecChecked, targetSection, oldName || '')
+            sendSubjectToCloud(cloudAction, currentDept, activeYear, val, isElecChecked, targetSection, oldName || '', oldSection || '')
                 .catch(e => console.warn('Subject cloud sync error:', e));
 
             clearSubjectEditForm();
@@ -3449,28 +3515,8 @@ function initSubjectManager() {
             refreshSubjectDropdowns(val);
             showCustomToast(
                 oldName ? 'Subject Updated & Synced!' : 'Subject Added & Synced!',
-                '"' + val + '" saved for ' + targetSectionText + (isElecChecked ? ' (Elective)' : '') + '.'
+                '"' + val + '" saved — ' + targetSectionText
             );
-        });
-    }
-
-    const electiveCheckEl = document.getElementById('newSubjectElectiveCheck');
-    const secSelectEl = document.getElementById('newSubjectSectionSelect');
-    if (electiveCheckEl && secSelectEl) {
-        electiveCheckEl.addEventListener('change', () => {
-            if (electiveCheckEl.checked) {
-                secSelectEl.value = 'ALL';
-            } else if (normalizeSectionCode(secSelectEl.value) === 'ALL') {
-                const hasAB = Array.from(secSelectEl.options).some(o => o.value === 'A_B');
-                secSelectEl.value = hasAB ? 'A_B' : 'A';
-            }
-        });
-        secSelectEl.addEventListener('change', () => {
-            if (normalizeSectionCode(secSelectEl.value) === 'ALL') {
-                electiveCheckEl.checked = true;
-            } else {
-                electiveCheckEl.checked = false;
-            }
         });
     }
 
@@ -3571,13 +3617,15 @@ function getSubjectSectionTagInfo(deptCode, yearStr, subjName) {
 }
 
 function formatSectionTagLabel(secCode) {
-    const sec = secCode || 'ALL';
-    if (sec === 'ALL') return { label: '🌐 All Sections', section: 'ALL', bg: 'rgba(234, 179, 8, 0.2)', color: '#eab308' };
-    if (sec === 'A_B') return { label: '🎯 Sec A & B', section: 'A_B', bg: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' };
-    if (sec === 'C (AIML)' || sec === 'AIML') return { label: '🤖 Sec C (AIML)', section: 'C (AIML)', bg: 'rgba(168, 85, 247, 0.2)', color: '#c084fc' };
-    if (sec === 'C (TP)' || sec === 'TP') return { label: '🏛️ Sec C (TP)', section: 'C (TP)', bg: 'rgba(168, 85, 247, 0.2)', color: '#c084fc' };
-    if (sec === 'C (AF)' || sec === 'AF') return { label: '📈 Sec C (AF)', section: 'C (AF)', bg: 'rgba(168, 85, 247, 0.2)', color: '#c084fc' };
-    return { label: `📌 Sec ${sec}`, section: sec, bg: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' };
+    const sec = secCode || 'COMMON';
+    const n = normalizeSectionCode(sec);
+    if (n === 'ALL') return { label: 'Combined elective', section: 'ALL', bg: 'rgba(234, 179, 8, 0.2)', color: '#eab308' };
+    if (n === 'COMMON') return { label: 'Common (all classes)', section: 'COMMON', bg: 'rgba(52, 211, 153, 0.2)', color: '#34d399' };
+    if (n === 'A_B') return { label: 'A & B only', section: 'A_B', bg: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' };
+    if (n === 'C_AIML') return { label: 'C (AIML) only', section: 'C (AIML)', bg: 'rgba(168, 85, 247, 0.2)', color: '#c084fc' };
+    if (n === 'C_TP') return { label: 'C (TP) only', section: 'C (TP)', bg: 'rgba(168, 85, 247, 0.2)', color: '#c084fc' };
+    if (n === 'C_AF') return { label: 'C (AF) only', section: 'C (AF)', bg: 'rgba(168, 85, 247, 0.2)', color: '#c084fc' };
+    return { label: 'Sec ' + sec, section: sec, bg: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' };
 }
 
 function renderSubjectChips() {
@@ -3592,14 +3640,16 @@ function renderSubjectChips() {
         return;
     }
 
-    subjects.forEach(subj => {
+    subjects.forEach(entry => {
+        const subj = entry.name;
+        const sec = entry.section;
         const chip = document.createElement('div');
         chip.className = 'subject-chip-tag';
         chip.style.display = 'inline-flex';
         chip.style.alignItems = 'center';
         chip.style.gap = '6px';
 
-        const tagInfo = getSubjectSectionTagInfo(currentDept, activeYear, subj);
+        const tagInfo = formatSectionTagLabel(sec);
 
         const nameSpan = document.createElement('span');
         nameSpan.textContent = subj;
@@ -3610,9 +3660,7 @@ function renderSubjectChips() {
         badgeSpan.textContent = tagInfo.label;
         chip.appendChild(badgeSpan);
 
-        const elecKey = (currentDept + '_' + activeYear + '_' + subj).toLowerCase();
-        const flags = getElectiveFlagsStore();
-        if (flags[elecKey] === true || tagInfo.section === 'ALL') {
+        if (normalizeSectionCode(sec) === 'ALL') {
             const elecBadge = document.createElement('span');
             elecBadge.style.cssText = 'font-size: 0.65rem; padding: 2px 6px; border-radius: 12px; background: rgba(52,211,153,0.2); color: #34d399; font-weight: 600;';
             elecBadge.textContent = 'Elective';
@@ -3629,7 +3677,7 @@ function renderSubjectChips() {
         editBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            beginSubjectEdit(subj);
+            beginSubjectEdit(subj, sec);
         });
         chip.appendChild(editBtn);
 
@@ -3641,7 +3689,7 @@ function renderSubjectChips() {
         delBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            deleteSubject(currentDept, activeYear, subj);
+            deleteSubject(currentDept, activeYear, subj, sec);
             renderSubjectChips();
             refreshSubjectDropdowns();
         });
