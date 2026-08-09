@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mgm-absentee-informer-v37-fa-i-scopes';
+const CACHE_NAME = 'mgm-absentee-informer-v38-prod-ready';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

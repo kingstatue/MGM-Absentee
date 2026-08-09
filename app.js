@@ -113,8 +113,11 @@ function getAuthPayload() {
 function setAuthSession(passcode, role, deptCode, remember) {
     const pass = (passcode || '').trim();
     try { sessionStorage.setItem('mgm_auth_pass', pass); } catch (e) {}
+    // Always persist locally so mobile/PWA kill does not drop auth mid-class.
+    // "Remember" still controls pre-fill on the login screen.
+    try { localStorage.setItem('mgm_remember_pass', pass); } catch (e) {}
     if (remember) {
-        try { localStorage.setItem('mgm_remember_pass', pass); } catch (e) {}
+        try { localStorage.setItem('mgm_remember_checked', '1'); } catch (e) {}
     }
     if (role) {
         currentRole = role;
@@ -419,11 +422,13 @@ function computeRollDiff(prevRollInput, newRollInput) {
 }
 
 function isSectionOverlap(sec1, sec2) {
-    const s1 = String(sec1 || '').trim().toUpperCase();
-    const s2 = String(sec2 || '').trim().toUpperCase();
-    if (!s1 || !s2) return false;
-    if (s1 === s2) return true;
-    if (s1 === 'ALL' || s1.includes('COMBIN') || s2 === 'ALL' || s2.includes('COMBIN')) return true;
+    const n1 = normalizeSectionCode(sec1);
+    const n2 = normalizeSectionCode(sec2);
+    if (!n1 || !n2) return false;
+    if (n1 === n2) return true;
+    if (n1 === 'ALL' || n2 === 'ALL') return true;
+    // BCA plain C and C (AIML) are the same class for conflict purposes
+    if ((n1 === 'C' && n2 === 'C_AIML') || (n1 === 'C_AIML' && n2 === 'C')) return true;
     return false;
 }
 
@@ -521,7 +526,7 @@ function checkSheetSlotConflict(dateVal, yearVal, sectionVal, slotVal, subjectVa
         const timeout = setTimeout(() => {
             cleanup();
             resolve({ exists: false, offline: true });
-        }, 4000);
+        }, 6000);
 
         function cleanup() {
             clearTimeout(timeout);
@@ -874,146 +879,6 @@ function openConfirmationModal(data) {
 function closeConfirmationModal() {
     confirmationModal.classList.remove('active');
     if (deleteBtn) deleteBtn.style.display = 'none';
-    if (modalAlertBox) modalAlertBox.style.display = 'none';
-    statusPill.className = 'status-pill';
-    statusText.textContent = 'Tap microphone to speak';
-}
-
-// 4. Backend Integration (HTTP POST to Google Apps Script Webhook with Date)
-async function submitData(dateVal, rollRaw, yearVal, sectionVal, subjectVal, slotVal, btnElem, textElem, spinnerElem) {
-    if (!subjectVal) {
-        alert('Please enter a subject name.');
-        return;
-    }
-
-    if (btnElem) btnElem.disabled = true;
-    if (textElem) textElem.style.opacity = '0.5';
-
-    let cleanSubject = subjectVal ? subjectVal.trim() : '';
-    if (isElectiveOrLanguageSubject(cleanSubject)) {
-        sectionVal = 'ALL';
-    } else if (sectionVal === 'ALL') {
-        // Core subject (e.g. Maths) -> Reset section to Section A to prevent accidental Combined entries
-        sectionVal = 'A';
-    }
-
-    const cleanDate = dateVal || getTodayISOString();
-    const cleanSlot = parseInt(slotVal, 10) || 1;
-
-    let formattedRolls = 'NIL';
-    let rollNumbersArray = normalizeRollNumbers(rollRaw);
-
-    if (rollNumbersArray.length > 0) {
-        formattedRolls = rollNumbersArray.join(', ');
-    }
-
-    const localHistory = JSON.parse(localStorage.getItem('mgm_attendance_history') || '[]');
-    const existingEntry = localHistory.find(item => {
-        if ((item.stream || 'BCA') !== currentDept) return false;
-        if (item.date !== cleanDate) return false;
-        if (item.year !== yearVal) return false;
-        if (parseInt(item.slot, 10) !== cleanSlot) return false;
-
-        const sec1 = item.section || 'A';
-        const sec2 = sectionVal || 'A';
-        if (!isSectionOverlap(sec1, sec2)) return false;
-
-        const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || sec1.toLowerCase().includes('combin');
-        const isComb2 = sectionVal === 'ALL' || (sectionVal || '').toUpperCase() === 'ALL' || (sectionVal || '').toLowerCase().includes('combin');
-        const isElec1 = isElectiveOrLanguageSubject(item.subject);
-        const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
-
-        if (isComb1 && isComb2 && isElec1 && isElec2 && item.subject.trim().toLowerCase() !== cleanSubject.toLowerCase()) {
-            return false; // Parallel elective
-        }
-
-        return true;
-    });
-
-    if (existingEntry) {
-        const sameSubject = cleanSubject.length > 0 &&
-            existingEntry.subject.trim().toLowerCase() === cleanSubject.toLowerCase();
-        const diff = computeRollDiff(existingEntry.rollNumbers, formattedRolls);
-        const prevStr = diff.prevRolls.length > 0 ? diff.prevRolls.join(', ') : 'NIL';
-
-        alertBoxElem.style.display = 'block';
-        alertBoxElem.className = 'alert-banner active';
-
-        if (!sameSubject) {
-            const secLabel = existingEntry.section === 'ALL' ? 'Combined (Sec A,B,C)' : `Sec ${existingEntry.section}`;
-            alertBoxElem.innerHTML = `
-            <div style="display: flex; gap: 10px; align-items: flex-start;">
-                <div style="flex: 1; font-size: 0.85rem; line-height: 1.4;">
-                    <strong style="color: #fbbf24;">⚠️ Slot already occupied (${secLabel})</strong><br>
-                    ${escapeHTML(cleanDate)} · ${escapeHTML(yearVal)} · Slot ${cleanSlot}<br>
-                    Existing entry: <strong>${escapeHTML(existingEntry.subject)}</strong> (${secLabel}) — Absentees: <strong>${escapeHTML(prevStr)}</strong><br>
-                    <span style="opacity: 0.9;">Submitting will merge or replace absentees.</span>
-                </div>
-            </div>`;
-            if (submitBtnTextElem) submitBtnTextElem.textContent = 'Merge or Replace Entry';
-        } else {
-            const addedStr = diff.addedRolls.length > 0 ? diff.addedRolls.join(', ') : 'None';
-            const retainedStr = diff.retainedRolls.length > 0 ? diff.retainedRolls.join(', ') : 'None';
-            alertBoxElem.innerHTML = `
-            <div style="display: flex; gap: 10px; align-items: flex-start;">
-                <div style="flex: 1; font-size: 0.85rem; line-height: 1.4;">
-                    <strong style="color: #fbbf24;">ℹ️ Entry already exists for ${escapeHTML(existingEntry.subject)} (Slot ${cleanSlot})</strong><br>
-                    Previous Entry: <strong>${escapeHTML(prevStr)}</strong><br>
-                    <span style="opacity: 0.9;">Submitting will ask to merge absentees from both entries.</span>
-                    <div style="margin-top: 6px; padding: 6px 8px; background: rgba(0,0,0,0.25); border-radius: 6px; display: flex; flex-wrap: wrap; gap: 8px;">
-                        <span style="color: #34d399;"><strong>+ Added:</strong> ${escapeHTML(addedStr)}</span>
-                        <span style="color: #a7f3d0;"><strong>Unchanged:</strong> ${escapeHTML(retainedStr)}</span>
-                    </div>
-                </div>
-            </div>`;
-            if (submitBtnTextElem) submitBtnTextElem.textContent = 'Merge & Save Attendance';
-        }
-        return existingEntry;
-    }
-
-    alertBoxElem.style.display = 'none';
-    alertBoxElem.innerHTML = '';
-    if (submitBtnTextElem) submitBtnTextElem.textContent = 'Submit Absentee';
-    return null;
-}
-
-function checkSheetSlotConflict(dateVal, yearVal, sectionVal, slotVal, subjectVal) {
-    return new Promise((resolve) => {
-        const cbName = 'mgmConflictCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
-        let scriptEl = null;
-        const timeout = setTimeout(() => {
-            cleanup();
-            resolve({ exists: false, offline: true });
-        }, 1500);
-
-        function cleanup() {
-            clearTimeout(timeout);
-            try { delete window[cbName]; } catch (e) {}
-            if (scriptEl && scriptEl.parentNode) scriptEl.parentNode.removeChild(scriptEl);
-        }
-
-        window[cbName] = function (data) {
-            cleanup();
-            resolve(data || { exists: false });
-        };
-
-        const params = new URLSearchParams({
-            action: 'check',
-            date: dateVal || getTodayISOString(),
-            stream: currentDept,
-            year: yearVal || '',
-            section: sectionVal || '',
-            slot: String(slotVal || 1),
-            subject: subjectVal || '',
-            callback: cbName
-        });
-        appendAuthToParams(params);
-
-        const targetUrl = getWebhookUrl(currentDept);
-        scriptEl = document.createElement('script');
-        scriptEl.src = targetUrl + (targetUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
-        scriptEl.onerror = function () {
-            cleanup();
             resolve({ exists: false, offline: true });
         };
         document.body.appendChild(scriptEl);
@@ -2363,7 +2228,7 @@ function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sec
             if (completed) return;
             completed = true;
             cleanup();
-            resolve(true);
+            resolve(false);
         }, 5000);
 
         window[cbName] = function (data) {
@@ -2395,7 +2260,7 @@ function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sec
             completed = true;
             clearTimeout(timeout);
             cleanup();
-            resolve(true);
+            resolve(false);
         };
         document.body.appendChild(scriptEl);
     }).finally(() => {
@@ -3521,16 +3386,31 @@ function initSubjectManager() {
             }
 
             const cloudAction = oldName ? 'rename_subject' : 'add_subject';
-            sendSubjectToCloud(cloudAction, currentDept, activeYear, val, isElecChecked, targetSection, oldName || '', oldSection || '')
-                .catch(e => console.warn('Subject cloud sync error:', e));
-
             clearSubjectEditForm();
             renderSubjectChips();
             refreshSubjectDropdowns(val);
             showCustomToast(
-                oldName ? 'Subject Updated & Synced!' : 'Subject Added & Synced!',
-                '"' + val + '" saved — ' + targetSectionText
+                oldName ? 'Subject Saved Locally' : 'Subject Saved Locally',
+                '"' + val + '" — syncing to sheet…'
             );
+            sendSubjectToCloud(cloudAction, currentDept, activeYear, val, isElecChecked, targetSection, oldName || '', oldSection || '')
+                .then(ok => {
+                    if (ok) {
+                        showCustomToast(
+                            oldName ? 'Subject Updated & Synced!' : 'Subject Added & Synced!',
+                            '"' + val + '" saved — ' + targetSectionText
+                        );
+                    } else {
+                        showCustomToast(
+                            'Saved on this device only',
+                            '"' + val + '" — cloud sync failed. Check login / Wi‑Fi, then re-open Manage Subjects.'
+                        );
+                    }
+                })
+                .catch(e => {
+                    console.warn('Subject cloud sync error:', e);
+                    showCustomToast('Saved on this device only', 'Cloud sync error — subject may not appear on other phones yet.');
+                });
         });
     }
 
@@ -3554,9 +3434,12 @@ function initSubjectManager() {
                         .concat((customStore[dept] && customStore[dept][yr]) || [])
                         .concat((cloudStore[dept] && cloudStore[dept][yr]) || []);
                     lists.forEach(s => {
-                        const name = extractSubjNameAndSection(s).name.trim();
-                        if (name && !deletedStore[dept][yr].some(d => d.toLowerCase() === name.toLowerCase())) {
-                            deletedStore[dept][yr].push(name);
+                        const item = extractSubjNameAndSection(s);
+                        const name = item.name.trim();
+                        if (!name) return;
+                        const dk = subjectScopeKey(name, item.section);
+                        if (!deletedStore[dept][yr].some(d => String(d).toLowerCase() === dk.toLowerCase())) {
+                            deletedStore[dept][yr].push(dk);
                         }
                     });
                 });
@@ -3586,7 +3469,7 @@ function initSubjectManager() {
 
 // Version upgrade check to purge stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
-    const APP_VER = 'v27.8_fa_i_scopes';
+    const APP_VER = 'v27.9_prod_ready';
     if (localStorage.getItem('mgm_app_ver') !== APP_VER) {
         localStorage.removeItem('mgm_cloud_subjects');
         localStorage.setItem('mgm_app_ver', APP_VER);
@@ -3738,8 +3621,12 @@ function initHODPortal() {
 
     if (hodShareAllWaBtn) {
         hodShareAllWaBtn.addEventListener('click', () => {
-            if (typeof shareHODMasterWhatsApp === 'function') {
-                shareHODMasterWhatsApp();
+            // Container is replaced by year-group WhatsApp buttons after fetch;
+            // if this seed button is still visible, point HOD to those buttons.
+            const status = document.getElementById('hodStatusMessage');
+            if (status) {
+                status.style.display = 'block';
+                status.textContent = 'Fetch absentees first — then use the year/section WhatsApp buttons above the cards.';
             }
         });
     }
