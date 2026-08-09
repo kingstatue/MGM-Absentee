@@ -3695,7 +3695,7 @@ function initSubjectManager() {
 
 // Version upgrade check to purge stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
-    const APP_VER = 'v27.14_multislot_rolls';
+    const APP_VER = 'v27.15_wa_compact';
     if (localStorage.getItem('mgm_app_ver') !== APP_VER) {
         localStorage.removeItem('mgm_cloud_subjects');
         localStorage.setItem('mgm_app_ver', APP_VER);
@@ -4196,82 +4196,115 @@ function buildGroupedWhatsAppButtons(stream, dateVal, entries) {
     return html;
 }
 
-function buildCombinedGroupWhatsAppMessage(groupTitle, dateStr, entries) {
-    const formattedDate = formatDateDisplay(dateStr);
-    let msg = `📌 *MGM COLLEGE — ABSENTEE NOTICE*\n`;
-    msg += `🏫 *Class:* ${groupTitle}\n`;
-    msg += `📅 *Date:* ${formattedDate}\n\n`;
-    msg += `*Period / Subject Wise Absentees:*\n`;
+/** Compact WhatsApp date: 09-08-2026 */
+function formatWhatsAppDateDDMMYYYY(dateStr) {
+    if (!dateStr) return '';
+    try {
+        const parts = String(dateStr).trim().split(/[-/]/);
+        if (parts.length === 3 && parts[0].length === 4) {
+            // YYYY-MM-DD
+            const dd = String(parts[2]).padStart(2, '0');
+            const mm = String(parts[1]).padStart(2, '0');
+            return dd + '-' + mm + '-' + parts[0];
+        }
+        if (parts.length === 3) {
+            // DD-MM-YYYY or similar
+            const dd = String(parts[0]).padStart(2, '0');
+            const mm = String(parts[1]).padStart(2, '0');
+            const yyyy = parts[2].length === 2 ? ('20' + parts[2]) : parts[2];
+            return dd + '-' + mm + '-' + yyyy;
+        }
+    } catch (e) {}
+    return String(dateStr);
+}
 
-    // Sort entries by section, then slot
-    entries.sort((a, b) => {
+function formatWhatsAppRolls(rollNumbers) {
+    const raw = (rollNumbers == null || String(rollNumbers).trim() === '') ? 'NIL' : String(rollNumbers).trim();
+    if (!raw || raw.toUpperCase() === 'NIL' || raw.toUpperCase() === 'NONE') {
+        return '*NIL*';
+    }
+    return '*' + raw + '*';
+}
+
+/** One period line: plain time + plain subject, bold rolls only. */
+function formatWhatsAppPeriodLine(entry, includeSecTag) {
+    const slotNum = parseInt(entry.slot, 10) || 1;
+    const timeLabel = getSlotTimeLabel(slotNum);
+    const subject = entry.subject || 'Subject';
+    const secTag = (includeSecTag && entry.section) ? (' [Sec ' + entry.section + ']') : '';
+    return '• ' + timeLabel + secTag + ' [' + subject + ']: ' + formatWhatsAppRolls(entry.rollNumbers);
+}
+
+function entriesSpanMultipleSections(entries) {
+    const secs = new Set();
+    (entries || []).forEach(e => {
+        const s = String(e.section || '').trim().toUpperCase();
+        if (s) secs.add(s);
+    });
+    return secs.size > 1;
+}
+
+function buildCombinedGroupWhatsAppMessage(groupTitle, dateStr, entries) {
+    const formattedDate = formatWhatsAppDateDDMMYYYY(dateStr);
+    let msg = '📌 *MGM COLLEGE — ABSENTEE NOTICE*\n';
+    msg += groupTitle + ' · ' + formattedDate + '\n\n';
+
+    const list = (entries || []).slice();
+    list.sort((a, b) => {
         const secA = String(a.section || '').toUpperCase();
         const secB = String(b.section || '').toUpperCase();
         if (secA !== secB) return secA.localeCompare(secB);
         return (parseInt(a.slot, 10) || 1) - (parseInt(b.slot, 10) || 1);
     });
 
-    entries.forEach(e => {
-        const slotNum = parseInt(e.slot, 10) || 1;
-        const timeLabel = getSlotTimeLabel(slotNum);
-        const secTag = e.section ? ` [Sec ${e.section}]` : '';
-        const rolls = e.rollNumbers && e.rollNumbers !== 'NIL' ? e.rollNumbers : 'NIL (All Present)';
-        msg += `• *${timeLabel}*${secTag} [${e.subject || 'Subject'}]: ${rolls}\n`;
+    const showSec = entriesSpanMultipleSections(list);
+    list.forEach(e => {
+        msg += formatWhatsAppPeriodLine(e, showSec) + '\n';
     });
 
-    msg += `\n_Please verify attendance with your ward._`;
-    return msg;
+    return msg.trim();
 }
 
 function buildSectionWhatsAppMessage(sectionTitle, dateStr, entries) {
-    const formattedDate = formatDateDisplay(dateStr);
-    let msg = `📌 *MGM COLLEGE — ABSENTEE NOTICE*\n`;
-    msg += `🏫 *Class:* ${sectionTitle}\n`;
-    msg += `📅 *Date:* ${formattedDate}\n\n`;
-    msg += `*Period / Subject Wise Absentees:*\n`;
+    const formattedDate = formatWhatsAppDateDDMMYYYY(dateStr);
+    let msg = '📌 *MGM COLLEGE — ABSENTEE NOTICE*\n';
+    msg += sectionTitle + ' · ' + formattedDate + '\n\n';
 
-    entries.forEach(e => {
-        const slotNum = parseInt(e.slot, 10) || 1;
-        const timeLabel = getSlotTimeLabel(slotNum);
-        const rolls = e.rollNumbers && e.rollNumbers !== 'NIL' ? e.rollNumbers : 'NIL (All Present)';
-        msg += `• *${timeLabel}* [${e.subject || 'Subject'}]: ${rolls}\n`;
+    const list = (entries || []).slice();
+    list.sort((a, b) => (parseInt(a.slot, 10) || 1) - (parseInt(b.slot, 10) || 1));
+    list.forEach(e => {
+        msg += formatWhatsAppPeriodLine(e, false) + '\n';
     });
 
-    msg += `\n_Please verify attendance with your ward._`;
-    return msg;
+    return msg.trim();
 }
 
 function buildYearWhatsAppMessage(yearLabel, stream, dateStr, entries) {
-    const formattedDate = formatDateDisplay(dateStr);
+    const formattedDate = formatWhatsAppDateDDMMYYYY(dateStr);
     const yrPrefix = yearLabel.includes('1st') || yearLabel === 'I' ? 'I' :
                      yearLabel.includes('2nd') || yearLabel === 'II' ? 'II' : 'III';
-    
-    let msg = `📌 *MGM COLLEGE — ${yrPrefix} ${stream} ABSENTEE REPORT*\n`;
-    msg += `📅 *Date:* ${formattedDate}\n\n`;
+
+    let msg = '📌 *MGM COLLEGE — ABSENTEE NOTICE*\n';
+    msg += yrPrefix + ' ' + stream + ' · ' + formattedDate + '\n\n';
 
     const groupedBySec = {};
-    entries.forEach(e => {
-        const secLabel = e.section ? `Section ${e.section}` : 'General';
+    (entries || []).forEach(e => {
+        const secLabel = e.section ? ('Sec ' + e.section) : 'General';
         if (!groupedBySec[secLabel]) groupedBySec[secLabel] = [];
         groupedBySec[secLabel].push(e);
     });
 
     Object.keys(groupedBySec).sort().forEach(secKey => {
-        msg += `🔹 *${yrPrefix} ${stream} - ${secKey}*\n`;
+        msg += yrPrefix + ' ' + stream + ' - ' + secKey + '\n';
         const secEntries = groupedBySec[secKey];
         secEntries.sort((a, b) => (parseInt(a.slot, 10) || 1) - (parseInt(b.slot, 10) || 1));
-        
         secEntries.forEach(e => {
-            const slotNum = parseInt(e.slot, 10) || 1;
-            const timeLabel = getSlotTimeLabel(slotNum);
-            const rolls = e.rollNumbers && e.rollNumbers !== 'NIL' ? e.rollNumbers : 'NIL (All Present)';
-            msg += `  • ${timeLabel} [${e.subject || 'Subject'}]: ${rolls}\n`;
+            msg += formatWhatsAppPeriodLine(e, false) + '\n';
         });
-        msg += `\n`;
+        msg += '\n';
     });
 
-    msg += `_Generated via MGM Attendance App_`;
-    return msg;
+    return msg.trim();
 }
 
 function openWhatsAppShare(encodedMsg) {
