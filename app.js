@@ -91,6 +91,120 @@ function getWebhookUrl(deptCode) {
     return DEFAULT_GOOGLE_SCRIPT_URL;
 }
 
+/** Session auth sent with every sheet request (validated by Apps Script). */
+function getAuthPayload() {
+    let pass = '';
+    try { pass = sessionStorage.getItem('mgm_auth_pass') || ''; } catch (e) {}
+    return {
+        authPasscode: pass,
+        authRole: localStorage.getItem('mgm_role') || currentRole || 'TEACHER',
+        authStream: currentDept || 'BCA'
+    };
+}
+
+function setAuthSession(passcode, role, deptCode, remember) {
+    const pass = (passcode || '').trim();
+    try { sessionStorage.setItem('mgm_auth_pass', pass); } catch (e) {}
+    if (remember) {
+        try { localStorage.setItem('mgm_remember_pass', pass); } catch (e) {}
+    }
+    if (role) {
+        currentRole = role;
+        localStorage.setItem('mgm_role', role);
+    }
+    if (deptCode) currentDept = deptCode;
+}
+
+function clearAuthSession() {
+    try { sessionStorage.removeItem('mgm_auth_pass'); } catch (e) {}
+    try { localStorage.removeItem('mgm_remember_pass'); } catch (e) {}
+}
+
+function restoreAuthSessionFromRemember() {
+    try {
+        const remembered = localStorage.getItem('mgm_remember_pass');
+        if (remembered) sessionStorage.setItem('mgm_auth_pass', remembered);
+    } catch (e) {}
+}
+
+function withAuth(payload) {
+    return Object.assign({}, payload || {}, getAuthPayload());
+}
+
+function appendAuthToParams(params) {
+    const auth = getAuthPayload();
+    params.set('authPasscode', auth.authPasscode || '');
+    params.set('authRole', auth.authRole || '');
+    params.set('authStream', auth.authStream || '');
+    return params;
+}
+
+/** Confirm login passcode against Apps Script (falls back to local if offline). */
+function authenticateWithServer(deptCode, passcode) {
+    return new Promise((resolve) => {
+        const targetUrl = getWebhookUrl(deptCode);
+        const cbName = 'mgmAuthCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+        let scriptEl = null;
+        let done = false;
+
+        const finish = (result) => {
+            if (done) return;
+            done = true;
+            clearTimeout(timeout);
+            try { delete window[cbName]; } catch (e) {}
+            if (scriptEl && scriptEl.parentNode) {
+                try { scriptEl.parentNode.removeChild(scriptEl); } catch (e) {}
+            }
+            resolve(result);
+        };
+
+        const timeout = setTimeout(() => finish({ ok: false, offline: true }), 4000);
+
+        window[cbName] = function (data) {
+            if (data && data.result === 'success') {
+                finish({ ok: true, role: data.role || 'TEACHER', offline: false });
+            } else {
+                finish({
+                    ok: false,
+                    offline: false,
+                    message: (data && (data.message || data.error)) || 'Invalid passcode'
+                });
+            }
+        };
+
+        const params = new URLSearchParams({
+            action: 'auth',
+            stream: deptCode || 'BCA',
+            authPasscode: (passcode || '').trim(),
+            authStream: deptCode || 'BCA',
+            callback: cbName
+        });
+
+        scriptEl = document.createElement('script');
+        scriptEl.src = targetUrl + (targetUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
+        scriptEl.onerror = function () { finish({ ok: false, offline: true }); };
+        document.body.appendChild(scriptEl);
+    });
+}
+
+function verifyAttendanceOnSheet(payload) {
+    return checkSheetSlotConflict(
+        payload.date,
+        payload.year,
+        payload.section,
+        payload.slot,
+        payload.subject
+    ).then((check) => {
+        if (!check || check.offline) return { verified: false, offline: true };
+        if (!check.exists) return { verified: false, offline: false };
+        const sheetRolls = normalizeRollNumbers(check.rollNumbers).map(String).sort().join(',');
+        const localRolls = normalizeRollNumbers(payload.rollNumbers).map(String).sort().join(',');
+        const subjectOk = !check.subject ||
+            String(check.subject).trim().toLowerCase() === String(payload.subject || '').trim().toLowerCase();
+        return { verified: subjectOk && sheetRolls === localRolls, offline: false };
+    }).catch(() => ({ verified: false, offline: true }));
+}
+
 function submitViaHiddenForm(url, payload) {
     return new Promise((resolve) => {
         try {
@@ -422,6 +536,7 @@ function checkSheetSlotConflict(dateVal, yearVal, sectionVal, slotVal, subjectVa
             subject: subjectVal || '',
             callback: cbName
         });
+        appendAuthToParams(params);
 
         const targetUrl = getWebhookUrl(currentDept);
         scriptEl = document.createElement('script');
@@ -884,6 +999,7 @@ function checkSheetSlotConflict(dateVal, yearVal, sectionVal, slotVal, subjectVa
             subject: subjectVal || '',
             callback: cbName
         });
+        appendAuthToParams(params);
 
         const targetUrl = getWebhookUrl(currentDept);
         scriptEl = document.createElement('script');
@@ -987,7 +1103,18 @@ function showSlotConflictDialog(params) {
 async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectVal, slotVal, btnElem, textElem, spinnerElem) {
     const cleanDate = dateVal || getTodayISOString();
     const cleanSlot = parseInt(slotVal, 10) || 1;
-    const cleanSubject = (subjectVal || '').trim();
+    let cleanSubject = (subjectVal || '').trim();
+    let cleanSection = sectionVal || 'A';
+
+    if (!cleanSubject) {
+        alert('Please enter / select a subject name before submitting.');
+        return { status: 'cancelled' };
+    }
+
+    // Language / elective subjects are combined across sections
+    if (isElectiveOrLanguageSubject(cleanSubject)) {
+        cleanSection = 'ALL';
+    }
 
     const rollNumbersArray = normalizeRollNumbers(rollNumbersRaw);
     let formattedRolls = rollNumbersArray.length > 0 ? rollNumbersArray.join(', ') : 'NIL';
@@ -1002,11 +1129,11 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         if (parseInt(item.slot, 10) !== cleanSlot) return false;
 
         const sec1 = item.section || 'A';
-        const sec2 = sectionVal || 'A';
+        const sec2 = cleanSection || 'A';
         if (!isSectionOverlap(sec1, sec2)) return false;
 
         const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || sec1.toLowerCase().includes('combin');
-        const isComb2 = sectionVal === 'ALL' || (sectionVal || '').toUpperCase() === 'ALL' || (sectionVal || '').toLowerCase().includes('combin');
+        const isComb2 = cleanSection === 'ALL' || (cleanSection || '').toUpperCase() === 'ALL' || (cleanSection || '').toLowerCase().includes('combin');
         const isElec1 = isElectiveOrLanguageSubject(item.subject);
         const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
 
@@ -1017,14 +1144,12 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         return true;
     });
 
-    // Cloud / Sheet check (Fast 1.5s max)
+    // Always check Google Sheet too (other teachers / other devices)
     let sheetConflict = { exists: false };
-    if (!existingEntry) {
-        try {
-            sheetConflict = await checkSheetSlotConflict(cleanDate, yearVal, sectionVal, cleanSlot, cleanSubject);
-        } catch (e) {
-            sheetConflict = { exists: false, offline: true };
-        }
+    try {
+        sheetConflict = await checkSheetSlotConflict(cleanDate, yearVal, cleanSection, cleanSlot, cleanSubject);
+    } catch (e) {
+        sheetConflict = { exists: false, offline: true };
     }
 
     const hasConflict = !!existingEntry || !!(sheetConflict.exists && !sheetConflict.offline);
@@ -1033,13 +1158,18 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
     let conflictChoice = 'create';
 
     if (hasConflict) {
-        const prevSubj = existingEntry ? existingEntry.subject : (sheetConflict.subject || cleanSubject);
-        const prevRolls = existingEntry ? existingEntry.rollNumbers : (sheetConflict.rollNumbers || 'NIL');
+        // Prefer sheet truth when both exist (cross-device)
+        const prevSubj = (sheetConflict.exists && sheetConflict.subject)
+            ? sheetConflict.subject
+            : (existingEntry ? existingEntry.subject : cleanSubject);
+        const prevRolls = (sheetConflict.exists && sheetConflict.rollNumbers != null)
+            ? sheetConflict.rollNumbers
+            : (existingEntry ? existingEntry.rollNumbers : 'NIL');
 
         const userChoice = await showSlotConflictDialog({
             date: cleanDate,
             year: yearVal,
-            section: sectionVal,
+            section: cleanSection,
             slot: cleanSlot,
             subject: cleanSubject,
             existingSubj: prevSubj,
@@ -1048,7 +1178,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         });
 
         if (!userChoice || userChoice.action === 'cancel') {
-            return;
+            return { status: 'cancelled' };
         }
 
         conflictChoice = userChoice.action;
@@ -1062,7 +1192,9 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
     if (spinnerElem) spinnerElem.style.display = 'block';
 
     const isUpdate = hasConflict;
-    const prevRollsArr = existingEntry ? normalizeRollNumbers(existingEntry.rollNumbers) : (sheetConflict.exists ? normalizeRollNumbers(sheetConflict.rollNumbers) : []);
+    const prevRollsArr = (sheetConflict.exists && !sheetConflict.offline)
+        ? normalizeRollNumbers(sheetConflict.rollNumbers)
+        : (existingEntry ? normalizeRollNumbers(existingEntry.rollNumbers) : []);
     const diff = computeRollDiff(prevRollsArr.join(', '), finalRolls);
 
     const payload = {
@@ -1072,7 +1204,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         date: cleanDate,
         rollNumbers: finalRolls,
         year: yearVal,
-        section: sectionVal,
+        section: cleanSection,
         subject: cleanSubject,
         slot: cleanSlot,
         previousRollNumbers: diff.prevRolls.length > 0 ? diff.prevRolls.join(', ') : 'NIL',
@@ -1091,17 +1223,35 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
 
     try {
         const targetUrl = getWebhookUrl(currentDept);
-        await postWithRetry(targetUrl, payload, 2);
+        await postWithRetry(targetUrl, withAuth(payload), 2);
 
+        const verify = await verifyAttendanceOnSheet(payload);
+        if (verify.verified) {
+            saveToLocalHistory({
+                ...payload,
+                offline: false,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+            closeConfirmationModal();
+            resetAllInputs();
+            showSuccessToast(payload);
+            setTimeout(fetchTodayServerHistory, 800);
+            return { status: 'ok' };
+        }
+
+        // Opaque POST may have failed — keep as pending sync
         saveToLocalHistory({
             ...payload,
-            offline: false,
+            offline: true,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
-
         closeConfirmationModal();
         resetAllInputs();
-        showSuccessToast(payload);
+        showCustomToast(
+            verify.offline ? 'Saved locally (could not verify sheet)' : 'Saved locally — sheet not updated yet',
+            'Will auto-sync when online. Tap Sync in Today\'s History if needed.'
+        );
+        return { status: 'offline' };
 
     } catch (error) {
         console.warn('Error submitting attendance:', error);
@@ -1116,6 +1266,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
             '⚠️ Saved Locally (Network Offline)',
             'Saved on phone. Will auto-sync to Google Sheet when online or tap "Sync" in Today\'s History.'
         );
+        return { status: 'offline' };
     } finally {
         if (btnElem) btnElem.disabled = false;
         if (textElem) textElem.style.opacity = '1';
@@ -1183,6 +1334,7 @@ async function handleMultiSlotSubmit(dateVal, masterRollRaw, yearVal, sectionVal
 
     const endSlot = Math.min(8, startSlot + duration - 1);
     let successCount = 0;
+    let cancelledCount = 0;
 
     for (let slotNum = startSlot; slotNum <= endSlot; slotNum++) {
         let slotRollRaw = masterRollRaw;
@@ -1193,15 +1345,26 @@ async function handleMultiSlotSubmit(dateVal, masterRollRaw, yearVal, sectionVal
             }
         }
         try {
-            await submitData(dateVal, slotRollRaw, yearVal, sectionVal, subjectVal, slotNum, btnElem, textElem, spinnerElem);
-            successCount++;
+            const result = await submitData(dateVal, slotRollRaw, yearVal, sectionVal, subjectVal, slotNum, btnElem, textElem, spinnerElem);
+            if (result && result.status === 'cancelled') {
+                cancelledCount++;
+                break; // stop remaining slots if user cancelled a conflict
+            }
+            if (result && (result.status === 'ok' || result.status === 'offline')) {
+                successCount++;
+            }
         } catch (e) {
             console.warn(`Error submitting slot ${slotNum}:`, e);
         }
     }
 
     if (successCount > 0) {
-        showCustomToast(`⚡ ${successCount}-Slot Lab Recorded!`, `Absentees logged for Slots ${startSlot} to ${endSlot} (${subjectVal}).`);
+        showCustomToast(
+            `⚡ ${successCount}-Slot Lab Recorded!`,
+            `Absentees logged for Slots ${startSlot} to ${endSlot} (${subjectVal}).`
+        );
+    } else if (cancelledCount > 0) {
+        showCustomToast('Submission cancelled', 'No lab slots were saved.');
     }
 }
 
@@ -1347,7 +1510,7 @@ async function deleteData(dateVal, yearVal, sectionVal, subjectVal, slotVal) {
 
     try {
         const targetUrl = getWebhookUrl(currentDept);
-        await postWithRetry(targetUrl, payload, 2);
+        await postWithRetry(targetUrl, withAuth(payload), 2);
     } catch (e) {
         console.error('Error sending delete request:', e);
         alert('Could not reach Google Sheets. Removed from app history on phone — check Raw Data / section sheet manually.');
@@ -1399,24 +1562,53 @@ function readAllHistory() {
     }
 }
 
-/** Keep only today on this phone; drop older days. */
-function pruneOldHistory() {
+/**
+ * Tidy local history without losing the offline sync queue.
+ * - Always keep unsynced (offline:true) entries for ANY date.
+ * - For already-synced entries, keep only today's rows (drawer).
+ */
+function compactAttendanceHistory(history) {
     const today = getTodayISOString();
-    const kept = readAllHistory().filter(item => item.date === today).slice(0, 15);
+    let offlineKept = 0;
+    let syncedTodayKept = 0;
+    const MAX_OFFLINE = 50;
+    const MAX_SYNCED_TODAY = 60;
+
+    return history.filter(item => {
+        if (item.offline === true) {
+            if (offlineKept >= MAX_OFFLINE) return false;
+            offlineKept++;
+            return true;
+        }
+        if (item.date === today) {
+            if (syncedTodayKept >= MAX_SYNCED_TODAY) return false;
+            syncedTodayKept++;
+            return true;
+        }
+        return false;
+    });
+}
+
+function pruneOldHistory() {
+    const kept = compactAttendanceHistory(readAllHistory());
     localStorage.setItem('mgm_attendance_history', JSON.stringify(kept));
     return kept;
 }
 
 function getTodayEntries() {
     const today = getTodayISOString();
-    return readAllHistory()
-        .filter(item => item.date === today && (item.stream || 'BCA') === currentDept)
-        .slice(0, 15);
+    const deptItems = readAllHistory().filter(item => (item.stream || 'BCA') === currentDept);
+    // Show today's rows + any still-pending offline rows from other dates
+    const pendingOtherDays = deptItems.filter(item => item.offline === true && item.date !== today);
+    const todayItems = deptItems.filter(item => item.date === today);
+    return [...pendingOtherDays, ...todayItems].slice(0, 30);
 }
 
 function updateTodayBadge() {
     const badge = document.getElementById('todayCountBadge');
-    const count = getTodayEntries().length;
+    const entries = getTodayEntries();
+    const count = entries.length;
+    const pendingOffline = entries.filter(item => item.offline === true).length;
     if (badge) {
         if (count > 0) {
             badge.hidden = false;
@@ -1428,25 +1620,35 @@ function updateTodayBadge() {
     }
     const sub = document.getElementById('todayDrawerSubtitle');
     if (sub) {
-        sub.textContent = count === 0
-            ? 'No classes marked yet today'
-            : count + ' class' + (count === 1 ? '' : 'es') + ' marked today — edit or delete any';
+        if (count === 0) {
+            sub.textContent = 'No classes marked yet today';
+        } else if (pendingOffline > 0) {
+            sub.textContent = count + ' entr' + (count === 1 ? 'y' : 'ies') +
+                ' — ' + pendingOffline + ' waiting to sync to Google Sheet';
+        } else {
+            sub.textContent = count + ' class' + (count === 1 ? '' : 'es') +
+                ' marked today — edit or delete any';
+        }
     }
 }
 
-// Local log for today's corrections on this phone
+// Local log + durable offline queue (offline rows survive past midnight)
 function saveToLocalHistory(entry) {
     const today = getTodayISOString();
     const entryDate = entry.date || today;
-    let history = readAllHistory().filter(item => item.date === today || item.date === entryDate);
+    let history = readAllHistory();
 
     const normalized = {
         ...entry,
         date: entryDate,
+        stream: entry.stream || currentDept || 'BCA',
         timestamp: entry.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
-    const existingIdx = history.findIndex(item => entryKey(item) === entryKey(normalized));
+    const existingIdx = history.findIndex(item =>
+        entryKey(item) === entryKey(normalized) &&
+        (item.stream || 'BCA') === (normalized.stream || 'BCA')
+    );
 
     if (existingIdx !== -1) {
         history[existingIdx] = { ...history[existingIdx], ...normalized };
@@ -1456,7 +1658,7 @@ function saveToLocalHistory(entry) {
         history.unshift(normalized);
     }
 
-    history = history.filter(item => item.date === today).slice(0, 20);
+    history = compactAttendanceHistory(history);
     localStorage.setItem('mgm_attendance_history', JSON.stringify(history));
     renderHistoryList();
 }
@@ -1493,9 +1695,12 @@ async function syncOfflineEntries() {
             delete payload.offline;
 
             try {
-                await postWithRetry(targetUrl, payload, 1);
-                history[i].offline = false;
-                syncedCount++;
+                await postWithRetry(targetUrl, withAuth(payload), 1);
+                const verify = await verifyAttendanceOnSheet(withAuth(payload));
+                if (verify.verified) {
+                    history[i].offline = false;
+                    syncedCount++;
+                }
             } catch (err) {
                 console.warn('Offline sync attempt failed for item:', item, err);
             }
@@ -1531,6 +1736,10 @@ function updateSyncButtonState() {
 
 let isFetchingServerHistory = false;
 
+function historyMatchKey(item) {
+    return entryKey(item) + '|' + (item.stream || 'BCA');
+}
+
 function fetchTodayServerHistory() {
     if (isFetchingServerHistory) return;
     isFetchingServerHistory = true;
@@ -1550,7 +1759,7 @@ function fetchTodayServerHistory() {
         isFetchingServerHistory = false;
         try { delete window[cbName]; } catch (e) {}
 
-        if (data && data.result === 'success' && data.entries) {
+        if (data && data.result === 'success' && Array.isArray(data.entries)) {
             const serverEntries = data.entries.map(e => ({
                 stream: stream,
                 date: dateVal,
@@ -1560,19 +1769,35 @@ function fetchTodayServerHistory() {
                 slot: parseInt(e.slot, 10) || 1,
                 rollNumbers: e.rollNumbers || 'NIL',
                 offline: false,
-                timestamp: 'Server Entry'
+                timestamp: 'From Sheet'
             }));
 
             const history = readAllHistory();
-            const offlineOnly = history.filter(item => item.offline === true);
+            const byKey = new Map();
 
-            const merged = [...offlineOnly];
-            serverEntries.forEach(sEntry => {
-                if (!merged.some(m => entryKey(m) === entryKey(sEntry))) {
-                    merged.push(sEntry);
+            // Keep offline queue (any date) + other streams / other dates
+            history.forEach(item => {
+                const k = historyMatchKey(item);
+                if (item.offline === true) {
+                    byKey.set(k, item);
+                    return;
                 }
+                const itemStream = item.stream || 'BCA';
+                if (itemStream !== stream || item.date !== dateVal) {
+                    byKey.set(k, item);
+                }
+                // today's synced rows for this stream come from server below
             });
 
+            // Sheet is source of truth for today's synced list (cross-device)
+            serverEntries.forEach(sEntry => {
+                const k = historyMatchKey(sEntry);
+                const existing = byKey.get(k);
+                if (existing && existing.offline === true) return; // pending local edit wins until synced
+                byKey.set(k, sEntry);
+            });
+
+            const merged = compactAttendanceHistory(Array.from(byKey.values()));
             localStorage.setItem('mgm_attendance_history', JSON.stringify(merged));
             renderHistoryList();
         }
@@ -1584,6 +1809,7 @@ function fetchTodayServerHistory() {
         date: dateVal,
         callback: cbName
     });
+    appendAuthToParams(params);
 
     const scriptEl = document.createElement('script');
     scriptEl.src = targetUrl + (targetUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
@@ -1615,14 +1841,19 @@ function renderHistoryList() {
             ? '<span class="badge badge-nil">NIL (All Present)</span>'
             : (Array.isArray(item.rollNumbers) ? escapeHTML(item.rollNumbers.join(', ')) : escapeHTML(String(item.rollNumbers)));
 
+        const todayStr = getTodayISOString();
+        const dateLabel = (item.date && item.date !== todayStr)
+            ? ' · ' + escapeHTML(item.date)
+            : '';
+
         const statusBadge = item.offline 
-            ? '<span class="badge badge-warning" style="background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3);">🔴 Offline (Pending Sync)</span>'
-            : '<span class="badge badge-success">🟢 Synced to Sheet</span>';
+            ? '<span class="badge badge-warning" style="background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3);">Offline (Pending Sync)</span>'
+            : '<span class="badge badge-success">Synced to Sheet</span>';
 
         return (
         '<div class="history-card">' +
             '<div class="history-top">' +
-                '<span class="history-title">' + escapeHTML(item.year) + ' Sec ' + escapeHTML(item.section) + '</span>' +
+                '<span class="history-title">' + escapeHTML(item.year) + ' Sec ' + escapeHTML(item.section) + dateLabel + '</span>' +
                 '<span class="history-time">' + escapeHTML(item.timestamp || '') + '</span>' +
             '</div>' +
             '<div class="history-details">' +
@@ -1825,7 +2056,7 @@ function initDepartmentManager() {
     }
 
     if (deptLoginForm) {
-        deptLoginForm.addEventListener('submit', (e) => {
+        deptLoginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const passcode = (deptPasscode.value || '').trim();
             const passcodes = getPasscodeStore();
@@ -1834,79 +2065,64 @@ function initDepartmentManager() {
             const hodPass = (passcodes.hod && passcodes.hod[selectedDept]) || ('hod' + selectedDept.toLowerCase());
             const adminPass = passcodes.ADMIN || 'admin2026';
 
-            if (passcode === adminPass) {
-                currentRole = 'ADMIN';
-                isHODAuthenticated = true;
-                localStorage.setItem('mgm_role', 'ADMIN');
-                if (loginAlertBox) loginAlertBox.style.display = 'none';
+            let role = null;
+            const serverAuth = navigator.onLine
+                ? await authenticateWithServer(selectedDept, passcode)
+                : { ok: false, offline: true };
 
-                if (rememberDeptCheck && rememberDeptCheck.checked) {
-                    localStorage.setItem('mgm_dept', selectedDept);
-                } else {
-                    localStorage.removeItem('mgm_dept');
-                }
-
-                applyDepartment(selectedDept);
-                applyRoleUI();
-                deptLoginModal.classList.remove('active');
-                deptPasscode.value = '';
-
-                if (pendingHODTabSwitch) {
-                    pendingHODTabSwitch = false;
-                    switchMode('hod');
-                }
-            } else if (passcode === hodPass) {
-                currentRole = 'HOD';
-                isHODAuthenticated = true;
-                localStorage.setItem('mgm_role', 'HOD');
-                if (loginAlertBox) loginAlertBox.style.display = 'none';
-
-                if (rememberDeptCheck && rememberDeptCheck.checked) {
-                    localStorage.setItem('mgm_dept', selectedDept);
-                } else {
-                    localStorage.removeItem('mgm_dept');
-                }
-
-                applyDepartment(selectedDept);
-                applyRoleUI();
-                deptLoginModal.classList.remove('active');
-                deptPasscode.value = '';
-
-                if (pendingHODTabSwitch) {
-                    pendingHODTabSwitch = false;
-                    switchMode('hod');
-                }
-            } else if (passcode === teacherPass) {
-                currentRole = 'TEACHER';
-                isHODAuthenticated = false;
-                localStorage.setItem('mgm_role', 'TEACHER');
-                if (loginAlertBox) loginAlertBox.style.display = 'none';
-
-                if (rememberDeptCheck && rememberDeptCheck.checked) {
-                    localStorage.setItem('mgm_dept', selectedDept);
-                } else {
-                    localStorage.removeItem('mgm_dept');
-                }
-
-                applyDepartment(selectedDept);
-                applyRoleUI();
-                deptLoginModal.classList.remove('active');
-                deptPasscode.value = '';
-
-                if (pendingHODTabSwitch) {
-                    pendingHODTabSwitch = false;
-                    if (loginAlertBox) {
-                        loginAlertBox.style.display = 'block';
-                        loginAlertBox.textContent = '❌ Teacher passcode entered. Please enter HOD Passcode to access HOD Portal.';
-                    }
-                    deptLoginModal.classList.add('active');
-                }
+            if (serverAuth.ok) {
+                role = serverAuth.role;
+            } else if (serverAuth.offline) {
+                // Offline fallback: local passcode store
+                if (passcode === adminPass) role = 'ADMIN';
+                else if (passcode === hodPass) role = 'HOD';
+                else if (passcode === teacherPass) role = 'TEACHER';
             } else {
+                if (loginAlertBox) {
+                    loginAlertBox.style.display = 'block';
+                    loginAlertBox.textContent = serverAuth.message || ('Invalid Passcode for ' + config.name + '.');
+                }
+                deptPasscode.focus();
+                return;
+            }
+
+            if (!role) {
                 if (loginAlertBox) {
                     loginAlertBox.style.display = 'block';
                     loginAlertBox.textContent = 'Invalid Passcode for ' + config.name + '. Please try again.';
                 }
                 deptPasscode.focus();
+                return;
+            }
+
+            setAuthSession(passcode, role, selectedDept, !!(rememberDeptCheck && rememberDeptCheck.checked));
+            isHODAuthenticated = (role === 'HOD' || role === 'ADMIN');
+            if (loginAlertBox) loginAlertBox.style.display = 'none';
+
+            if (rememberDeptCheck && rememberDeptCheck.checked) {
+                localStorage.setItem('mgm_dept', selectedDept);
+            } else {
+                localStorage.removeItem('mgm_dept');
+                try { localStorage.removeItem('mgm_remember_pass'); } catch (e) {}
+            }
+
+            if (role === 'TEACHER' && pendingHODTabSwitch) {
+                if (loginAlertBox) {
+                    loginAlertBox.style.display = 'block';
+                    loginAlertBox.textContent = 'Teacher passcode entered. Please enter HOD Passcode to access HOD Portal.';
+                }
+                deptLoginModal.classList.add('active');
+                return;
+            }
+
+            applyDepartment(selectedDept);
+            applyRoleUI();
+            deptLoginModal.classList.remove('active');
+            deptPasscode.value = '';
+
+            if (pendingHODTabSwitch && (role === 'HOD' || role === 'ADMIN')) {
+                pendingHODTabSwitch = false;
+                switchMode('hod');
             }
         });
     }
@@ -1925,6 +2141,7 @@ function initDepartmentManager() {
         logoutBtn.addEventListener('click', () => {
             isHODAuthenticated = false;
             pendingHODTabSwitch = false;
+            clearAuthSession();
             localStorage.removeItem('mgm_dept');
             localStorage.removeItem('mgm_role');
             if (deptPasscode) deptPasscode.value = '';
@@ -1943,6 +2160,9 @@ function initDepartmentManager() {
     // Auto Login from localStorage
     const savedDept = localStorage.getItem('mgm_dept');
     if (savedDept && DEPT_CONFIG[savedDept]) {
+        restoreAuthSessionFromRemember();
+        currentRole = localStorage.getItem('mgm_role') || 'TEACHER';
+        isHODAuthenticated = (currentRole === 'HOD' || currentRole === 'ADMIN');
         applyDepartment(savedDept);
         applyRoleUI();
         deptLoginModal.classList.remove('active');
@@ -2035,6 +2255,10 @@ function applyDepartment(deptCode) {
     renderStreamPresets(config);
     updateTodayBadge();
     fetchCloudSubjects();
+    // Pull today's sheet entries so history matches other devices
+    if (navigator.onLine) {
+        fetchTodayServerHistory();
+    }
 }
 
 function updateYearSelects(config) {
@@ -2099,20 +2323,20 @@ function saveElectiveFlagsStore(store) {
     localStorage.setItem('mgm_elective_flags', JSON.stringify(store));
 }
 
-function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sectionStr) {
+function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sectionStr, oldSubjectName) {
     const targetSec = sectionStr || 'ALL';
-    const payload = {
+    const payload = withAuth({
         action: action,
         stream: deptCode,
         year: yearStr,
         section: targetSec,
         subject: subjName,
+        oldSubject: oldSubjectName || '',
         isElective: isElective === true || isElective === 'true'
-    };
+    });
     const targetUrl = getWebhookUrl(deptCode);
 
     // 1. Dual-Engine Engine A: Submit via Hidden Form POST
-    // Bypasses mobile CORS & 302 fetch body-drop issues on iOS/Android, working on both v16.4 and v16.5 Apps Script
     submitViaHiddenForm(targetUrl, payload).catch(e => console.warn('[SubjectSync] Hidden form submission error:', e));
 
     // 2. Dual-Engine Engine B: Submit via JSONP Script Tag GET
@@ -2150,9 +2374,11 @@ function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sec
             year: yearStr,
             section: targetSec,
             subject: subjName,
+            oldSubject: oldSubjectName || '',
             isElective: payload.isElective ? 'true' : 'false',
             callback: cbName
         });
+        appendAuthToParams(params);
 
         scriptEl = document.createElement('script');
         scriptEl.src = targetUrl + (targetUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
@@ -2280,6 +2506,7 @@ function fetchCloudSubjects() {
         action: 'get_subjects',
         callback: cbName
     });
+    appendAuthToParams(params);
 
     scriptEl = document.createElement('script');
     scriptEl.src = targetUrl + (targetUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
@@ -2317,6 +2544,92 @@ function saveDeletedSubjectsStore(store) {
     localStorage.setItem('mgm_deleted_subjects', JSON.stringify(store));
 }
 
+function beginSubjectEdit(subjName) {
+    const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
+    const newSubjectInput = document.getElementById('newSubjectInput');
+    const addSubjectBtn = document.getElementById('addSubjectBtn');
+    const oldNameInput = document.getElementById('editingSubjectOldName');
+    const electiveCheck = document.getElementById('newSubjectElectiveCheck');
+    const secSelect = document.getElementById('newSubjectSectionSelect');
+    const hint = document.getElementById('subjectEditHint');
+
+    const tagInfo = getSubjectSectionTagInfo(currentDept, activeYear, subjName);
+    const key = (currentDept + '_' + activeYear + '_' + String(subjName).trim()).toLowerCase();
+    const flags = getElectiveFlagsStore();
+    const isElec = flags[key] === true || tagInfo.section === 'ALL';
+
+    if (oldNameInput) oldNameInput.value = subjName;
+    if (newSubjectInput) {
+        newSubjectInput.value = subjName;
+        newSubjectInput.focus();
+    }
+    if (addSubjectBtn) addSubjectBtn.textContent = 'Save';
+    if (secSelect) secSelect.value = tagInfo.section || 'ALL';
+    if (electiveCheck) electiveCheck.checked = !!isElec;
+    if (hint) {
+        hint.style.display = 'block';
+        hint.textContent = 'Editing "' + subjName + '". Change name/section/elective, then tap Save. Tap Clear form to cancel.';
+    }
+}
+
+function clearSubjectEditForm() {
+    const newSubjectInput = document.getElementById('newSubjectInput');
+    const addSubjectBtn = document.getElementById('addSubjectBtn');
+    const oldNameInput = document.getElementById('editingSubjectOldName');
+    const electiveCheck = document.getElementById('newSubjectElectiveCheck');
+    const hint = document.getElementById('subjectEditHint');
+    if (oldNameInput) oldNameInput.value = '';
+    if (newSubjectInput) newSubjectInput.value = '';
+    if (addSubjectBtn) addSubjectBtn.textContent = '+ Add';
+    if (electiveCheck) electiveCheck.checked = false;
+    if (hint) {
+        hint.style.display = 'none';
+        hint.textContent = '';
+    }
+}
+
+function upsertLocalSubject(deptCode, yearStr, name, section, isElective, oldName) {
+    const store = getCustomSubjectsStore();
+    if (!store[deptCode]) store[deptCode] = {};
+    if (!store[deptCode][yearStr]) store[deptCode][yearStr] = [];
+
+    if (oldName && oldName.toLowerCase() !== name.toLowerCase()) {
+        store[deptCode][yearStr] = store[deptCode][yearStr].filter(s => {
+            const item = extractSubjNameAndSection(s);
+            return item.name.trim().toLowerCase() !== oldName.toLowerCase();
+        });
+        const cloudStore = getCloudSubjectsStore();
+        if (cloudStore[deptCode] && cloudStore[deptCode][yearStr]) {
+            cloudStore[deptCode][yearStr] = cloudStore[deptCode][yearStr].filter(s => {
+                const item = extractSubjNameAndSection(s);
+                return item.name.trim().toLowerCase() !== oldName.toLowerCase();
+            });
+            saveCloudSubjectsStore(cloudStore);
+        }
+        const flags = getElectiveFlagsStore();
+        delete flags[(deptCode + '_' + yearStr + '_' + oldName).toLowerCase()];
+        saveElectiveFlagsStore(flags);
+    }
+
+    const subjObj = { name: name, section: section };
+    const existingIdx = store[deptCode][yearStr].findIndex(s =>
+        (typeof s === 'string' ? s.toLowerCase() : (s.name || s.subject || '').toLowerCase()) === name.toLowerCase()
+    );
+    if (existingIdx !== -1) store[deptCode][yearStr][existingIdx] = subjObj;
+    else store[deptCode][yearStr].push(subjObj);
+    saveCustomSubjectsStore(store);
+
+    const flags = getElectiveFlagsStore();
+    flags[(deptCode + '_' + yearStr + '_' + name).toLowerCase()] = !!isElective;
+    saveElectiveFlagsStore(flags);
+
+    const deletedStore = getDeletedSubjectsStore();
+    if (deletedStore[deptCode] && deletedStore[deptCode][yearStr]) {
+        deletedStore[deptCode][yearStr] = deletedStore[deptCode][yearStr].filter(s => s.toLowerCase() !== name.toLowerCase());
+        saveDeletedSubjectsStore(deletedStore);
+    }
+}
+
 function deleteSubject(deptCode, yearStr, subjName) {
     if (!subjName) return;
     const targetName = typeof subjName === 'string' ? subjName.trim() : extractSubjNameAndSection(subjName).name.trim();
@@ -2351,7 +2664,7 @@ function deleteSubject(deptCode, yearStr, subjName) {
     sendSubjectToCloud('delete_subject', deptCode, yearStr, targetName)
         .catch(e => console.warn('Subject delete cloud sync error:', e));
 
-    showCustomToast('🗑️ Subject Deleted Across College', `"${targetName}" removed from ${deptCode} ${yearStr} on all devices.`);
+    showCustomToast('Subject Deleted Across College', '"' + targetName + '" removed from ' + deptCode + ' ' + yearStr + ' on all devices.');
 }
 
 function extractSubjNameAndSection(subj) {
@@ -2831,12 +3144,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.addEventListener('online', () => {
         console.log('[Network] Back online - triggering auto-sync...');
-        syncOfflineEntries();
+        syncOfflineEntries().then(() => fetchTodayServerHistory());
     });
 
     renderHistoryList();
     if (navigator.onLine) {
-        setTimeout(syncOfflineEntries, 2000);
+        setTimeout(() => {
+            syncOfflineEntries().then(() => fetchTodayServerHistory());
+        }, 2000);
     }
 
     // Preset Pills
@@ -2966,6 +3281,7 @@ function initSubjectManager() {
         if (modalYearText) modalYearText.textContent = activeYear;
 
         populateModalSectionOptions();
+        clearSubjectEditForm();
         fetchCloudSubjects();
         renderSubjectChips();
         if (subjectManageModal) {
@@ -2990,52 +3306,46 @@ function initSubjectManager() {
             }
             const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
             const secSelectModal = document.getElementById('newSubjectSectionSelect');
-            const targetSection = secSelectModal ? secSelectModal.value : 'ALL';
-            const targetSectionText = secSelectModal && secSelectModal.options[secSelectModal.selectedIndex] ? secSelectModal.options[secSelectModal.selectedIndex].text : 'All Sections';
-            const isElecChecked = targetSection === 'ALL';
-            const subjObj = { name: val, section: targetSection };
+            const electiveCheck = document.getElementById('newSubjectElectiveCheck');
+            const oldNameInput = document.getElementById('editingSubjectOldName');
+            const oldName = oldNameInput ? oldNameInput.value.trim() : '';
+            let targetSection = secSelectModal ? secSelectModal.value : 'ALL';
+            const isElecChecked = !!(electiveCheck && electiveCheck.checked) || targetSection === 'ALL';
+            if (isElecChecked) targetSection = 'ALL';
+            const targetSectionText = secSelectModal && secSelectModal.options[secSelectModal.selectedIndex]
+                ? secSelectModal.options[secSelectModal.selectedIndex].text
+                : 'All Sections';
 
-            const store = getCustomSubjectsStore();
-            if (!store[currentDept]) store[currentDept] = {};
-            if (!store[currentDept][activeYear]) store[currentDept][activeYear] = [];
+            upsertLocalSubject(currentDept, activeYear, val, targetSection, isElecChecked, oldName || null);
 
-            const existingIdx = store[currentDept][activeYear].findIndex(s =>
-                (typeof s === 'string' ? s.toLowerCase() : (s.name || s.subject || '').toLowerCase()) === val.toLowerCase()
-            );
-
-            if (existingIdx !== -1) {
-                store[currentDept][activeYear][existingIdx] = subjObj;
-            } else {
-                store[currentDept][activeYear].push(subjObj);
-            }
-            saveCustomSubjectsStore(store);
-
-            // Un-flag cleared status for this department since user added a new subject
             const clearedStore = getClearedDeptsStore();
             delete clearedStore[currentDept];
             saveClearedDeptsStore(clearedStore);
 
-            // Un-delete subject if previously in local deleted store
-            const deletedStore = getDeletedSubjectsStore();
-            if (deletedStore[currentDept] && deletedStore[currentDept][activeYear]) {
-                deletedStore[currentDept][activeYear] = deletedStore[currentDept][activeYear].filter(s => s.toLowerCase() !== val.toLowerCase());
-                saveDeletedSubjectsStore(deletedStore);
-            }
+            const cloudAction = oldName ? 'rename_subject' : 'add_subject';
+            sendSubjectToCloud(cloudAction, currentDept, activeYear, val, isElecChecked, targetSection, oldName || '')
+                .catch(e => console.warn('Subject cloud sync error:', e));
 
-            const key = (currentDept + '_' + activeYear + '_' + val.trim()).toLowerCase();
-            const flags = getElectiveFlagsStore();
-            flags[key] = isElecChecked;
-            saveElectiveFlagsStore(flags);
-
-            sendSubjectToCloud('add_subject', currentDept, activeYear, val, isElecChecked, targetSection)
-                .catch(e => console.warn('Subject add cloud sync error:', e));
-
-            newSubjectInput.value = '';
+            clearSubjectEditForm();
             renderSubjectChips();
             const activeSec = directSectionSelect ? directSectionSelect.value : 'ALL';
             const yearSubjects = getSubjectsForActiveYear(currentDept, activeYear, activeSec);
             updateSubjectDropdowns(yearSubjects, val);
-            showCustomToast('⚡ Subject Added & Synced!', `"${val}" added for ${targetSectionText}.`);
+            showCustomToast(
+                oldName ? 'Subject Updated & Synced!' : 'Subject Added & Synced!',
+                '"' + val + '" saved for ' + targetSectionText + (isElecChecked ? ' (Elective)' : '') + '.'
+            );
+        });
+    }
+
+    const electiveCheckEl = document.getElementById('newSubjectElectiveCheck');
+    const secSelectEl = document.getElementById('newSubjectSectionSelect');
+    if (electiveCheckEl && secSelectEl) {
+        electiveCheckEl.addEventListener('change', () => {
+            if (electiveCheckEl.checked) secSelectEl.value = 'ALL';
+        });
+        secSelectEl.addEventListener('change', () => {
+            if (secSelectEl.value === 'ALL') electiveCheckEl.checked = true;
         });
     }
 
@@ -3072,7 +3382,7 @@ function initSubjectManager() {
 
 // Version upgrade check to purge stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
-    const APP_VER = 'v26.8_clean_subj';
+    const APP_VER = 'v27.1_auth_subjects';
     if (localStorage.getItem('mgm_app_ver') !== APP_VER) {
         localStorage.removeItem('mgm_cloud_subjects');
         localStorage.setItem('mgm_app_ver', APP_VER);
@@ -3155,6 +3465,29 @@ function renderSubjectChips() {
         badgeSpan.style.cssText = `font-size: 0.68rem; padding: 2px 6px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); font-weight: 600; line-height: 1; margin: 0; background: ${tagInfo.bg}; color: ${tagInfo.color};`;
         badgeSpan.textContent = tagInfo.label;
         chip.appendChild(badgeSpan);
+
+        const elecKey = (currentDept + '_' + activeYear + '_' + subj).toLowerCase();
+        const flags = getElectiveFlagsStore();
+        if (flags[elecKey] === true || tagInfo.section === 'ALL') {
+            const elecBadge = document.createElement('span');
+            elecBadge.style.cssText = 'font-size: 0.65rem; padding: 2px 6px; border-radius: 12px; background: rgba(52,211,153,0.2); color: #34d399; font-weight: 600;';
+            elecBadge.textContent = 'Elective';
+            chip.appendChild(elecBadge);
+        }
+
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'subject-chip-del';
+        editBtn.textContent = 'Edit';
+        editBtn.title = 'Rename / edit "' + subj + '"';
+        editBtn.style.fontSize = '0.68rem';
+        editBtn.style.padding = '2px 6px';
+        editBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            beginSubjectEdit(subj);
+        });
+        chip.appendChild(editBtn);
 
         const delBtn = document.createElement('button');
         delBtn.type = 'button';
@@ -3252,6 +3585,7 @@ function fetchHODAbsentees() {
         date: dateVal,
         callback: cbName
     });
+    appendAuthToParams(params);
 
     const scriptEl = document.createElement('script');
     scriptEl.src = targetUrl + (targetUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
@@ -3722,8 +4056,33 @@ function initPasscodeManager() {
                 ADMIN: currentRole === 'ADMIN' ? (passADMIN ? passADMIN.value.trim() : store.ADMIN) : store.ADMIN
             };
             savePasscodeStore(updatedCustom);
+
+            // Push to Apps Script Script Properties (ADMIN required on server)
+            (function syncPasscodesToServer(storeObj) {
+                const targetUrl = getWebhookUrl(currentDept);
+                const payload = withAuth(Object.assign({ action: 'set_passcodes' }, storeObj));
+                submitViaHiddenForm(targetUrl, payload).catch(function () {});
+                const cbName = 'mgmPassSync_' + Date.now();
+                window[cbName] = function (data) {
+                    try { delete window[cbName]; } catch (err) {}
+                    if (data && data.result === 'success') {
+                        showCustomToast('Passcodes saved', 'Updated on this device and Google Sheet server.');
+                    }
+                };
+                const params = new URLSearchParams(Object.assign({
+                    action: 'set_passcodes',
+                    callback: cbName
+                }, storeObj));
+                appendAuthToParams(params);
+                const scriptEl = document.createElement('script');
+                scriptEl.src = targetUrl + (targetUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
+                document.body.appendChild(scriptEl);
+            })(updatedCustom);
+
             if (modal) modal.classList.remove('active');
-            alert('Department passcodes updated successfully!');
+            if (currentRole !== 'ADMIN') {
+                alert('Passcodes updated on this device. Super Admin should save once so Google Sheet server passcodes stay in sync.');
+            }
         });
     }
 
