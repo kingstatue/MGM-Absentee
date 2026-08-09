@@ -2522,7 +2522,10 @@ function fetchCloudSubjects() {
 
             const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
             refreshSubjectDropdowns();
-            renderSubjectChips();
+            const subjectManageModal = document.getElementById('subjectManageModal');
+            if (subjectManageModal && subjectManageModal.classList.contains('active')) {
+                renderSubjectChips();
+            }
         } else if (data && (data.error === 'Unauthorized' || data.result === 'error')) {
             console.warn('[Subjects] Cloud fetch failed:', data.message || data.error);
             if (String(data.error || data.message || '').toLowerCase().indexOf('unauthor') !== -1) {
@@ -2716,23 +2719,23 @@ function normalizeSectionCode(sec) {
 
 /**
  * Section visibility rules:
- * - Combined (ALL): ONLY subjects tagged ALL (true electives/languages)
- * - Sec A / B: A_B shared subjects + that letter + ALL electives — NOT C(AIML)
- * - Sec C / C(AIML): C AIML subjects + ALL electives — NOT A_B
- * - A_B (manage tag): A_B (+ A/B) + ALL electives — NOT C
+ * - Combined (ALL): ONLY subjects tagged ALL (Kannada/Hindi/Sanskrit electives)
+ * - Sec A / B: A_B (+ A/B) only — electives do NOT appear (enter under Combined)
+ * - Sec C / C(AIML): AIML only — electives do NOT appear
+ * - A_B manage tag: A_B / A / B — not electives, not AIML
  */
 function isCustomSubjectMatchingSection(subjObj, targetSec) {
     const sSec = normalizeSectionCode(subjObj.section || 'ALL');
     const target = normalizeSectionCode(targetSec || 'A');
 
-    // Combined attendance: electives/languages only
+    // Combined: languages/electives only (students distributed across sections)
     if (target === 'ALL') {
         return sSec === 'ALL';
     }
 
-    // Elective / language pool is available in every concrete section
+    // Electives must NOT appear under Sec A/B/C — staff must use Combined
     if (sSec === 'ALL') {
-        return true;
+        return false;
     }
 
     if (sSec === target) return true;
@@ -2747,17 +2750,19 @@ function isCustomSubjectMatchingSection(subjObj, targetSec) {
         return true;
     }
 
-    // Manage-tag A_B: show A_B and single A/B — never AIML/C streams
     if (target === 'A_B') {
         return sSec === 'A_B' || sSec === 'A' || sSec === 'B';
     }
 
-    // C (TP) / C (AF)
     if (target === 'C_TP') return sSec === 'C_TP';
     if (target === 'C_AF') return sSec === 'C_AF';
     if (target === 'C_AIML') return sSec === 'C_AIML' || sSec === 'C';
 
     return false;
+}
+
+function subjectListFingerprint(subjects) {
+    return (subjects || []).map(s => String(s).toLowerCase()).join('\u0001');
 }
 
 function refreshSubjectDropdowns(preferredSubject) {
@@ -2860,9 +2865,25 @@ function getAllSubjectsForYearManage(deptCode, yearStr) {
 
 function updateSubjectDropdowns(subjects, defaultSubject) {
     const subjectSelects = [directSubjectInput, subjectInput];
+    const nextFp = subjectListFingerprint(subjects);
+
     subjectSelects.forEach(selectEl => {
         if (!selectEl) return;
+
         const prev = selectEl.value;
+        const curFp = subjectListFingerprint(
+            Array.from(selectEl.options).map(o => o.value).filter(v => v)
+        );
+
+        // Skip DOM rebuild when options are unchanged (stops flash on open/sync)
+        if (curFp === nextFp && subjects && subjects.length > 0) {
+            if (defaultSubject && subjects.some(s => s.toLowerCase() === String(defaultSubject).toLowerCase())) {
+                const match = subjects.find(s => s.toLowerCase() === String(defaultSubject).toLowerCase());
+                if (match) selectEl.value = match;
+            }
+            return;
+        }
+
         selectEl.innerHTML = '';
         if (subjects && Array.isArray(subjects) && subjects.length > 0) {
             subjects.forEach(subj => {
@@ -3087,17 +3108,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (submitBtn) submitBtn.addEventListener('click', submitModalForm);
 
-    // Year selection change listeners to filter subjects by year & update section options
+    // Year / section changes: filter locally only (cloud poll already runs every 12s).
+    // Avoid fetchCloudSubjects here — it rebuilt dropdowns mid-interaction and caused screen flash.
     if (directYearSelect) {
         directYearSelect.addEventListener('change', () => {
             const config = DEPT_CONFIG[currentDept];
             const hasSec = config ? config.hasSections : true;
             const yrVal = directYearSelect.value;
             updateSectionSelects(hasSec, currentDept, yrVal);
-            const secVal = directSectionSelect ? directSectionSelect.value : 'A';
-            const yearSubjects = getSubjectsForActiveYear(currentDept, yrVal, secVal);
-            updateSubjectDropdowns(yearSubjects, config ? config.defaultSubject : null);
-            fetchCloudSubjects();
+            refreshSubjectDropdowns(config ? config.defaultSubject : null);
         });
     }
 
@@ -3108,20 +3127,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const yrVal = yearSelect.value;
             updateSectionSelects(hasSec, currentDept, yrVal);
             const secVal = sectionSelect ? sectionSelect.value : 'A';
-            const yearSubjects = getSubjectsForActiveYear(currentDept, yrVal, secVal);
-            updateSubjectDropdowns(yearSubjects, config ? config.defaultSubject : null);
-            fetchCloudSubjects();
+            updateSubjectDropdowns(getSubjectsForActiveYear(currentDept, yrVal, secVal), config ? config.defaultSubject : null);
         });
     }
 
-    // Section selection change listeners to filter subjects by section
     if (directSectionSelect) {
         directSectionSelect.addEventListener('change', () => {
-            const config = DEPT_CONFIG[currentDept];
-            const yrVal = directYearSelect ? directYearSelect.value : 'First Year';
-            const yearSubjects = getSubjectsForActiveYear(currentDept, yrVal, directSectionSelect.value);
-            updateSubjectDropdowns(yearSubjects, config ? config.defaultSubject : null);
-            fetchCloudSubjects();
+            refreshSubjectDropdowns();
         });
     }
 
@@ -3129,36 +3141,33 @@ document.addEventListener('DOMContentLoaded', () => {
         sectionSelect.addEventListener('change', () => {
             const config = DEPT_CONFIG[currentDept];
             const yrVal = yearSelect ? yearSelect.value : 'First Year';
-            const yearSubjects = getSubjectsForActiveYear(currentDept, yrVal, sectionSelect.value);
-            updateSubjectDropdowns(yearSubjects, config ? config.defaultSubject : null);
-            fetchCloudSubjects();
+            updateSubjectDropdowns(
+                getSubjectsForActiveYear(currentDept, yrVal, sectionSelect.value),
+                config ? config.defaultSubject : null
+            );
         });
     }
 
-    // Live Double Entry warning listeners & Auto-Combined for languages/electives
+    // Live Double Entry warning — SELECT uses change only (input on <select> causes flicker on mobile)
     [dateInput, yearSelect, sectionSelect, subjectInput, slotSelect, rollNumbersInput].forEach(elem => {
         if (elem) {
-            elem.addEventListener('change', () => {
+            const run = () => {
                 if (elem === subjectInput || elem === sectionSelect) checkLanguageElectiveAutoCombined(subjectInput.value, sectionSelect, yearSelect);
                 updateModalDoubleEntryCheck();
-            });
-            elem.addEventListener('input', () => {
-                if (elem === subjectInput || elem === sectionSelect) checkLanguageElectiveAutoCombined(subjectInput.value, sectionSelect, yearSelect);
-                updateModalDoubleEntryCheck();
-            });
+            };
+            elem.addEventListener('change', run);
+            if (elem.tagName !== 'SELECT') elem.addEventListener('input', run);
         }
     });
 
     [directDateInput, directYearSelect, directSectionSelect, directSubjectInput, directSlotSelect, directRollInput].forEach(elem => {
         if (elem) {
-            elem.addEventListener('change', () => {
+            const run = () => {
                 if (elem === directSubjectInput || elem === directSectionSelect) checkLanguageElectiveAutoCombined(directSubjectInput.value, directSectionSelect, directYearSelect);
                 updateDirectDoubleEntryCheck();
-            });
-            elem.addEventListener('input', () => {
-                if (elem === directSubjectInput || elem === directSectionSelect) checkLanguageElectiveAutoCombined(directSubjectInput.value, directSectionSelect, directYearSelect);
-                updateDirectDoubleEntryCheck();
-            });
+            };
+            elem.addEventListener('change', run);
+            if (elem.tagName !== 'SELECT') elem.addEventListener('input', run);
         }
     });
 
