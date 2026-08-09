@@ -1,27 +1,28 @@
-const CACHE_NAME = 'mgm-absentee-informer-v26-autoupdate';
+const CACHE_NAME = 'mgm-absentee-informer-v27-auto';
 const ASSETS_TO_CACHE = [
   './',
-  './index.html?v=v26.0',
-  './styles.css?v=v26.0',
-  './app.js?v=v26.0',
-  './parser.js?v=v26.0',
+  './index.html',
+  './styles.css',
+  './app.js',
+  './parser.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
   'https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap'
 ];
 
-// Install Event - Cache Core Assets & Skip Waiting
+// Install Event - Precache and skip waiting immediately
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[PWA SW] Pre-caching offline assets v26');
+      console.log('[PWA SW] Pre-caching offline assets v27');
       return cache.addAll(ASSETS_TO_CACHE);
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
-// Activate Event - Purge all old caches and claim clients immediately
+// Activate Event - Purge old caches & claim clients immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -37,25 +38,43 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch Event - Network First with no-cache flag for immediate updates
+// Fetch Event - ALWAYS NETWORK FIRST for HTML, JS, CSS so app updates automatically when online
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
 
-  // Allow cross-origin requests (Google Apps Script API, Google Fonts) to pass through
+  // Bypass cache for external APIs (Google Apps Script API)
   if (url.origin !== location.origin) return;
 
-  event.respondWith(
-    fetch(event.request, { cache: 'no-cache' })
-      .then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
-        }
-        return networkResponse;
+  const isCoreAsset = url.pathname.endsWith('.html') || url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname === '/' || url.pathname.endsWith('/');
+
+  if (isCoreAsset) {
+    // Network-First with cache bypass for instant auto-update when online, falling back to cache if offline
+    event.respondWith(
+      fetch(event.request, { cache: 'reload' })
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          return caches.match(event.request);
+        })
+    );
+  } else {
+    // Cache-First for images/fonts
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        return cached || fetch(event.request).then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+          }
+          return networkResponse;
+        });
       })
-      .catch(() => {
-        return caches.match(event.request);
-      })
-  );
+    );
+  }
 });

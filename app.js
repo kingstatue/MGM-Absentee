@@ -2622,10 +2622,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderHistoryList();
 
-    // PWA Service Worker with Auto Update & Force Refresh Capability
+    // PWA Service Worker with Auto Update Capability
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js?v=v26.0')
+            navigator.serviceWorker.register('./sw.js')
                 .then(reg => {
                     console.log('[PWA] Service Worker Registered:', reg.scope);
                     reg.update(); // Force check for SW update on every app launch
@@ -2637,11 +2637,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                 if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
                                     showCustomToast(
                                         '⚡ App Updated to Latest Version!',
-                                        'Reloading with latest department structures...'
+                                        'Loading updated department structures & features...'
                                     );
                                     setTimeout(() => {
                                         window.location.reload(true);
-                                    }, 1000);
+                                    }, 800);
                                 }
                             };
                         }
@@ -2661,7 +2661,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function forceAppUpdate() {
-    showCustomToast('🔄 Updating Mobile App...', 'Purging cache and loading latest features...');
+    showCustomToast('🔄 Checking for App Updates...', 'All attendance history & offline logs remain 100% safe.');
     if ('caches' in window) {
         caches.keys().then(names => {
             return Promise.all(names.map(name => caches.delete(name)));
@@ -2669,14 +2669,14 @@ function forceAppUpdate() {
             if (navigator.serviceWorker) {
                 navigator.serviceWorker.getRegistrations().then(regs => {
                     regs.forEach(reg => reg.unregister());
-                    setTimeout(() => window.location.reload(true), 600);
+                    setTimeout(() => window.location.reload(true), 500);
                 });
             } else {
-                setTimeout(() => window.location.reload(true), 600);
+                setTimeout(() => window.location.reload(true), 500);
             }
         });
     } else {
-        setTimeout(() => window.location.reload(true), 600);
+        setTimeout(() => window.location.reload(true), 500);
     }
 }
 
