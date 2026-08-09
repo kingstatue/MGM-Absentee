@@ -1266,14 +1266,23 @@ async function handleMultiSlotSubmit(dateVal, masterRollRaw, yearVal, sectionVal
     let successCount = 0;
     let cancelledCount = 0;
 
+    // CRITICAL: snapshot every slot's absentees BEFORE the first submit.
+    // submitData → resetAllInputs() wipes the multi-slot DOM, so later slots
+    // used to fall back to empty master → NIL (edit later still worked).
+    const slotRollMap = {};
     for (let slotNum = startSlot; slotNum <= endSlot; slotNum++) {
         let slotRollRaw = masterRollRaw;
         if (breakdownEl) {
-            const slotInput = breakdownEl.querySelector(`input[data-slot="${slotNum}"]`);
+            const slotInput = breakdownEl.querySelector('input[data-slot="' + slotNum + '"]');
             if (slotInput) {
                 slotRollRaw = slotInput.value;
             }
         }
+        slotRollMap[slotNum] = slotRollRaw;
+    }
+
+    for (let slotNum = startSlot; slotNum <= endSlot; slotNum++) {
+        const slotRollRaw = slotRollMap[slotNum];
         try {
             const result = await submitData(dateVal, slotRollRaw, yearVal, sectionVal, subjectVal, slotNum, btnElem, textElem, spinnerElem);
             if (result && result.status === 'cancelled') {
@@ -1284,14 +1293,14 @@ async function handleMultiSlotSubmit(dateVal, masterRollRaw, yearVal, sectionVal
                 successCount++;
             }
         } catch (e) {
-            console.warn(`Error submitting slot ${slotNum}:`, e);
+            console.warn('Error submitting slot ' + slotNum + ':', e);
         }
     }
 
     if (successCount > 0) {
         showCustomToast(
-            `⚡ ${successCount}-Slot Lab Recorded!`,
-            `Absentees logged for Slots ${startSlot} to ${endSlot} (${subjectVal}).`
+            '⚡ ' + successCount + '-Slot Lab Recorded!',
+            'Absentees logged for Slots ' + startSlot + ' to ' + endSlot + ' (' + subjectVal + ').'
         );
     } else if (cancelledCount > 0) {
         showCustomToast('Submission cancelled', 'No lab slots were saved.');
@@ -3686,7 +3695,7 @@ function initSubjectManager() {
 
 // Version upgrade check to purge stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
-    const APP_VER = 'v27.13_mobile_login';
+    const APP_VER = 'v27.14_multislot_rolls';
     if (localStorage.getItem('mgm_app_ver') !== APP_VER) {
         localStorage.removeItem('mgm_cloud_subjects');
         localStorage.setItem('mgm_app_ver', APP_VER);
