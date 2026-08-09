@@ -2462,7 +2462,7 @@ function fetchCloudSubjects() {
                             const beforeLen = customStore[dDept][dYr].length;
                             customStore[dDept][dYr] = customStore[dDept][dYr].filter(s => {
                                 const item = extractSubjNameAndSection(s);
-                                return !delList.some(d => d.toLowerCase() === item.name.toLowerCase());
+                                return !isSubjectTombstoned(delList, item.name, item.section);
                             });
                             if (customStore[dDept][dYr].length !== beforeLen) customChanged = true;
                         }
@@ -2485,15 +2485,21 @@ function fetchCloudSubjects() {
                         if (deletedStore[deptKey] && deletedStore[deptKey][yrKey]) {
                             const before = deletedStore[deptKey][yrKey].length;
                             const activeNames = subjs.map(s => extractSubjNameAndSection(s).name.toLowerCase());
-                            deletedStore[deptKey][yrKey] = deletedStore[deptKey][yrKey].filter(d =>
-                                !activeNames.includes(String(d).toLowerCase())
-                            );
+                            const activeKeys = subjs.map(s => {
+                                const it = extractSubjNameAndSection(s);
+                                return subjectScopeKey(it.name, it.section).toLowerCase();
+                            });
+                            deletedStore[deptKey][yrKey] = deletedStore[deptKey][yrKey].filter(d => {
+                                const dl = String(d || '').toLowerCase();
+                                if (dl.indexOf('::') !== -1) return !activeKeys.includes(dl);
+                                return !activeNames.includes(dl);
+                            });
                             if (deletedStore[deptKey][yrKey].length !== before) deletedChanged = true;
                         }
                         const delList = (deletedStore[deptKey] && deletedStore[deptKey][yrKey]) ? deletedStore[deptKey][yrKey] : [];
                         cleanedCloudSubjects[deptKey][yrKey] = subjs.filter(s => {
                             const item = extractSubjNameAndSection(s);
-                            return !delList.some(d => d.toLowerCase() === item.name.toLowerCase());
+                            return !isSubjectTombstoned(delList, item.name, item.section);
                         });
                     }
                 }
@@ -2808,6 +2814,18 @@ function subjectScopeKey(name, section) {
     return String(name || '').trim().toLowerCase() + '::' + normalizeSectionCode(section);
 }
 
+/** Tombstone may be name::SECTION or legacy bare name (hides all scopes of that name). */
+function isSubjectTombstoned(deletedList, name, section) {
+    const dk = subjectScopeKey(name, section).toLowerCase();
+    const nameLower = String(name || '').trim().toLowerCase();
+    return (deletedList || []).some(d => {
+        const dl = String(d || '').toLowerCase();
+        if (dl === dk) return true;
+        if (dl.indexOf('::') !== -1) return false;
+        return dl === nameLower;
+    });
+}
+
 function sectionsEqualForSubject(a, b) {
     return normalizeSectionCode(a) === normalizeSectionCode(b);
 }
@@ -2869,16 +2887,12 @@ function getSubjectsForActiveYear(deptCode, yearStr, sectionStr) {
 
     const deletedStore = getDeletedSubjectsStore();
     const deletedList = ((deletedStore[deptCode] || {})[yearStr]) || [];
-    const isDeletedEntry = (name, section) => {
-        const dk = subjectScopeKey(name, section);
-        return deletedList.some(d => d === dk || d.toLowerCase() === String(name).toLowerCase());
-    };
 
     const mergeList = (list) => {
         (list || []).forEach(subj => {
             const item = extractSubjNameAndSection(subj);
             if (!item.name) return;
-            if (isDeletedEntry(item.name, item.section)) return;
+            if (isSubjectTombstoned(deletedList, item.name, item.section)) return;
             if (isCustomSubjectMatchingSection(item, sec)) {
                 if (!baseSubjects.some(s => s.toLowerCase() === item.name.toLowerCase())) {
                     baseSubjects.push(item.name);
@@ -2908,7 +2922,7 @@ function getAllSubjectsForYearManage(deptCode, yearStr) {
         const name = item.name.trim();
         if (!name) return;
         const dk = subjectScopeKey(name, item.section);
-        if (deletedList.some(d => d === dk || d.toLowerCase() === name.toLowerCase())) return;
+        if (isSubjectTombstoned(deletedList, name, item.section)) return;
         if (seen.has(dk)) return;
         seen.add(dk);
         entries.push({ name: name, section: item.section || 'A_B' });
@@ -3572,7 +3586,7 @@ function initSubjectManager() {
 
 // Version upgrade check to purge stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
-    const APP_VER = 'v27.1_auth_subjects';
+    const APP_VER = 'v27.8_fa_i_scopes';
     if (localStorage.getItem('mgm_app_ver') !== APP_VER) {
         localStorage.removeItem('mgm_cloud_subjects');
         localStorage.setItem('mgm_app_ver', APP_VER);
