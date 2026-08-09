@@ -24,7 +24,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <link rel="stylesheet" href="styles.css?v=v27.12">
+  <link rel="stylesheet" href="styles.css?v=v27.13">
 </head>
 <body>
 
@@ -82,12 +82,48 @@
               <polyline points="12 5 19 12 12 19"></polyline>
             </svg>
           </button>
+          <button type="button" class="btn-secondary" id="mobileForceRefreshBtn" style="width: 100%; margin-top: 10px; font-size: 0.8rem; font-weight: 600; padding: 10px;">
+            Phone stuck / frozen? Tap to clear cache &amp; reload
+          </button>
           <button type="button" class="btn-secondary" id="cancelHODLoginBtn" onclick="cancelHODLoginAndReturnToLogger()" style="width: 100%; margin-top: 8px; font-size: 0.84rem; font-weight: 600; padding: 10px; display: none;">
             ← Back to Attendance Logger / Manual Entry
           </button>
         </form>
       </div>
     </div>
+
+    <script>
+      // Works even if app.js failed to load (old broken PWA cache)
+      (function () {
+        function mgmForceRefresh() {
+          var done = function () { window.location.reload(); };
+          try {
+            if (window.caches && caches.keys) {
+              caches.keys().then(function (names) {
+                return Promise.all(names.map(function (n) { return caches.delete(n); }));
+              }).then(function () {
+                if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+                  return navigator.serviceWorker.getRegistrations().then(function (regs) {
+                    regs.forEach(function (r) { r.unregister(); });
+                  });
+                }
+              }).then(done).catch(done);
+              return;
+            }
+          } catch (e) {}
+          done();
+        }
+        window.mgmForceRefresh = mgmForceRefresh;
+        document.addEventListener('DOMContentLoaded', function () {
+          var btn = document.getElementById('mobileForceRefreshBtn');
+          if (btn) btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            btn.textContent = 'Clearing cache…';
+            mgmForceRefresh();
+          });
+        });
+      })();
+    </script>
 
     <!-- Top Header -->
     <header class="app-header">
@@ -700,7 +736,7 @@
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js?v=v27.12"></script>
-  <script src="app.js?v=v27.12"></script>
+  <script src="parser.js?v=v27.13"></script>
+  <script src="app.js?v=v27.13"></script>
 </body>
 </html>

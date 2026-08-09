@@ -1,28 +1,24 @@
-const CACHE_NAME = 'mgm-absentee-informer-v41-syntax-login';
+const CACHE_NAME = 'mgm-absentee-informer-v42-mobile-login';
+// Do NOT precache app.js / index / css — mobile was stuck on broken cached JS after updates.
+// Network-first fetch handler still caches them after a successful live load.
 const ASSETS_TO_CACHE = [
-  './',
-  './index.html',
-  './styles.css',
-  './app.js',
-  './parser.js',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png',
-  'https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap'
+  './icon-512.png'
 ];
 
-// Install Event - Precache and skip waiting immediately
+// Install Event - Precache icons only and skip waiting immediately
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[PWA SW] Pre-caching offline assets v36');
-      return cache.addAll(ASSETS_TO_CACHE);
+      console.log('[PWA SW] Install', CACHE_NAME);
+      return cache.addAll(ASSETS_TO_CACHE).catch(() => undefined);
     })
   );
 });
 
-// Activate Event - Purge old caches & claim clients immediately
+// Activate Event - Purge ALL other caches & claim clients immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -49,9 +45,9 @@ self.addEventListener('fetch', (event) => {
   const isCoreAsset = url.pathname.endsWith('.html') || url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname === '/' || url.pathname.endsWith('/');
 
   if (isCoreAsset) {
-    // Network-First with cache bypass for instant auto-update when online, falling back to cache if offline
+    // Network-First — never prefer stale JS (mobile freeze after broken deploy)
     event.respondWith(
-      fetch(event.request, { cache: 'reload' })
+      fetch(event.request, { cache: 'no-store' })
         .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             const responseClone = networkResponse.clone();
@@ -59,9 +55,7 @@ self.addEventListener('fetch', (event) => {
           }
           return networkResponse;
         })
-        .catch(() => {
-          return caches.match(event.request);
-        })
+        .catch(() => caches.match(event.request))
     );
   } else {
     // Cache-First for images/fonts
