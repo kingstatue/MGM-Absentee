@@ -2240,9 +2240,15 @@ function fetchCloudSubjects() {
             }
 
             if (data.customSubjects) {
+                const clearedStore = getClearedDeptsStore();
                 // Filter out ANY deleted subjects BEFORE saving to cloudSubjectsStore so page refreshes never resurrect deleted subjects!
                 const cleanedCloudSubjects = {};
                 for (let deptKey in data.customSubjects) {
+                    if (clearedStore[deptKey]) {
+                        // User cleared this department: do not resurrect old cloud subjects!
+                        cleanedCloudSubjects[deptKey] = {};
+                        continue;
+                    }
                     cleanedCloudSubjects[deptKey] = {};
                     for (let yrKey in data.customSubjects[deptKey]) {
                         const subjs = data.customSubjects[deptKey][yrKey] || [];
@@ -2283,6 +2289,20 @@ function fetchCloudSubjects() {
         if (scriptEl && scriptEl.parentNode) scriptEl.parentNode.removeChild(scriptEl);
     };
     document.body.appendChild(scriptEl);
+}
+
+function getClearedDeptsStore() {
+    try {
+        return JSON.parse(localStorage.getItem('mgm_cleared_depts') || '{}');
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveClearedDeptsStore(store) {
+    try {
+        localStorage.setItem('mgm_cleared_depts', JSON.stringify(store || {}));
+    } catch (e) {}
 }
 
 function getDeletedSubjectsStore() {
@@ -2990,6 +3010,11 @@ function initSubjectManager() {
             }
             saveCustomSubjectsStore(store);
 
+            // Un-flag cleared status for this department since user added a new subject
+            const clearedStore = getClearedDeptsStore();
+            delete clearedStore[currentDept];
+            saveClearedDeptsStore(clearedStore);
+
             // Un-delete subject if previously in local deleted store
             const deletedStore = getDeletedSubjectsStore();
             if (deletedStore[currentDept] && deletedStore[currentDept][activeYear]) {
@@ -3017,6 +3042,10 @@ function initSubjectManager() {
     if (resetSubjectsBtn) {
         resetSubjectsBtn.addEventListener('click', () => {
             if (confirm('Clear all stored subjects for ' + currentDept + '? This will let you add fresh subjects.')) {
+                const clearedStore = getClearedDeptsStore();
+                clearedStore[currentDept] = true;
+                saveClearedDeptsStore(clearedStore);
+
                 const customStore = getCustomSubjectsStore();
                 delete customStore[currentDept];
                 saveCustomSubjectsStore(customStore);
