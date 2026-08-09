@@ -13,17 +13,21 @@ const NUMBER_WORDS = {
 };
 
 const COMMON_SUBJECTS = [
-    // BCA Subjects
+    // BCA Subjects (General & AIML)
     'English', 'Environmental Studies', 'Java', 'Database', 'DBMS', 'Database Management', 
     'C++', 'C Programming', 'Python', 'Data Structures', 'Web Technology', 'Web Development', 
     'Computer Networks', 'Operating Systems', 'Software Engineering', 'Mathematics', 
-    'Discrete Math', 'Cloud Computing', 'Cyber Security', 'Artificial Intelligence', 
-    'AI', 'Android Development', 'PHP', 'Computer Architecture', 'Soft Skills',
+    'Discrete Math', 'Cloud Computing', 'Cloud Computing Essentials', 'Cyber Security', 'Artificial Intelligence', 
+    'AI', 'Fundamentals of AI & ML', 'Python Programming for AI', 'Data Science & Visualization', 
+    'Database Systems for AI', 'Linux & Shell Scripting', 'Android Development', 'PHP', 'Computer Architecture', 'Soft Skills',
 
-    // B.Com / BCM Subjects
-    'Financial Accounting', 'Corporate Accounting', 'Cost Accounting', 'Income Tax', 
-    'Auditing', 'Business Law', 'Company Law', 'GST & Customs', 'Banking & Insurance', 
-    'Financial Management', 'Business Statistics', 'Marketing Management', 'E-Commerce',
+    // B.Com / BCM Subjects (General, TP, AF)
+    'Financial Accounting', 'Financial Accounting I', 'Corporate Accounting', 'Corporate Accounting II', 
+    'Cost Accounting', 'Advanced Cost Accounting', 'Income Tax', 'Income Tax Law & Practice I', 'Income Tax Law & Practice II', 
+    'Direct Tax Structure', 'Tax Planning & Management', 'Tax Planning', 'Auditing', 'Business Law', 'Company Law', 
+    'GST & Customs', 'Customs Duty & Customs Law', 'Banking & Insurance', 'Financial Management', 'Strategic Financial Management', 
+    'Business Statistics', 'Marketing Management', 'Financial Institutions & Markets', 'Security Analysis & Portfolio Management', 
+    'International Financial Reporting', 'E-Commerce',
 
     // B.A. Subjects
     'History', 'Political Science', 'Sociology', 'Economics', 'Journalism', 
@@ -115,19 +119,21 @@ function parseAttendanceSpeech(text, activeDept) {
     const ELECTIVE_LANG_REGEX = /\b(kannada|kanada|kanad|kan|hindi|hindhi|hind|hin|sanskrit|sanskrith|sanskritha|sanskrut|sanskrutha|sanskritam|sansk|sans|devops|wcms|ost|open\s*source|digital\s*fluency|cyber\s*security|e-?filing|journalism|optional\s*english|human\s*rights|elective)\b/i;
     const isLangOrElectiveSubj = ELECTIVE_LANG_REGEX.test(lowerText) || (subject && ELECTIVE_LANG_REGEX.test(subject));
 
-    if (isLangOrElectiveSubj && !/\b(sec\s*[a-c]|section\s*[a-c])\b/i.test(lowerText)) {
+    let section = 'A';
+    if (isLangOrElectiveSubj && !/\b(sec\s*[a-d]|section\s*[a-d])\b/i.test(lowerText)) {
         section = 'ALL';
     } else {
-        const sectionMatch = lowerText.match(/(?:section|sec|class)\s*([a-c]|all|combined)\b/i) || lowerText.match(/\b([a-c]|all|combined)\s*(?:section|sec)\b/i);
+        const sectionMatch = lowerText.match(/(?:section|sec|class)\s*([a-d]|all|combined)\b/i) || lowerText.match(/\b([a-d]|all|combined)\s*(?:section|sec)\b/i);
         if (sectionMatch) {
             const secVal = sectionMatch[1].toUpperCase();
             section = (secVal === 'COMBINED' || secVal === 'ALL') ? 'ALL' : secVal;
         } else {
             if (/\b(combined|all\s*sec|all\s*sections?)\b/i.test(lowerText)) section = 'ALL';
-            else if (/\bsec\s*a\b|\bsection\s*a\b/i.test(lowerText) || /\b([1-3]\s*yr|[1-3](?:st|nd|rd)\s*year|bca|bcom|bcm)\s*a\b/i.test(lowerText)) section = 'A';
+            else if (/\bsec(?:tion)?\s*c\s*\(?af\)?\b|\bsec(?:tion)?\s*c\s*af\b|\bsec\s*d\b|\bsection\s*d\b|\baf\b/i.test(lowerText)) section = 'C (AF)';
+            else if (/\bsec(?:tion)?\s*c\s*\(?tp\)?\b|\bsec(?:tion)?\s*c\s*tp\b|\btp\b/i.test(lowerText)) section = 'C (TP)';
+            else if (/\bsec\s*c\b|\bsection\s*c\b/i.test(lowerText) || /\b([1-3]\s*yr|[1-3](?:st|nd|rd)\s*year|bca|bcom|bcm)\s*c\b/i.test(lowerText) || /\bsec(?:tion)?\s*c\s*\(?aiml\)?\b|\baiml\b/i.test(lowerText)) section = 'C';
             else if (/\bsec\s*b\b|\bsection\s*b\b/i.test(lowerText) || /\b([1-3]\s*yr|[1-3](?:st|nd|rd)\s*year|bca|bcom|bcm)\s*b\b/i.test(lowerText)) section = 'B';
-            else if (/\bsec\s*c\b|\bsection\s*c\b/i.test(lowerText) || /\b([1-3]\s*yr|[1-3](?:st|nd|rd)\s*year|bca|bcom|bcm)\s*c\b/i.test(lowerText)) section = 'C';
-            else if (/\bsection\s*a\b/i.test(lowerText)) section = 'A';
+            else if (/\bsec\s*a\b|\bsection\s*a\b/i.test(lowerText) || /\b([1-3]\s*yr|[1-3](?:st|nd|rd)\s*year|bca|bcom|bcm)\s*a\b/i.test(lowerText)) section = 'A';
         }
     }
 

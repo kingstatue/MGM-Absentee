@@ -305,6 +305,8 @@
                 <option value="A">Section A</option>
                 <option value="B">Section B</option>
                 <option value="C">Section C</option>
+                <option value="C (TP)">Section C (TP)</option>
+                <option value="C (AF)">Section C (AF)</option>
                 <option value="ALL">Combined (Sec A, B, C / Electives)</option>
               </select>
             </div>
@@ -557,12 +559,20 @@
         <div class="form-group" style="margin-top: 10px;">
           <label for="newSubjectInput">Add New Subject (<span id="subjectModalYearText">First Year</span>)</label>
           <div style="display: flex; gap: 8px;">
-            <input type="text" id="newSubjectInput" class="form-input" placeholder="Type new subject name (e.g. DevOps, WCMS, Python Lab)">
+            <input type="text" id="newSubjectInput" class="form-input" placeholder="Type new subject name (e.g. AI Lab, Tax Procedure)">
             <button type="button" class="btn-primary" id="addSubjectBtn" style="white-space: nowrap; padding: 0 16px;">+ Add</button>
           </div>
-          <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 0.84rem; color: var(--text-dim);">
-            <input type="checkbox" id="newSubjectIsElectiveCheckbox" style="width: 16px; height: 16px; accent-color: var(--primary-color); cursor: pointer;">
-            <label for="newSubjectIsElectiveCheckbox" style="cursor: pointer; margin-bottom: 0; font-weight: 500;">⚡ Combined Elective / Language (Parallel session across sections)</label>
+          <div style="display: flex; gap: 12px; align-items: center; margin-top: 8px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <label for="newSubjectSectionSelect" style="font-size: 0.82rem; font-weight: 600; color: var(--text-main); margin: 0; white-space: nowrap;">Target Section:</label>
+              <select id="newSubjectSectionSelect" class="form-select" style="padding: 3px 8px; font-size: 0.82rem; height: auto;">
+                <option value="ALL">All Sections (General & Electives)</option>
+              </select>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--text-dim);">
+              <input type="checkbox" id="newSubjectIsElectiveCheckbox" style="width: 15px; height: 15px; accent-color: var(--primary-color); cursor: pointer;">
+              <label for="newSubjectIsElectiveCheckbox" style="cursor: pointer; margin-bottom: 0; font-weight: 500;">⚡ Combined Elective / Language</label>
+            </div>
           </div>
         </div>
 

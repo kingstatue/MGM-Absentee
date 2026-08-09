@@ -7,14 +7,32 @@ const DEPT_CONFIG = {
         badgeClass: 'bca',
         hasSections: true,
         defaultSubject: 'English',
+        subjectsByYearAndSection: {
+            'First Year': {
+                'A': ['English', 'Kannada', 'Hindi', 'Sanskrit', 'Computer Fundamentals & C', 'Data Structures using C', 'Digital Logic & Discrete Structures', 'Web Designing', 'Office Automation', 'Digital Fluency'],
+                'B': ['English', 'Kannada', 'Hindi', 'Sanskrit', 'Computer Fundamentals & C', 'Data Structures using C', 'Digital Logic & Discrete Structures', 'Web Designing', 'Office Automation', 'Digital Fluency'],
+                'C': ['English', 'Kannada', 'Hindi', 'Sanskrit', 'Digital Fluency', 'Fundamentals of AI & ML', 'Cloud Computing Essentials', 'Python Programming for AI', 'Data Science & Visualization', 'Database Systems for AI', 'Linux & Shell Scripting']
+            },
+            'Second Year': {
+                'A': ['Object Oriented Programming with Java', 'Database Management Systems (DBMS)', 'Operating System Concepts', 'Python Programming', 'Computer Networks', 'Software Engineering', 'DevOps', 'Web Content Management Systems (WCMS)', 'Open Source Technologies (OST)', 'English', 'Kannada', 'Hindi', 'Sanskrit'],
+                'B': ['Object Oriented Programming with Java', 'Database Management Systems (DBMS)', 'Operating System Concepts', 'Python Programming', 'Computer Networks', 'Software Engineering', 'DevOps', 'Web Content Management Systems (WCMS)', 'Open Source Technologies (OST)', 'English', 'Kannada', 'Hindi', 'Sanskrit'],
+                'C': ['Object Oriented Programming with Java', 'Database Management Systems (DBMS)', 'Operating System Concepts', 'Python Programming', 'Computer Networks', 'Software Engineering', 'DevOps', 'Web Content Management Systems (WCMS)', 'Open Source Technologies (OST)', 'English', 'Kannada', 'Hindi', 'Sanskrit']
+            },
+            'Third Year': {
+                'A': ['Web Technologies (PHP/Node)', 'Cloud Computing', 'Artificial Intelligence & ML', 'Mobile Application Development', 'Cyber Security & Ethics', 'Project Work'],
+                'B': ['Web Technologies (PHP/Node)', 'Cloud Computing', 'Artificial Intelligence & ML', 'Mobile Application Development', 'Cyber Security & Ethics', 'Project Work'],
+                'C': ['Web Technologies (PHP/Node)', 'Cloud Computing', 'Artificial Intelligence & ML', 'Mobile Application Development', 'Cyber Security & Ethics', 'Project Work']
+            }
+        },
         subjectsByYear: {
-            'First Year': ['English', 'Kannada', 'Hindi', 'Sanskrit', 'Computer Fundamentals & C', 'Data Structures using C', 'Digital Logic & Discrete Structures', 'Web Designing', 'Office Automation', 'Digital Fluency'],
-            'Second Year': ['Object Oriented Programming with Java', 'Database Management Systems (DBMS)', 'Operating System Concepts', 'Python Programming', 'Computer Networks', 'Software Engineering', 'DevOps', 'Web Content Management Systems (WCMS)', 'Open Source Technologies (OST)'],
+            'First Year': ['English', 'Kannada', 'Hindi', 'Sanskrit', 'Computer Fundamentals & C', 'Data Structures using C', 'Digital Logic & Discrete Structures', 'Web Designing', 'Office Automation', 'Digital Fluency', 'Fundamentals of AI & ML', 'Cloud Computing Essentials', 'Python Programming for AI', 'Data Science & Visualization', 'Database Systems for AI', 'Linux & Shell Scripting'],
+            'Second Year': ['Object Oriented Programming with Java', 'Database Management Systems (DBMS)', 'Operating System Concepts', 'Python Programming', 'Computer Networks', 'Software Engineering', 'DevOps', 'Web Content Management Systems (WCMS)', 'Open Source Technologies (OST)', 'English', 'Kannada', 'Hindi', 'Sanskrit'],
             'Third Year': ['Web Technologies (PHP/Node)', 'Cloud Computing', 'Artificial Intelligence & ML', 'Mobile Application Development', 'Cyber Security & Ethics', 'Project Work']
         },
-        subjects: ['English', 'Kannada', 'Hindi', 'Sanskrit', 'Computer Fundamentals & C', 'Data Structures using C', 'Digital Logic & Discrete Structures', 'Web Designing', 'Office Automation', 'Digital Fluency', 'Object Oriented Programming with Java', 'Database Management Systems (DBMS)', 'Operating System Concepts', 'Python Programming', 'Computer Networks', 'Software Engineering', 'DevOps', 'Web Content Management Systems (WCMS)', 'Open Source Technologies (OST)', 'Web Technologies (PHP/Node)', 'Cloud Computing', 'Artificial Intelligence & ML', 'Mobile Application Development', 'Cyber Security & Ethics', 'Project Work'],
+        subjects: ['English', 'Kannada', 'Hindi', 'Sanskrit', 'Computer Fundamentals & C', 'Data Structures using C', 'Digital Logic & Discrete Structures', 'Web Designing', 'Office Automation', 'Digital Fluency', 'Fundamentals of AI & ML', 'Cloud Computing Essentials', 'Python Programming for AI', 'Data Science & Visualization', 'Database Systems for AI', 'Linux & Shell Scripting', 'Object Oriented Programming with Java', 'Database Management Systems (DBMS)', 'Operating System Concepts', 'Python Programming', 'Computer Networks', 'Software Engineering', 'DevOps', 'Web Content Management Systems (WCMS)', 'Open Source Technologies (OST)', 'Web Technologies (PHP/Node)', 'Cloud Computing', 'Artificial Intelligence & ML', 'Mobile Application Development', 'Cyber Security & Ethics', 'Project Work'],
         samplePresets: [
             { label: '"26709 26717 English 1st Yr Sec A Slot 1"', phrase: '26709 26717 English First Year A Slot 1' },
+            { label: '"26701, 26705 1st Yr Sec C Fundamentals of AI Slot 2"', phrase: 'Roll numbers 26701 26705 1st Year BCA Sec C Fundamentals of AI 10-10.55' },
             { label: '"Roll 26701, 26705 2nd Yr Sec B Java 10-10.55"', phrase: 'Roll numbers 26701, 26705 2nd Year BCA Sec B Java 10-10.55' },
             { label: '"3rd Yr Sec A DBMS Slot 1 - Absentees 5, 8, 19"', phrase: 'Third year Section A DBMS slot 1 absentees 5 8 19' }
         ]
@@ -26,15 +44,36 @@ const DEPT_CONFIG = {
         badgeClass: 'bcm',
         hasSections: true,
         defaultSubject: 'Financial Accounting',
-        subjectsByYear: {
-            'First Year': ['Financial Accounting', 'Business Organization & Management', 'Principles of Marketing', 'Business Mathematics & Statistics', 'Digital Fluency', 'General English', 'Kannada', 'Hindi'],
-            'Second Year': ['Corporate Accounting', 'Cost Accounting', 'Law & Practice of Income Tax', 'Business Law', 'Banking Law & Operations', 'Entrepreneurship'],
-            'Third Year': ['Management Accounting', 'Financial Management', 'Goods & Services Tax (GST)', 'Auditing & Corporate Governance', 'E-Filing & Financial Services']
+        subjectsByYearAndSection: {
+            'First Year': {
+                'A': ['Financial Accounting', 'Business Organization & Management', 'Principles of Marketing', 'Business Mathematics & Statistics', 'Digital Fluency', 'General English', 'Kannada', 'Hindi'],
+                'B': ['Financial Accounting', 'Business Organization & Management', 'Principles of Marketing', 'Business Mathematics & Statistics', 'Digital Fluency', 'General English', 'Kannada', 'Hindi'],
+                'C (TP)': ['Financial Accounting', 'Income Tax Law & Practice I', 'Direct Tax Structure', 'Business Organization & Management', 'General English', 'Kannada', 'Hindi', 'Digital Fluency'],
+                'C (AF)': ['Financial Accounting I', 'Financial Institutions & Markets', 'Business Mathematics & Statistics', 'General English', 'Kannada', 'Hindi', 'Digital Fluency']
+            },
+            'Second Year': {
+                'A': ['Corporate Accounting', 'Cost Accounting', 'Law & Practice of Income Tax', 'Business Law', 'Banking Law & Operations', 'Entrepreneurship'],
+                'B': ['Corporate Accounting', 'Cost Accounting', 'Law & Practice of Income Tax', 'Business Law', 'Banking Law & Operations', 'Entrepreneurship'],
+                'C (TP)': ['Income Tax Law & Practice II', 'Goods & Services Tax (GST)', 'Customs Duty & Customs Law', 'Corporate Accounting', 'Business Law'],
+                'C (AF)': ['Corporate Accounting II', 'Advanced Cost Accounting', 'Financial Management', 'Banking & Insurance Law', 'Business Law']
+            },
+            'Third Year': {
+                'A': ['Management Accounting', 'Financial Management', 'Goods & Services Tax (GST)', 'Auditing & Corporate Governance', 'E-Filing & Financial Services'],
+                'B': ['Management Accounting', 'Financial Management', 'Goods & Services Tax (GST)', 'Auditing & Corporate Governance', 'E-Filing & Financial Services'],
+                'C (TP)': ['Tax Planning & Management', 'E-Filing of Tax Returns', 'Assessment Procedure & Auditing', 'Corporate Tax', 'Management Accounting'],
+                'C (AF)': ['Security Analysis & Portfolio Management', 'International Financial Reporting (IFRS)', 'Strategic Financial Management', 'Auditing & Assurance', 'E-Filing']
+            }
         },
-        subjects: ['Financial Accounting', 'Business Organization & Management', 'Principles of Marketing', 'Business Mathematics & Statistics', 'Digital Fluency', 'Corporate Accounting', 'Cost Accounting', 'Law & Practice of Income Tax', 'Business Law', 'Banking Law & Operations', 'Management Accounting', 'Financial Management', 'Goods & Services Tax (GST)', 'Auditing & Corporate Governance', 'E-Filing & Financial Services', 'General English', 'Kannada', 'Hindi'],
+        subjectsByYear: {
+            'First Year': ['Financial Accounting', 'Business Organization & Management', 'Principles of Marketing', 'Business Mathematics & Statistics', 'Digital Fluency', 'General English', 'Kannada', 'Hindi', 'Income Tax Law & Practice I', 'Direct Tax Structure', 'Financial Accounting I', 'Financial Institutions & Markets'],
+            'Second Year': ['Corporate Accounting', 'Cost Accounting', 'Law & Practice of Income Tax', 'Business Law', 'Banking Law & Operations', 'Entrepreneurship', 'Income Tax Law & Practice II', 'Goods & Services Tax (GST)', 'Customs Duty & Customs Law', 'Corporate Accounting II', 'Advanced Cost Accounting', 'Financial Management', 'Banking & Insurance Law'],
+            'Third Year': ['Management Accounting', 'Financial Management', 'Goods & Services Tax (GST)', 'Auditing & Corporate Governance', 'E-Filing & Financial Services', 'Tax Planning & Management', 'E-Filing of Tax Returns', 'Assessment Procedure & Auditing', 'Corporate Tax', 'Security Analysis & Portfolio Management', 'International Financial Reporting (IFRS)', 'Strategic Financial Management', 'Auditing & Assurance']
+        },
+        subjects: ['Financial Accounting', 'Business Organization & Management', 'Principles of Marketing', 'Business Mathematics & Statistics', 'Digital Fluency', 'Corporate Accounting', 'Cost Accounting', 'Law & Practice of Income Tax', 'Business Law', 'Banking Law & Operations', 'Management Accounting', 'Financial Management', 'Goods & Services Tax (GST)', 'Auditing & Corporate Governance', 'E-Filing & Financial Services', 'General English', 'Kannada', 'Hindi', 'Income Tax Law & Practice I', 'Direct Tax Structure', 'Income Tax Law & Practice II', 'Customs Duty & Customs Law', 'Corporate Accounting II', 'Advanced Cost Accounting', 'Tax Planning & Management', 'E-Filing of Tax Returns', 'Assessment Procedure & Auditing', 'Corporate Tax', 'Security Analysis & Portfolio Management', 'International Financial Reporting (IFRS)', 'Strategic Financial Management', 'Auditing & Assurance'],
         samplePresets: [
             { label: '"101 108 Financial Accounting 1st Yr Sec A Slot 1"', phrase: '101 108 Financial Accounting First Year Sec A Slot 1' },
-            { label: '"Roll 204, 212 2nd Yr Sec B Income Tax 10-10.55"', phrase: 'Roll numbers 204, 212 2nd Year BCOM Sec B Income Tax 10-10.55' },
+            { label: '"Roll 101, 105 1st Yr Sec C Income Tax Slot 2"', phrase: 'Roll numbers 101, 105 1st Year BCOM Sec C Income Tax 10-10.55' },
+            { label: '"Roll 204, 212 2nd Yr Sec D Advanced Cost Accounting 10-10.55"', phrase: 'Roll numbers 204, 212 2nd Year BCOM Sec D Advanced Cost Accounting 10-10.55' },
             { label: '"3rd Yr Sec A Auditing Slot 2 - Absentees 15, 22"', phrase: 'Third year Section A Auditing slot 2 absentees 15 22' }
         ]
     },
@@ -1847,13 +1886,14 @@ function applyDepartment(deptCode) {
     // Stream-specific Year dropdown labels
     updateYearSelects(config);
 
-    // Preloaded Subject Dropdown options for active stream & selected year
-    const initialYear = directYearSelect ? directYearSelect.value : 'First Year';
-    const yearSubjects = getSubjectsForActiveYear(deptCode, initialYear);
-    updateSubjectDropdowns(yearSubjects, config.defaultSubject);
-
     // Section visibility & dropdown options (BCA/BCM have sections; BA/BSC do not)
-    updateSectionSelects(config.hasSections);
+    const initialYear = directYearSelect ? directYearSelect.value : 'First Year';
+    updateSectionSelects(config.hasSections, deptCode, initialYear);
+
+    // Preloaded Subject Dropdown options for active stream, selected year & section
+    const initialSection = directSectionSelect ? directSectionSelect.value : 'A';
+    const yearSubjects = getSubjectsForActiveYear(deptCode, initialYear, initialSection);
+    updateSubjectDropdowns(yearSubjects, config.defaultSubject);
 
     // Render Stream Presets & update today count badge
     renderStreamPresets(config);
@@ -1923,11 +1963,13 @@ function saveElectiveFlagsStore(store) {
     localStorage.setItem('mgm_elective_flags', JSON.stringify(store));
 }
 
-function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective) {
+function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sectionStr) {
+    const targetSec = sectionStr || 'ALL';
     const payload = {
         action: action,
         stream: deptCode,
         year: yearStr,
+        section: targetSec,
         subject: subjName,
         isElective: isElective === true || isElective === 'true'
     };
@@ -1970,6 +2012,7 @@ function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective) {
             action: action,
             stream: deptCode,
             year: yearStr,
+            section: targetSec,
             subject: subjName,
             isElective: payload.isElective ? 'true' : 'false',
             callback: cbName
@@ -2099,12 +2142,50 @@ function deleteSubject(deptCode, yearStr, subjName) {
     showCustomToast('🗑️ Subject Deleted Across College', `"${subjName}" removed from ${deptCode} ${yearStr} on all devices.`);
 }
 
-function getSubjectsForActiveYear(deptCode, yearStr) {
+function extractSubjNameAndSection(subj) {
+    if (!subj) return { name: '', section: 'ALL' };
+    if (typeof subj === 'string') return { name: subj, section: 'ALL' };
+    return { name: subj.name || subj.subject || '', section: subj.section || 'ALL' };
+}
+
+function isCustomSubjectMatchingSection(subjObj, targetSec) {
+    const sSec = subjObj.section || 'ALL';
+    if (targetSec === 'ALL' || sSec === 'ALL' || sSec === 'ANY') return true;
+    if (sSec === targetSec) return true;
+    if (sSec === 'A_B' && (targetSec === 'A' || targetSec === 'B')) return true;
+    if (targetSec === 'C' && (sSec === 'C (AIML)' || sSec === 'C (TP)' || sSec === 'C (AF)')) return true;
+    return false;
+}
+
+function getSubjectsForActiveYear(deptCode, yearStr, sectionStr) {
     const config = DEPT_CONFIG[deptCode];
     if (!config) return [];
 
     let baseSubjects = [];
-    if (config.subjectsByYear && config.subjectsByYear[yearStr]) {
+    const sec = sectionStr || 'ALL';
+
+    if (config.subjectsByYearAndSection && config.subjectsByYearAndSection[yearStr]) {
+        const secMap = config.subjectsByYearAndSection[yearStr];
+        let targetKey = sec;
+        if (!secMap[targetKey]) {
+            if (targetKey === 'C' || targetKey === 'C TP' || targetKey.indexOf('TP') !== -1) targetKey = 'C (TP)';
+            else if (targetKey === 'D' || targetKey === 'C AF' || targetKey.indexOf('AF') !== -1) targetKey = 'C (AF)';
+        }
+        if (sec !== 'ALL' && secMap[targetKey]) {
+            baseSubjects = [...secMap[targetKey]];
+        } else {
+            // Combine all unique subjects across sections for this year
+            const allSecSubjs = [];
+            Object.values(secMap).forEach(arr => {
+                arr.forEach(s => {
+                    if (!allSecSubjs.some(existing => existing.toLowerCase() === s.toLowerCase())) {
+                        allSecSubjs.push(s);
+                    }
+                });
+            });
+            baseSubjects = allSecSubjs;
+        }
+    } else if (config.subjectsByYear && config.subjectsByYear[yearStr]) {
         baseSubjects = [...config.subjectsByYear[yearStr]];
     } else {
         baseSubjects = [...(config.subjects || [])];
@@ -2115,8 +2196,11 @@ function getSubjectsForActiveYear(deptCode, yearStr) {
     const deptCloud = cloudStore[deptCode] || {};
     const cloudList = deptCloud[yearStr] || [];
     cloudList.forEach(subj => {
-        if (!baseSubjects.some(s => s.toLowerCase() === subj.toLowerCase())) {
-            baseSubjects.push(subj);
+        const item = extractSubjNameAndSection(subj);
+        if (isCustomSubjectMatchingSection(item, sec)) {
+            if (!baseSubjects.some(s => s.toLowerCase() === item.name.toLowerCase())) {
+                baseSubjects.push(item.name);
+            }
         }
     });
 
@@ -2125,8 +2209,11 @@ function getSubjectsForActiveYear(deptCode, yearStr) {
     const deptCustom = customStore[deptCode] || {};
     const customList = deptCustom[yearStr] || [];
     customList.forEach(subj => {
-        if (!baseSubjects.some(s => s.toLowerCase() === subj.toLowerCase())) {
-            baseSubjects.push(subj);
+        const item = extractSubjNameAndSection(subj);
+        if (isCustomSubjectMatchingSection(item, sec)) {
+            if (!baseSubjects.some(s => s.toLowerCase() === item.name.toLowerCase())) {
+                baseSubjects.push(item.name);
+            }
         }
     });
 
@@ -2234,28 +2321,64 @@ function setSubjectValue(selectEl, subjectVal) {
     }
 }
 
-function updateSectionSelects(hasSections) {
+function updateSectionSelects(hasSections, deptCode, yearStr) {
+    const dept = deptCode || currentDept || 'BCA';
+    const year = yearStr || (directYearSelect ? directYearSelect.value : 'First Year');
+    const isFirstYear = year === 'First Year' || year === '1' || year === '1st Year';
+
     const sectionSelects = [directSectionSelect, sectionSelect];
     sectionSelects.forEach(selectEl => {
         if (!selectEl) return;
+        const curVal = selectEl.value;
         selectEl.innerHTML = '';
         const formGroup = selectEl.closest('.form-group') || selectEl.parentElement;
         if (hasSections) {
             selectEl.disabled = false;
             if (formGroup) formGroup.style.display = '';
-            const options = [
-                { val: 'A', label: 'Section A' },
-                { val: 'B', label: 'Section B' },
-                { val: 'C', label: 'Section C' },
-                { val: 'ALL', label: 'Combined (Sec A, B, C / Electives)' }
-            ];
+            let options = [];
+
+            if (dept === 'BCA') {
+                if (isFirstYear) {
+                    options = [
+                        { val: 'A', label: 'Section A (General BCA)' },
+                        { val: 'B', label: 'Section B (General BCA)' },
+                        { val: 'C', label: 'Section C (AIML)' },
+                        { val: 'ALL', label: 'Combined (Sec A, B, C / Electives)' }
+                    ];
+                } else {
+                    options = [
+                        { val: 'A', label: 'Section A' },
+                        { val: 'B', label: 'Section B' },
+                        { val: 'C', label: 'Section C' },
+                        { val: 'ALL', label: 'Combined (Sec A, B, C / Electives)' }
+                    ];
+                }
+            } else if (dept === 'BCM' || dept === 'BCOM') {
+                options = [
+                    { val: 'A', label: 'Section A (General B.Com)' },
+                    { val: 'B', label: 'Section B (General B.Com)' },
+                    { val: 'C (TP)', label: 'Section C (TP - Tax Procedure)' },
+                    { val: 'C (AF)', label: 'Section C (AF - Accounting & Finance)' },
+                    { val: 'ALL', label: 'Combined (Sec A, B, C / Electives)' }
+                ];
+            } else {
+                options = [
+                    { val: 'A', label: 'Section A' },
+                    { val: 'B', label: 'Section B' },
+                    { val: 'C', label: 'Section C' },
+                    { val: 'ALL', label: 'Combined (Sec A, B, C / Electives)' }
+                ];
+            }
+
             options.forEach(o => {
                 const opt = document.createElement('option');
                 opt.value = o.val;
                 opt.textContent = o.label;
                 selectEl.appendChild(opt);
             });
-            selectEl.value = 'A';
+
+            const valid = options.some(o => o.val === curVal);
+            selectEl.value = valid ? curVal : 'A';
         } else {
             const opt = document.createElement('option');
             opt.value = 'A';
@@ -2337,19 +2460,46 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (submitBtn) submitBtn.addEventListener('click', submitModalForm);
 
-    // Year selection change listeners to filter subjects by year
+    // Year selection change listeners to filter subjects by year & update section options
     if (directYearSelect) {
         directYearSelect.addEventListener('change', () => {
-            const yearSubjects = getSubjectsForActiveYear(currentDept, directYearSelect.value);
             const config = DEPT_CONFIG[currentDept];
+            const hasSec = config ? config.hasSections : true;
+            const yrVal = directYearSelect.value;
+            updateSectionSelects(hasSec, currentDept, yrVal);
+            const secVal = directSectionSelect ? directSectionSelect.value : 'A';
+            const yearSubjects = getSubjectsForActiveYear(currentDept, yrVal, secVal);
             updateSubjectDropdowns(yearSubjects, config ? config.defaultSubject : null);
         });
     }
 
     if (yearSelect) {
         yearSelect.addEventListener('change', () => {
-            const yearSubjects = getSubjectsForActiveYear(currentDept, yearSelect.value);
             const config = DEPT_CONFIG[currentDept];
+            const hasSec = config ? config.hasSections : true;
+            const yrVal = yearSelect.value;
+            updateSectionSelects(hasSec, currentDept, yrVal);
+            const secVal = sectionSelect ? sectionSelect.value : 'A';
+            const yearSubjects = getSubjectsForActiveYear(currentDept, yrVal, secVal);
+            updateSubjectDropdowns(yearSubjects, config ? config.defaultSubject : null);
+        });
+    }
+
+    // Section selection change listeners to filter subjects by section
+    if (directSectionSelect) {
+        directSectionSelect.addEventListener('change', () => {
+            const config = DEPT_CONFIG[currentDept];
+            const yrVal = directYearSelect ? directYearSelect.value : 'First Year';
+            const yearSubjects = getSubjectsForActiveYear(currentDept, yrVal, directSectionSelect.value);
+            updateSubjectDropdowns(yearSubjects, config ? config.defaultSubject : null);
+        });
+    }
+
+    if (sectionSelect) {
+        sectionSelect.addEventListener('change', () => {
+            const config = DEPT_CONFIG[currentDept];
+            const yrVal = yearSelect ? yearSelect.value : 'First Year';
+            const yearSubjects = getSubjectsForActiveYear(currentDept, yrVal, sectionSelect.value);
             updateSubjectDropdowns(yearSubjects, config ? config.defaultSubject : null);
         });
     }
@@ -2482,6 +2632,40 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+function populateModalSectionOptions() {
+    const secSelect = document.getElementById('newSubjectSectionSelect');
+    if (!secSelect) return;
+    secSelect.innerHTML = '';
+
+    const dept = currentDept || 'BCA';
+    const year = directYearSelect ? directYearSelect.value : 'First Year';
+    const isFirstYear = year === 'First Year' || year === '1' || year === '1st Year';
+
+    let options = [{ val: 'ALL', label: 'All Sections (General & Electives)' }];
+
+    if (dept === 'BCA') {
+        if (isFirstYear) {
+            options.push({ val: 'A_B', label: 'Section A & B (General BCA)' });
+            options.push({ val: 'C (AIML)', label: 'Section C (AIML)' });
+        } else {
+            options.push({ val: 'A', label: 'Section A' });
+            options.push({ val: 'B', label: 'Section B' });
+            options.push({ val: 'C', label: 'Section C' });
+        }
+    } else if (dept === 'BCM' || dept === 'BCOM') {
+        options.push({ val: 'A_B', label: 'Section A & B (General B.Com)' });
+        options.push({ val: 'C (TP)', label: 'Section C (TP - Tax Procedure)' });
+        options.push({ val: 'C (AF)', label: 'Section C (AF - Accounting & Finance)' });
+    }
+
+    options.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.val;
+        opt.textContent = o.label;
+        secSelect.appendChild(opt);
+    });
+}
+
 function initSubjectManager() {
     const manageBtnVoice = document.getElementById('manageSubjectBtnVoice');
     const manageBtnDirect = document.getElementById('manageSubjectBtnDirect');
@@ -2502,6 +2686,7 @@ function initSubjectManager() {
         if (modalDeptText && DEPT_CONFIG[currentDept]) modalDeptText.textContent = DEPT_CONFIG[currentDept].code;
         if (modalYearText) modalYearText.textContent = activeYear;
 
+        populateModalSectionOptions();
         fetchCloudSubjects();
         renderSubjectChips();
         if (subjectManageModal) {
@@ -2527,15 +2712,24 @@ function initSubjectManager() {
             const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
             const isElecCheckbox = document.getElementById('newSubjectIsElectiveCheckbox');
             const isElecChecked = isElecCheckbox ? isElecCheckbox.checked : false;
+            const secSelectModal = document.getElementById('newSubjectSectionSelect');
+            const targetSection = secSelectModal ? secSelectModal.value : 'ALL';
+            const subjObj = { name: val, section: targetSection };
 
             const store = getCustomSubjectsStore();
             if (!store[currentDept]) store[currentDept] = {};
             if (!store[currentDept][activeYear]) store[currentDept][activeYear] = [];
 
-            if (!store[currentDept][activeYear].some(s => s.toLowerCase() === val.toLowerCase())) {
-                store[currentDept][activeYear].push(val);
-                saveCustomSubjectsStore(store);
+            const existingIdx = store[currentDept][activeYear].findIndex(s =>
+                (typeof s === 'string' ? s.toLowerCase() : (s.name || s.subject || '').toLowerCase()) === val.toLowerCase()
+            );
+
+            if (existingIdx !== -1) {
+                store[currentDept][activeYear][existingIdx] = subjObj;
+            } else {
+                store[currentDept][activeYear].push(subjObj);
             }
+            saveCustomSubjectsStore(store);
 
             // Un-delete subject if previously in local deleted store
             const deletedStore = getDeletedSubjectsStore();
@@ -2549,7 +2743,7 @@ function initSubjectManager() {
             flags[key] = isElecChecked;
             saveElectiveFlagsStore(flags);
 
-            sendSubjectToCloud('add_subject', currentDept, activeYear, val, isElecChecked)
+            sendSubjectToCloud('add_subject', currentDept, activeYear, val, isElecChecked, targetSection)
                 .catch(e => console.warn('Subject add cloud sync error:', e));
 
             newSubjectInput.value = '';
@@ -2557,7 +2751,7 @@ function initSubjectManager() {
             renderSubjectChips();
             const yearSubjects = getSubjectsForActiveYear(currentDept, activeYear);
             updateSubjectDropdowns(yearSubjects, val);
-            showCustomToast('⚡ Subject Synced to All Devices!', `"${val}" added as ${isElecChecked ? 'Combined Elective' : 'Section Subject'}.`);
+            showCustomToast('⚡ Subject Synced to All Devices!', `"${val}" added as ${isElecChecked ? 'Combined Elective' : ('Section (' + targetSection + ') Subject')}.`);
         });
     }
 
