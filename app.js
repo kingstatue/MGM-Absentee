@@ -549,9 +549,20 @@ function wipeHODPortalState() {
     }
 }
 
+function cancelHODLoginAndReturnToLogger() {
+    pendingHODTabSwitch = false;
+    const deptLoginModal = document.getElementById('deptLoginModal');
+    const cancelBtn = document.getElementById('cancelHODLoginBtn');
+    if (deptLoginModal) deptLoginModal.classList.remove('active');
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    switchMode('typing');
+}
+
 // 1. Mode Switcher Handler
 function switchMode(mode) {
+    const cancelBtn = document.getElementById('cancelHODLoginBtn');
     if (mode === 'voice') {
+        if (cancelBtn) cancelBtn.style.display = 'none';
         if (currentDept !== 'BCA') {
             switchMode('typing');
             return;
@@ -564,6 +575,7 @@ function switchMode(mode) {
         if (hodSection) hodSection.style.display = 'none';
         wipeHODPortalState();
     } else if (mode === 'typing') {
+        if (cancelBtn) cancelBtn.style.display = 'none';
         if (typingModeTab) typingModeTab.classList.add('active');
         if (voiceModeTab) voiceModeTab.classList.remove('active');
         if (hodModeTab) hodModeTab.classList.remove('active');
@@ -580,10 +592,12 @@ function switchMode(mode) {
                 loginAlertBox.style.display = 'block';
                 loginAlertBox.textContent = '🔒 Enter HOD Passcode for ' + deptLabel + ' (or Super Admin Passcode) to access HOD Portal';
             }
+            if (cancelBtn) cancelBtn.style.display = 'block';
             if (deptLoginModal) deptLoginModal.classList.add('active');
             if (deptPasscode) deptPasscode.focus();
             return;
         }
+        if (cancelBtn) cancelBtn.style.display = 'none';
 
         if (hodModeTab) hodModeTab.classList.add('active');
         if (voiceModeTab) voiceModeTab.classList.remove('active');
@@ -3095,26 +3109,9 @@ function renderHODSectionCards(data) {
         groupedByYear[yearFullLabel].push(entry);
     });
 
-    // Render Year-Wise Combined WhatsApp buttons in globalShareContainer
+    // Render Grouped WhatsApp buttons according to department section rules
     if (globalShareContainer) {
-        let yearButtonsHtml = '<div style="display: flex; flex-direction: column; gap: 8px;">';
-        
-        Object.keys(groupedByYear).forEach(yearLabel => {
-            const yrEntries = groupedByYear[yearLabel];
-            const yrMsg = buildYearWhatsAppMessage(yearLabel, stream, dateVal, yrEntries);
-            const encodedYrMsg = encodeURIComponent(yrMsg);
-            
-            const secNames = [...new Set(yrEntries.map(e => e.section || '').filter(Boolean))].sort().join(', ');
-            const secSuffix = secNames ? ` (Sec ${secNames})` : '';
-
-            yearButtonsHtml += `
-                <button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodedYrMsg}')">
-                    📱 Share ${escapeHTML(yearLabel)} ${escapeHTML(stream)}${escapeHTML(secSuffix)} Combined Report
-                </button>`;
-        });
-        
-        yearButtonsHtml += '</div>';
-        globalShareContainer.innerHTML = yearButtonsHtml;
+        globalShareContainer.innerHTML = buildGroupedWhatsAppButtons(stream, dateVal, entries);
         globalShareContainer.style.display = 'block';
     }
 
@@ -3159,9 +3156,6 @@ function renderHODSectionCards(data) {
                         <span class="accordion-chevron">▼</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;" onclick="event.stopPropagation()">
-                        <button type="button" class="btn-whatsapp-header" onclick="openWhatsAppShare('${encodedMsg}')">
-                            📱 WhatsApp
-                        </button>
                         <span class="hod-card-badge">${secEntries.length} slot${secEntries.length === 1 ? '' : 's'}</span>
                     </div>
                 </div>
@@ -3195,6 +3189,138 @@ function renderHODSectionCards(data) {
     });
 
     container.innerHTML = html;
+}
+
+function buildGroupedWhatsAppButtons(stream, dateVal, entries) {
+    let html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
+    const streamCode = stream === 'BCM' ? 'B.Com' : (stream === 'BA' ? 'B.A.' : (stream === 'BSC' ? 'B.Sc.' : stream));
+
+    const yrPrefixes = ['I', 'II', 'III'];
+
+    yrPrefixes.forEach(yrCode => {
+        const yrEntries = entries.filter(e => {
+            const yr = String(e.year || '').toUpperCase();
+            if (yrCode === 'I') return yr.includes('FIRST') || yr.includes('1');
+            if (yrCode === 'II') return yr.includes('SECOND') || yr.includes('2');
+            if (yrCode === 'III') return yr.includes('THIRD') || yr.includes('3');
+            return false;
+        });
+
+        if (yrEntries.length === 0) return;
+
+        const yrLabel = yrCode === 'I' ? '1st Year' : (yrCode === 'II' ? '2nd Year' : '3rd Year');
+
+        if (stream === 'BCA') {
+            if (yrCode === 'I') {
+                // 1st Year BCA: Sec A & B combined together, Sec C (AIML) separate
+                const abEntries = yrEntries.filter(e => {
+                    const sec = String(e.section || '').toUpperCase();
+                    return sec === 'A' || sec === 'B' || sec === 'ALL' || sec === 'COMBINED';
+                });
+                const cEntries = yrEntries.filter(e => {
+                    const sec = String(e.section || '').toUpperCase();
+                    return sec === 'C' || sec.includes('AIML');
+                });
+
+                if (abEntries.length > 0) {
+                    const title = `1st Year BCA - Section A & B Combined`;
+                    const msg = buildCombinedGroupWhatsAppMessage(title, dateVal, abEntries);
+                    html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
+                        📱 Share ${escapeHTML(title)} Report
+                    </button>`;
+                }
+
+                if (cEntries.length > 0) {
+                    const cTitle = `1st Year BCA - Section C (AIML)`;
+                    const msg = buildCombinedGroupWhatsAppMessage(cTitle, dateVal, cEntries);
+                    html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
+                        📱 Share ${escapeHTML(cTitle)} Report
+                    </button>`;
+                }
+            } else {
+                // 2nd & 3rd Year BCA: All Sections A, B & C combined together
+                const title = `${yrLabel} BCA - Section A, B & C Combined`;
+                const msg = buildCombinedGroupWhatsAppMessage(title, dateVal, yrEntries);
+                html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
+                    📱 Share ${escapeHTML(title)} Report
+                </button>`;
+            }
+        } else if (stream === 'BCM' || stream === 'BCOM') {
+            const abEntries = yrEntries.filter(e => {
+                const sec = String(e.section || '').toUpperCase();
+                return sec === 'A' || sec === 'B' || sec === 'ALL' || sec === 'COMBINED';
+            });
+            const tpEntries = yrEntries.filter(e => {
+                const sec = String(e.section || '').toUpperCase();
+                return sec.includes('TP') || sec === 'C (TP)';
+            });
+            const afEntries = yrEntries.filter(e => {
+                const sec = String(e.section || '').toUpperCase();
+                return sec.includes('AF') || sec === 'C (AF)' || sec === 'D';
+            });
+
+            if (abEntries.length > 0) {
+                const title = `${yrLabel} B.Com - Section A & B Combined`;
+                const msg = buildCombinedGroupWhatsAppMessage(title, dateVal, abEntries);
+                html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
+                    📱 Share ${escapeHTML(title)} Report
+                </button>`;
+            }
+
+            if (tpEntries.length > 0) {
+                const title = `${yrLabel} B.Com - Section C (TP - Tax Procedure)`;
+                const msg = buildCombinedGroupWhatsAppMessage(title, dateVal, tpEntries);
+                html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
+                    📱 Share ${escapeHTML(title)} Report
+                </button>`;
+            }
+
+            if (afEntries.length > 0) {
+                const title = `${yrLabel} B.Com - Section C (AF - Accounting & Finance)`;
+                const msg = buildCombinedGroupWhatsAppMessage(title, dateVal, afEntries);
+                html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
+                    📱 Share ${escapeHTML(title)} Report
+                </button>`;
+            }
+        } else {
+            // BA / BSC
+            const title = `${yrLabel} ${streamCode}`;
+            const msg = buildCombinedGroupWhatsAppMessage(title, dateVal, yrEntries);
+            html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
+                📱 Share ${escapeHTML(title)} Report
+            </button>`;
+        }
+    });
+
+    html += '</div>';
+    return html;
+}
+
+function buildCombinedGroupWhatsAppMessage(groupTitle, dateStr, entries) {
+    const formattedDate = formatDateDisplay(dateStr);
+    let msg = `📌 *MGM COLLEGE — ABSENTEE NOTICE*\n`;
+    msg += `🏫 *Class:* ${groupTitle}\n`;
+    msg += `📅 *Date:* ${formattedDate}\n\n`;
+    msg += `*Period / Subject Wise Absentees:*\n`;
+
+    // Sort entries by section, then slot
+    entries.sort((a, b) => {
+        const secA = String(a.section || '').toUpperCase();
+        const secB = String(b.section || '').toUpperCase();
+        if (secA !== secB) return secA.localeCompare(secB);
+        return (parseInt(a.slot, 10) || 1) - (parseInt(b.slot, 10) || 1);
+    });
+
+    entries.forEach(e => {
+        const slotNum = parseInt(e.slot, 10) || 1;
+        const timeLabel = getSlotTimeLabel(slotNum);
+        const secTag = e.section ? ` [Sec ${e.section}]` : '';
+        const rolls = e.rollNumbers && e.rollNumbers !== 'NIL' ? e.rollNumbers : 'NIL (All Present)';
+        msg += `• *${timeLabel}*${secTag} [${e.subject || 'Subject'}]: ${rolls}\n`;
+    });
+
+    msg += `\n_Please verify attendance with your ward._`;
+    return msg;
 }
 
 function buildSectionWhatsAppMessage(sectionTitle, dateStr, entries) {
