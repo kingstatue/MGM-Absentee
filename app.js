@@ -854,6 +854,48 @@ async function submitData(dateVal, rollRaw, yearVal, sectionVal, subjectVal, slo
     return null;
 }
 
+function checkSheetSlotConflict(dateVal, yearVal, sectionVal, slotVal, subjectVal) {
+    return new Promise((resolve) => {
+        const cbName = 'mgmConflictCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+        let scriptEl = null;
+        const timeout = setTimeout(() => {
+            cleanup();
+            resolve({ exists: false, offline: true });
+        }, 1500);
+
+        function cleanup() {
+            clearTimeout(timeout);
+            try { delete window[cbName]; } catch (e) {}
+            if (scriptEl && scriptEl.parentNode) scriptEl.parentNode.removeChild(scriptEl);
+        }
+
+        window[cbName] = function (data) {
+            cleanup();
+            resolve(data || { exists: false });
+        };
+
+        const params = new URLSearchParams({
+            action: 'check',
+            date: dateVal || getTodayISOString(),
+            stream: currentDept,
+            year: yearVal || '',
+            section: sectionVal || '',
+            slot: String(slotVal || 1),
+            subject: subjectVal || '',
+            callback: cbName
+        });
+
+        const targetUrl = getWebhookUrl(currentDept);
+        scriptEl = document.createElement('script');
+        scriptEl.src = targetUrl + (targetUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
+        scriptEl.onerror = function () {
+            cleanup();
+            resolve({ exists: false, offline: true });
+        };
+        document.body.appendChild(scriptEl);
+    });
+}
+
 function showSlotConflictDialog(params) {
     return new Promise((resolve) => {
         const prevRollsArr = normalizeRollNumbers(params.existingRolls);
@@ -861,12 +903,14 @@ function showSlotConflictDialog(params) {
         const mergedRollsArr = Array.from(new Set([...prevRollsArr, ...newRollsArr])).sort((a, b) => a - b);
         const mergedStr = mergedRollsArr.length > 0 ? mergedRollsArr.join(', ') : 'NIL';
 
+        const oldModal = document.getElementById('slotConflictModalDialog');
+        if (oldModal && oldModal.parentNode) oldModal.parentNode.removeChild(oldModal);
+
         const dialog = document.createElement('div');
+        dialog.id = 'slotConflictModalDialog';
         dialog.className = 'modal-backdrop active';
-        dialog.style.zIndex = '9999';
-        dialog.style.display = 'flex';
-        dialog.style.alignItems = 'center';
-        dialog.style.justifyContent = 'center';
+        dialog.style.cssText = 'position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);';
+
         dialog.innerHTML = `
             <div class="modal-card" style="max-width: 480px; width: 92%; padding: 22px; border-top: 4px solid #f59e0b; background: var(--bg-card, #1e293b); color: var(--text-main, #f8fafc); border-radius: 14px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
@@ -894,7 +938,7 @@ function showSlotConflictDialog(params) {
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 10px;">
-                    <button type="button" id="conflictMergeBtn" class="btn-primary" style="background: #10b981; border: none; font-weight: 700; padding: 12px; font-size: 0.9rem; border-radius: 8px; cursor: pointer;">
+                    <button type="button" id="conflictMergeBtn" class="btn-primary" style="background: #10b981; border: none; font-weight: 700; padding: 12px; font-size: 0.9rem; border-radius: 8px; cursor: pointer; color: #fff;">
                         🔀 Merge Both Entries (${mergedRollsArr.length} Absentees)
                     </button>
                     <button type="button" id="conflictReplaceBtn" class="btn-secondary" style="border: 1px solid rgba(239, 68, 68, 0.5); color: #f87171; padding: 10px; font-size: 0.85rem; border-radius: 8px; cursor: pointer; background: transparent;">
@@ -910,13 +954,19 @@ function showSlotConflictDialog(params) {
         document.body.appendChild(dialog);
 
         const cleanup = (choice) => {
-            if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+            if (dialog && dialog.parentNode) {
+                dialog.parentNode.removeChild(dialog);
+            }
             resolve(choice);
         };
 
-        dialog.querySelector('#conflictMergeBtn').onclick = () => cleanup({ action: 'merge', mergedRolls: mergedStr, mergedArr: mergedRollsArr });
-        dialog.querySelector('#conflictReplaceBtn').onclick = () => cleanup({ action: 'replace', mergedRolls: params.newRolls, mergedArr: newRollsArr });
-        dialog.querySelector('#conflictCancelBtn').onclick = () => cleanup({ action: 'cancel' });
+        const mBtn = dialog.querySelector('#conflictMergeBtn');
+        const rBtn = dialog.querySelector('#conflictReplaceBtn');
+        const cBtn = dialog.querySelector('#conflictCancelBtn');
+
+        if (mBtn) mBtn.addEventListener('click', (e) => { e.preventDefault(); cleanup({ action: 'merge', mergedRolls: mergedStr, mergedArr: mergedRollsArr }); });
+        if (rBtn) rBtn.addEventListener('click', (e) => { e.preventDefault(); cleanup({ action: 'replace', mergedRolls: params.newRolls, mergedArr: newRollsArr }); });
+        if (cBtn) cBtn.addEventListener('click', (e) => { e.preventDefault(); cleanup({ action: 'cancel' }); });
     });
 }
 
@@ -928,10 +978,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
     const rollNumbersArray = normalizeRollNumbers(rollNumbersRaw);
     let formattedRolls = rollNumbersArray.length > 0 ? rollNumbersArray.join(', ') : 'NIL';
 
-    if (btnElem) btnElem.disabled = true;
-    if (textElem) textElem.style.opacity = '0.5';
-
-    // Local Storage conflict check
+    // Local Storage conflict check (Instant 0ms)
     const history = JSON.parse(localStorage.getItem('mgm_attendance_history') || '[]');
     const cleanStream = currentDept || 'BCA';
     const existingEntry = history.find(item => {
@@ -956,12 +1003,14 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         return true;
     });
 
-    // Cloud / Sheet check
+    // Cloud / Sheet check (Fast 1.5s max)
     let sheetConflict = { exists: false };
-    try {
-        sheetConflict = await checkSheetSlotConflict(cleanDate, yearVal, sectionVal, cleanSlot, cleanSubject);
-    } catch (e) {
-        sheetConflict = { exists: false, offline: true };
+    if (!existingEntry) {
+        try {
+            sheetConflict = await checkSheetSlotConflict(cleanDate, yearVal, sectionVal, cleanSlot, cleanSubject);
+        } catch (e) {
+            sheetConflict = { exists: false, offline: true };
+        }
     }
 
     const hasConflict = !!existingEntry || !!(sheetConflict.exists && !sheetConflict.offline);
@@ -973,7 +1022,6 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         const prevSubj = existingEntry ? existingEntry.subject : (sheetConflict.subject || cleanSubject);
         const prevRolls = existingEntry ? existingEntry.rollNumbers : (sheetConflict.rollNumbers || 'NIL');
 
-        // Always show interactive conflict dialog with 3 explicit choices (Merge, Overwrite, Cancel)
         const userChoice = await showSlotConflictDialog({
             date: cleanDate,
             year: yearVal,
@@ -985,9 +1033,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
             newRolls: formattedRolls
         });
 
-        if (userChoice.action === 'cancel') {
-            if (btnElem) btnElem.disabled = false;
-            if (textElem) textElem.style.opacity = '1';
+        if (!userChoice || userChoice.action === 'cancel') {
             return;
         }
 
@@ -995,6 +1041,11 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         finalRolls = userChoice.mergedRolls;
         finalRollsArr = userChoice.mergedArr;
     }
+
+    // Now disable button & show spinner during actual HTTP POST transmission
+    if (btnElem) btnElem.disabled = true;
+    if (textElem) textElem.style.opacity = '0.5';
+    if (spinnerElem) spinnerElem.style.display = 'block';
 
     const isUpdate = hasConflict;
     const prevRollsArr = existingEntry ? normalizeRollNumbers(existingEntry.rollNumbers) : (sheetConflict.exists ? normalizeRollNumbers(sheetConflict.rollNumbers) : []);
