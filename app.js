@@ -3318,9 +3318,8 @@ function initSubjectManager() {
 
             upsertLocalSubject(currentDept, activeYear, val, targetSection, isElecChecked, oldName || null);
 
-            const clearedStore = getClearedDeptsStore();
-            delete clearedStore[currentDept];
-            saveClearedDeptsStore(clearedStore);
+            // Keep "cleared" guard if set — do NOT unlock old cloud subjects just because one new subject was added.
+            // Kannada (etc.) lives in local custom store and is pushed to the sheet as ADD.
 
             const cloudAction = oldName ? 'rename_subject' : 'add_subject';
             sendSubjectToCloud(cloudAction, currentDept, activeYear, val, isElecChecked, targetSection, oldName || '')
@@ -3351,30 +3350,49 @@ function initSubjectManager() {
 
     if (resetSubjectsBtn) {
         resetSubjectsBtn.addEventListener('click', () => {
-            if (confirm('Clear all stored subjects for ' + currentDept + '? This will let you add fresh subjects.')) {
-                const clearedStore = getClearedDeptsStore();
-                clearedStore[currentDept] = true;
-                saveClearedDeptsStore(clearedStore);
-
+            if (confirm('Clear all stored subjects for ' + currentDept + '?\n\nThis removes them on this phone AND marks them deleted in Google Sheet so they will not come back on sync.')) {
+                const dept = currentDept;
                 const customStore = getCustomSubjectsStore();
-                delete customStore[currentDept];
-                saveCustomSubjectsStore(customStore);
-
+                const cloudStore = getCloudSubjectsStore();
                 const deletedStore = getDeletedSubjectsStore();
-                delete deletedStore[currentDept];
+                if (!deletedStore[dept]) deletedStore[dept] = {};
+
+                // Tombstone every known subject so a later cloud fetch cannot resurrect them
+                const years = new Set([
+                    ...Object.keys((customStore[dept] || {})),
+                    ...Object.keys((cloudStore[dept] || {}))
+                ]);
+                years.forEach(yr => {
+                    if (!deletedStore[dept][yr]) deletedStore[dept][yr] = [];
+                    const lists = []
+                        .concat((customStore[dept] && customStore[dept][yr]) || [])
+                        .concat((cloudStore[dept] && cloudStore[dept][yr]) || []);
+                    lists.forEach(s => {
+                        const name = extractSubjNameAndSection(s).name.trim();
+                        if (name && !deletedStore[dept][yr].some(d => d.toLowerCase() === name.toLowerCase())) {
+                            deletedStore[dept][yr].push(name);
+                        }
+                    });
+                });
                 saveDeletedSubjectsStore(deletedStore);
 
-                const cloudStore = getCloudSubjectsStore();
-                delete cloudStore[currentDept];
+                const clearedStore = getClearedDeptsStore();
+                clearedStore[dept] = true;
+                saveClearedDeptsStore(clearedStore);
+
+                delete customStore[dept];
+                saveCustomSubjectsStore(customStore);
+                delete cloudStore[dept];
                 saveCloudSubjectsStore(cloudStore);
 
-                sendSubjectToCloud('clear_subjects', currentDept, 'ALL', '').catch(e => console.warn('Cloud subject clear error:', e));
+                sendSubjectToCloud('clear_subjects', dept, 'ALL', '')
+                    .catch(e => console.warn('Cloud subject clear error:', e));
 
                 const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
                 renderSubjectChips();
-                const yearSubjects = getSubjectsForActiveYear(currentDept, activeYear);
+                const yearSubjects = getSubjectsForActiveYear(dept, activeYear);
                 updateSubjectDropdowns(yearSubjects, null);
-                showCustomToast('🧹 All Subjects Cleared!', 'All custom and cloud subjects cleared for ' + currentDept + '.');
+                showCustomToast('All Subjects Cleared!', 'Cleared for ' + dept + '. Old sheet subjects marked deleted so they stay gone.');
             }
         });
     }
