@@ -95,6 +95,14 @@ function getWebhookUrl(deptCode) {
 function getAuthPayload() {
     let pass = '';
     try { pass = sessionStorage.getItem('mgm_auth_pass') || ''; } catch (e) {}
+    // Mobile browsers / PWAs often wipe sessionStorage when the app is killed —
+    // fall back to remembered pass so subject sync keeps working.
+    if (!pass) {
+        try {
+            pass = localStorage.getItem('mgm_remember_pass') || '';
+            if (pass) sessionStorage.setItem('mgm_auth_pass', pass);
+        } catch (e) {}
+    }
     return {
         authPasscode: pass,
         authRole: localStorage.getItem('mgm_role') || currentRole || 'TEACHER',
@@ -2466,13 +2474,22 @@ function fetchCloudSubjects() {
             }
 
             if (data.customSubjects) {
-                // Sheet is source of truth. Only hide subjects listed in deletedStore (tombstones).
-                // Do NOT use clearedStore here — it blocked NEW subjects added from other devices.
+                // Sheet is source of truth. Active (ADD) subjects on the sheet undelete local tombstones
+                // so a subject added on PC is not hidden forever on mobile after an old Clear All.
+                let deletedChanged = false;
                 const cleanedCloudSubjects = {};
                 for (let deptKey in data.customSubjects) {
                     cleanedCloudSubjects[deptKey] = {};
                     for (let yrKey in data.customSubjects[deptKey]) {
                         const subjs = data.customSubjects[deptKey][yrKey] || [];
+                        if (deletedStore[deptKey] && deletedStore[deptKey][yrKey]) {
+                            const before = deletedStore[deptKey][yrKey].length;
+                            const activeNames = subjs.map(s => extractSubjNameAndSection(s).name.toLowerCase());
+                            deletedStore[deptKey][yrKey] = deletedStore[deptKey][yrKey].filter(d =>
+                                !activeNames.includes(String(d).toLowerCase())
+                            );
+                            if (deletedStore[deptKey][yrKey].length !== before) deletedChanged = true;
+                        }
                         const delList = (deletedStore[deptKey] && deletedStore[deptKey][yrKey]) ? deletedStore[deptKey][yrKey] : [];
                         cleanedCloudSubjects[deptKey][yrKey] = subjs.filter(s => {
                             const item = extractSubjNameAndSection(s);
@@ -2480,7 +2497,21 @@ function fetchCloudSubjects() {
                         });
                     }
                 }
+                if (deletedChanged) saveDeletedSubjectsStore(deletedStore);
                 saveCloudSubjectsStore(cleanedCloudSubjects);
+
+                // Drop local cleared lock once sheet sync succeeds
+                try {
+                    const clearedStore = getClearedDeptsStore();
+                    let clearedChanged = false;
+                    for (let deptKey in data.customSubjects) {
+                        if (clearedStore[deptKey]) {
+                            delete clearedStore[deptKey];
+                            clearedChanged = true;
+                        }
+                    }
+                    if (clearedChanged) saveClearedDeptsStore(clearedStore);
+                } catch (e) {}
             }
 
             if (data.electiveSubjects) {
@@ -2496,6 +2527,9 @@ function fetchCloudSubjects() {
             renderSubjectChips();
         } else if (data && (data.error === 'Unauthorized' || data.result === 'error')) {
             console.warn('[Subjects] Cloud fetch failed:', data.message || data.error);
+            if (String(data.error || data.message || '').toLowerCase().indexOf('unauthor') !== -1) {
+                showCustomToast('Login required for subject sync', 'Open the app and enter passcode again on this device.');
+            }
         }
     };
 
