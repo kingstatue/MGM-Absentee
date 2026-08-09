@@ -1,4 +1,4 @@
-// Department & Multi-Stream Configuration (Mangalore University SEP Syllabus)
+// Department & Multi-Stream Configuration (User-Driven Subjects)
 const DEPT_CONFIG = {
     BCA: {
         code: 'BCA',
@@ -6,36 +6,19 @@ const DEPT_CONFIG = {
         passcode: 'bca2026',
         badgeClass: 'bca',
         hasSections: true,
-        defaultSubject: 'English',
+        defaultSubject: '',
         subjectsByYearAndSection: {
-            'First Year': {
-                'A': ['English', 'Kannada', 'Hindi', 'Sanskrit', 'Computer Fundamentals & C', 'Data Structures using C', 'Digital Logic & Discrete Structures', 'Web Designing', 'Office Automation', 'Digital Fluency'],
-                'B': ['English', 'Kannada', 'Hindi', 'Sanskrit', 'Computer Fundamentals & C', 'Data Structures using C', 'Digital Logic & Discrete Structures', 'Web Designing', 'Office Automation', 'Digital Fluency'],
-                'C': ['English', 'Kannada', 'Hindi', 'Sanskrit', 'Digital Fluency', 'Fundamentals of AI & ML', 'Cloud Computing Essentials', 'Python Programming for AI', 'Data Science & Visualization', 'Database Systems for AI', 'Linux & Shell Scripting']
-            },
-            'Second Year': {
-                'A': ['Object Oriented Programming with Java', 'Database Management Systems (DBMS)', 'Operating System Concepts', 'Python Programming', 'Computer Networks', 'Software Engineering', 'DevOps', 'Web Content Management Systems (WCMS)', 'Open Source Technologies (OST)', 'English', 'Kannada', 'Hindi', 'Sanskrit'],
-                'B': ['Object Oriented Programming with Java', 'Database Management Systems (DBMS)', 'Operating System Concepts', 'Python Programming', 'Computer Networks', 'Software Engineering', 'DevOps', 'Web Content Management Systems (WCMS)', 'Open Source Technologies (OST)', 'English', 'Kannada', 'Hindi', 'Sanskrit'],
-                'C': ['Object Oriented Programming with Java', 'Database Management Systems (DBMS)', 'Operating System Concepts', 'Python Programming', 'Computer Networks', 'Software Engineering', 'DevOps', 'Web Content Management Systems (WCMS)', 'Open Source Technologies (OST)', 'English', 'Kannada', 'Hindi', 'Sanskrit']
-            },
-            'Third Year': {
-                'A': ['Web Technologies (PHP/Node)', 'Cloud Computing', 'Artificial Intelligence & ML', 'Mobile Application Development', 'Cyber Security & Ethics', 'Project Work'],
-                'B': ['Web Technologies (PHP/Node)', 'Cloud Computing', 'Artificial Intelligence & ML', 'Mobile Application Development', 'Cyber Security & Ethics', 'Project Work'],
-                'C': ['Web Technologies (PHP/Node)', 'Cloud Computing', 'Artificial Intelligence & ML', 'Mobile Application Development', 'Cyber Security & Ethics', 'Project Work']
-            }
+            'First Year': { 'A': [], 'B': [], 'C': [] },
+            'Second Year': { 'A': [], 'B': [], 'C': [] },
+            'Third Year': { 'A': [], 'B': [], 'C': [] }
         },
         subjectsByYear: {
-            'First Year': ['English', 'Kannada', 'Hindi', 'Sanskrit', 'Computer Fundamentals & C', 'Data Structures using C', 'Digital Logic & Discrete Structures', 'Web Designing', 'Office Automation', 'Digital Fluency', 'Fundamentals of AI & ML', 'Cloud Computing Essentials', 'Python Programming for AI', 'Data Science & Visualization', 'Database Systems for AI', 'Linux & Shell Scripting'],
-            'Second Year': ['Object Oriented Programming with Java', 'Database Management Systems (DBMS)', 'Operating System Concepts', 'Python Programming', 'Computer Networks', 'Software Engineering', 'DevOps', 'Web Content Management Systems (WCMS)', 'Open Source Technologies (OST)', 'English', 'Kannada', 'Hindi', 'Sanskrit'],
-            'Third Year': ['Web Technologies (PHP/Node)', 'Cloud Computing', 'Artificial Intelligence & ML', 'Mobile Application Development', 'Cyber Security & Ethics', 'Project Work']
+            'First Year': [],
+            'Second Year': [],
+            'Third Year': []
         },
-        subjects: ['English', 'Kannada', 'Hindi', 'Sanskrit', 'Computer Fundamentals & C', 'Data Structures using C', 'Digital Logic & Discrete Structures', 'Web Designing', 'Office Automation', 'Digital Fluency', 'Fundamentals of AI & ML', 'Cloud Computing Essentials', 'Python Programming for AI', 'Data Science & Visualization', 'Database Systems for AI', 'Linux & Shell Scripting', 'Object Oriented Programming with Java', 'Database Management Systems (DBMS)', 'Operating System Concepts', 'Python Programming', 'Computer Networks', 'Software Engineering', 'DevOps', 'Web Content Management Systems (WCMS)', 'Open Source Technologies (OST)', 'Web Technologies (PHP/Node)', 'Cloud Computing', 'Artificial Intelligence & ML', 'Mobile Application Development', 'Cyber Security & Ethics', 'Project Work'],
-        samplePresets: [
-            { label: '"26709 26717 English 1st Yr Sec A Slot 1"', phrase: '26709 26717 English First Year A Slot 1' },
-            { label: '"26701, 26705 1st Yr Sec C Fundamentals of AI Slot 2"', phrase: 'Roll numbers 26701 26705 1st Year BCA Sec C Fundamentals of AI 10-10.55' },
-            { label: '"Roll 26701, 26705 2nd Yr Sec B Java 10-10.55"', phrase: 'Roll numbers 26701, 26705 2nd Year BCA Sec B Java 10-10.55' },
-            { label: '"3rd Yr Sec A DBMS Slot 1 - Absentees 5, 8, 19"', phrase: 'Third year Section A DBMS slot 1 absentees 5 8 19' }
-        ]
+        subjects: [],
+        samplePresets: []
     },
     BCM: {
         code: 'BCM',
@@ -43,39 +26,19 @@ const DEPT_CONFIG = {
         passcode: 'bcm2026',
         badgeClass: 'bcm',
         hasSections: true,
-        defaultSubject: 'Financial Accounting-I',
+        defaultSubject: '',
         subjectsByYearAndSection: {
-            'First Year': {
-                'A': ['Financial Accounting-I', 'Quantitative Techniques- I', 'Foundation of Commerce-I', 'Individual and Team Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit', 'Digital Fluency'],
-                'B': ['Financial Accounting-I', 'Quantitative Techniques- I', 'Foundation of Commerce-I', 'Individual and Team Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit', 'Digital Fluency'],
-                'C (TP)': ['Financial Accounting-I', 'Income Tax I', 'Goods and Service Tax I', 'Individual and Team Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit', 'Digital Fluency'],
-                'C (AF)': ['Computerised Accounting-I', 'Financial Management- I', 'Quantitative Techniques - I', 'Cost Accounting - I', 'General English', 'Kannada', 'Hindi', 'Sanskrit', 'Digital Fluency']
-            },
-            'Second Year': {
-                'A': ['Corporate Accounting-I', 'Income Tax - I', 'Cost and Management Accounting - I', 'Human Resource Management', 'Personal Investment Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit'],
-                'B': ['Corporate Accounting-I', 'Income Tax - I', 'Cost and Management Accounting - I', 'Human Resource Management', 'Personal Investment Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit'],
-                'C (TP)': ['CA - I', 'Income Tax - III', 'Goods and Service Tax - III', 'Human Resource Management', 'Personal Investment Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit'],
-                'C (AF)': ['CA - III', 'Income Tax - I', 'Fund Management', 'Human Resource Management', 'Personal Investment Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit']
-            },
-            'Third Year': {
-                'A': ['Financial Management-I', 'Income Tax I', 'Cost and Management Accounting III', 'Business Law', 'Employability Skills', 'PBL'],
-                'B': ['Financial Management-I', 'Income Tax I', 'Cost and Management Accounting III', 'Business Law', 'Employability Skills', 'PBL'],
-                'C (TP)': ['Financial Management-I', 'Advance Income Tax', 'Costing I', 'Business Law', 'Employability Skills', 'PBL'],
-                'C (AF)': ['Income Tax- III', 'SAPM', 'Computerized Accounting', 'Business Law', 'Employability Skills', 'PBL']
-            }
+            'First Year': { 'A': [], 'B': [], 'C (TP)': [], 'C (AF)': [] },
+            'Second Year': { 'A': [], 'B': [], 'C (TP)': [], 'C (AF)': [] },
+            'Third Year': { 'A': [], 'B': [], 'C (TP)': [], 'C (AF)': [] }
         },
         subjectsByYear: {
-            'First Year': ['Financial Accounting-I', 'Quantitative Techniques- I', 'Foundation of Commerce-I', 'Individual and Team Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit', 'Digital Fluency', 'Income Tax I', 'Goods and Service Tax I', 'Computerised Accounting-I', 'Financial Management- I', 'Cost Accounting - I'],
-            'Second Year': ['Corporate Accounting-I', 'Income Tax - I', 'Cost and Management Accounting - I', 'Human Resource Management', 'Personal Investment Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit', 'CA - I', 'Income Tax - III', 'Goods and Service Tax - III', 'CA - III', 'Fund Management'],
-            'Third Year': ['Financial Management-I', 'Income Tax I', 'Cost and Management Accounting III', 'Business Law', 'Employability Skills', 'PBL', 'Advance Income Tax', 'Costing I', 'Income Tax- III', 'SAPM', 'Computerized Accounting']
+            'First Year': [],
+            'Second Year': [],
+            'Third Year': []
         },
-        subjects: ['Financial Accounting-I', 'Quantitative Techniques- I', 'Foundation of Commerce-I', 'Individual and Team Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit', 'Digital Fluency', 'Income Tax I', 'Goods and Service Tax I', 'Computerised Accounting-I', 'Financial Management- I', 'Cost Accounting - I', 'Corporate Accounting-I', 'Income Tax - I', 'Cost and Management Accounting - I', 'Human Resource Management', 'Personal Investment Management', 'CA - I', 'Income Tax - III', 'Goods and Service Tax - III', 'CA - III', 'Fund Management', 'Financial Management-I', 'Cost and Management Accounting III', 'Business Law', 'Employability Skills', 'PBL', 'Advance Income Tax', 'Costing I', 'Income Tax- III', 'SAPM', 'Computerized Accounting'],
-        samplePresets: [
-            { label: '"101 108 Financial Accounting 1st Yr Sec A Slot 1"', phrase: '101 108 Financial Accounting-I First Year Sec A Slot 1' },
-            { label: '"Roll 101, 105 1st Yr Sec C TP Income Tax Slot 2"', phrase: 'Roll numbers 101, 105 1st Year BCOM Sec C TP Income Tax I 10-10.55' },
-            { label: '"Roll 204, 212 2nd Yr Sec C AF Fund Management 10-10.55"', phrase: 'Roll numbers 204, 212 2nd Year BCOM Sec C AF Fund Management 10-10.55' },
-            { label: '"3rd Yr Sec A Business Law Slot 2 - Absentees 15, 22"', phrase: 'Third year Section A Business Law slot 2 absentees 15 22' }
-        ]
+        subjects: [],
+        samplePresets: []
     },
     BA: {
         code: 'BA',
@@ -83,18 +46,14 @@ const DEPT_CONFIG = {
         passcode: 'ba2026',
         badgeClass: 'ba',
         hasSections: false,
-        defaultSubject: 'History',
+        defaultSubject: '',
         subjectsByYear: {
-            'First Year': ['History of India (Earliest to 1206)', 'Basic Concepts of Political Science', 'Micro Economic Analysis', 'Principles of Sociology', 'General English', 'Kannada', 'Hindi', 'Sanskrit'],
-            'Second Year': ['History of India (1206 to 1707)', 'Indian Constitution & Political Process', 'Macro Economic Analysis', 'Sociology of Indian Society', 'Journalism', 'Optional English'],
-            'Third Year': ['History of Modern India & Karnataka', 'International Relations', 'Indian Economy', 'Applied Sociology & Research', 'Human Rights']
+            'First Year': [],
+            'Second Year': [],
+            'Third Year': []
         },
-        subjects: ['History', 'History of India (Earliest to 1206)', 'History of India (1206 to 1707)', 'History of Modern India & Karnataka', 'Political Science', 'Basic Concepts of Political Science', 'Indian Constitution & Political Process', 'International Relations', 'Sociology', 'Micro Economic Analysis', 'Macro Economic Analysis', 'Indian Economy', 'Journalism', 'Optional English', 'Human Rights', 'General English', 'Kannada', 'Hindi', 'Sanskrit'],
-        samplePresets: [
-            { label: '"45 52 History 1st Yr Slot 1"', phrase: '45 52 History First Year Slot 1' },
-            { label: '"Roll 12, 19 2nd Yr Political Science Slot 2"', phrase: 'Roll numbers 12, 19 2nd Year BA Political Science 10-10.55' },
-            { label: '"3rd Yr Economics Slot 3 absentees 8 14"', phrase: 'Third year Economics slot 3 absentees 8 14' }
-        ]
+        subjects: [],
+        samplePresets: []
     },
     BSC: {
         code: 'BSC',
@@ -102,18 +61,14 @@ const DEPT_CONFIG = {
         passcode: 'bsc2026',
         badgeClass: 'bsc',
         hasSections: false,
-        defaultSubject: 'Physics',
+        defaultSubject: '',
         subjectsByYear: {
-            'First Year': ['Physics Mechanics & Properties + Lab', 'Inorganic & Organic Chemistry + Lab', 'Algebra & Calculus', 'Computer Science Fundamentals', 'General English', 'Kannada', 'Hindi'],
-            'Second Year': ['Physics Electricity & Optics + Lab', 'Physical & Organic Chemistry + Lab', 'Differential Equations & Real Analysis', 'Electronics', 'Statistics', 'Botany', 'Zoology'],
-            'Third Year': ['Physics Quantum & Atomic + Lab', 'Analytical & Physical Chemistry + Lab', 'Complex Analysis & Linear Algebra', 'Physics Lab III', 'Chemistry Lab III']
+            'First Year': [],
+            'Second Year': [],
+            'Third Year': []
         },
-        subjects: ['Physics', 'Physics Mechanics & Properties + Lab', 'Physics Electricity & Optics + Lab', 'Physics Quantum & Atomic + Lab', 'Chemistry', 'Inorganic & Organic Chemistry + Lab', 'Chemistry Lab', 'Mathematics', 'Algebra & Calculus', 'Differential Equations & Real Analysis', 'Complex Analysis & Linear Algebra', 'Computer Science', 'Electronics', 'Statistics', 'Botany', 'Zoology', 'General English', 'Kannada', 'Hindi'],
-        samplePresets: [
-            { label: '"12 18 Physics 1st Yr Slot 1"', phrase: '12 18 Physics First Year Slot 1' },
-            { label: '"Roll 305, 312 2nd Yr Chemistry Slot 2"', phrase: 'Roll numbers 305, 312 2nd Year BSC Chemistry 10-10.55' },
-            { label: '"3rd Yr Mathematics Slot 3 absentees 7 11"', phrase: 'Third year Mathematics slot 3 absentees 7 11' }
-        ]
+        subjects: [],
+        samplePresets: []
     }
 };
 
@@ -852,7 +807,156 @@ async function submitData(dateVal, rollRaw, yearVal, sectionVal, subjectVal, slo
         return true;
     });
 
-    // Cross-phone / sheet check: same Date + Year + Section + Slot already taken?
+    if (existingEntry) {
+        const sameSubject = cleanSubject.length > 0 &&
+            existingEntry.subject.trim().toLowerCase() === cleanSubject.toLowerCase();
+        const diff = computeRollDiff(existingEntry.rollNumbers, formattedRolls);
+        const prevStr = diff.prevRolls.length > 0 ? diff.prevRolls.join(', ') : 'NIL';
+
+        alertBoxElem.style.display = 'block';
+        alertBoxElem.className = 'alert-banner active';
+
+        if (!sameSubject) {
+            const secLabel = existingEntry.section === 'ALL' ? 'Combined (Sec A,B,C)' : `Sec ${existingEntry.section}`;
+            alertBoxElem.innerHTML = `
+            <div style="display: flex; gap: 10px; align-items: flex-start;">
+                <div style="flex: 1; font-size: 0.85rem; line-height: 1.4;">
+                    <strong style="color: #fbbf24;">⚠️ Slot already occupied (${secLabel})</strong><br>
+                    ${escapeHTML(cleanDate)} · ${escapeHTML(yearVal)} · Slot ${cleanSlot}<br>
+                    Existing entry: <strong>${escapeHTML(existingEntry.subject)}</strong> (${secLabel}) — Absentees: <strong>${escapeHTML(prevStr)}</strong><br>
+                    <span style="opacity: 0.9;">Submitting will merge or replace absentees.</span>
+                </div>
+            </div>`;
+            if (submitBtnTextElem) submitBtnTextElem.textContent = 'Merge or Replace Entry';
+        } else {
+            const addedStr = diff.addedRolls.length > 0 ? diff.addedRolls.join(', ') : 'None';
+            const retainedStr = diff.retainedRolls.length > 0 ? diff.retainedRolls.join(', ') : 'None';
+            alertBoxElem.innerHTML = `
+            <div style="display: flex; gap: 10px; align-items: flex-start;">
+                <div style="flex: 1; font-size: 0.85rem; line-height: 1.4;">
+                    <strong style="color: #fbbf24;">ℹ️ Entry already exists for ${escapeHTML(existingEntry.subject)} (Slot ${cleanSlot})</strong><br>
+                    Previous Entry: <strong>${escapeHTML(prevStr)}</strong><br>
+                    <span style="opacity: 0.9;">Submitting will ask to merge absentees from both entries.</span>
+                    <div style="margin-top: 6px; padding: 6px 8px; background: rgba(0,0,0,0.25); border-radius: 6px; display: flex; flex-wrap: wrap; gap: 8px;">
+                        <span style="color: #34d399;"><strong>+ Added:</strong> ${escapeHTML(addedStr)}</span>
+                        <span style="color: #a7f3d0;"><strong>Unchanged:</strong> ${escapeHTML(retainedStr)}</span>
+                    </div>
+                </div>
+            </div>`;
+            if (submitBtnTextElem) submitBtnTextElem.textContent = 'Merge & Save Attendance';
+        }
+        return existingEntry;
+    }
+
+    alertBoxElem.style.display = 'none';
+    alertBoxElem.innerHTML = '';
+    if (submitBtnTextElem) submitBtnTextElem.textContent = 'Submit Absentee';
+    return null;
+}
+
+function showSlotConflictDialog(params) {
+    return new Promise((resolve) => {
+        const prevRollsArr = normalizeRollNumbers(params.existingRolls);
+        const newRollsArr = normalizeRollNumbers(params.newRolls);
+        const mergedRollsArr = Array.from(new Set([...prevRollsArr, ...newRollsArr])).sort((a, b) => a - b);
+        const mergedStr = mergedRollsArr.length > 0 ? mergedRollsArr.join(', ') : 'NIL';
+
+        const dialog = document.createElement('div');
+        dialog.className = 'modal-backdrop active';
+        dialog.style.zIndex = '9999';
+        dialog.style.display = 'flex';
+        dialog.style.alignItems = 'center';
+        dialog.style.justifyContent = 'center';
+        dialog.innerHTML = `
+            <div class="modal-card" style="max-width: 480px; width: 92%; padding: 22px; border-top: 4px solid #f59e0b; background: var(--bg-card, #1e293b); color: var(--text-main, #f8fafc); border-radius: 14px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+                    <h3 style="margin: 0; font-size: 1.15rem; color: #fbbf24; display: flex; align-items: center; gap: 8px;">
+                        ⚠️ Slot Entry Conflict (Slot ${escapeHTML(String(params.slot))})
+                    </h3>
+                </div>
+                <div style="font-size: 0.88rem; line-height: 1.5; margin-bottom: 16px;">
+                    <p style="margin: 0 0 10px 0; color: var(--text-dim, #94a3b8);">An entry already exists for <strong>Slot ${escapeHTML(String(params.slot))}</strong> on <strong>${escapeHTML(params.date)}</strong> (${escapeHTML(params.year)} Sec ${escapeHTML(params.section)}).</p>
+                    <div style="background: rgba(255,255,255,0.06); padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; border-left: 3px solid #f87171;">
+                        <div style="font-weight: 600; color: #f87171;">Previous Teacher / Slot Entry:</div>
+                        <div style="font-size: 0.85rem;">Subject: <strong>${escapeHTML(params.existingSubj || params.subject)}</strong></div>
+                        <div style="font-size: 0.85rem;">Absentees: <strong>${escapeHTML(params.existingRolls || 'NIL')}</strong></div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.06); padding: 10px 12px; border-radius: 8px; border-left: 3px solid #60a5fa;">
+                        <div style="font-weight: 600; color: #60a5fa;">Your Current Entry:</div>
+                        <div style="font-size: 0.85rem;">Subject: <strong>${escapeHTML(params.subject)}</strong></div>
+                        <div style="font-size: 0.85rem;">Absentees: <strong>${escapeHTML(params.newRolls || 'NIL')}</strong></div>
+                    </div>
+                </div>
+
+                <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); padding: 10px 12px; border-radius: 8px; margin-bottom: 18px; font-size: 0.85rem; color: #34d399;">
+                    <strong>🔀 Combined Result if Merged:</strong><br>
+                    <span style="font-size: 0.95rem; font-weight: 700; color: #6ee7b7;">${escapeHTML(mergedStr)}</span> (${mergedRollsArr.length} total absentees)
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <button type="button" id="conflictMergeBtn" class="btn-primary" style="background: #10b981; border: none; font-weight: 700; padding: 12px; font-size: 0.9rem; border-radius: 8px; cursor: pointer;">
+                        🔀 Merge Both Entries (${mergedRollsArr.length} Absentees)
+                    </button>
+                    <button type="button" id="conflictReplaceBtn" class="btn-secondary" style="border: 1px solid rgba(239, 68, 68, 0.5); color: #f87171; padding: 10px; font-size: 0.85rem; border-radius: 8px; cursor: pointer; background: transparent;">
+                        ✏️ Overwrite / Replace with My List Only
+                    </button>
+                    <button type="button" id="conflictCancelBtn" class="btn-secondary" style="opacity: 0.7; padding: 8px; font-size: 0.82rem; border-radius: 8px; cursor: pointer; background: transparent; color: var(--text-dim, #94a3b8);">
+                        ❌ Cancel Submission
+                    </button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(dialog);
+
+        const cleanup = (choice) => {
+            if (dialog.parentNode) dialog.parentNode.removeChild(dialog);
+            resolve(choice);
+        };
+
+        dialog.querySelector('#conflictMergeBtn').onclick = () => cleanup({ action: 'merge', mergedRolls: mergedStr, mergedArr: mergedRollsArr });
+        dialog.querySelector('#conflictReplaceBtn').onclick = () => cleanup({ action: 'replace', mergedRolls: params.newRolls, mergedArr: newRollsArr });
+        dialog.querySelector('#conflictCancelBtn').onclick = () => cleanup({ action: 'cancel' });
+    });
+}
+
+async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectVal, slotVal, btnElem, textElem, spinnerElem) {
+    const cleanDate = dateVal || getTodayISOString();
+    const cleanSlot = parseInt(slotVal, 10) || 1;
+    const cleanSubject = (subjectVal || '').trim();
+
+    const rollNumbersArray = normalizeRollNumbers(rollNumbersRaw);
+    let formattedRolls = rollNumbersArray.length > 0 ? rollNumbersArray.join(', ') : 'NIL';
+
+    if (btnElem) btnElem.disabled = true;
+    if (textElem) textElem.style.opacity = '0.5';
+
+    // Local Storage conflict check
+    const history = JSON.parse(localStorage.getItem('mgm_attendance_history') || '[]');
+    const cleanStream = currentDept || 'BCA';
+    const existingEntry = history.find(item => {
+        if ((item.stream || 'BCA') !== cleanStream) return false;
+        if (item.date !== cleanDate) return false;
+        if (item.year !== cleanYear) return false;
+        if (parseInt(item.slot, 10) !== cleanSlot) return false;
+
+        const sec1 = item.section || 'A';
+        const sec2 = sectionVal || 'A';
+        if (!isSectionOverlap(sec1, sec2)) return false;
+
+        const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || sec1.toLowerCase().includes('combin');
+        const isComb2 = sec2 === 'ALL' || sec2.toUpperCase() === 'ALL' || sec2.toLowerCase().includes('combin');
+        const isElec1 = isElectiveOrLanguageSubject(item.subject);
+        const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
+
+        if (isComb1 && isComb2 && isElec1 && isElec2 && item.subject.trim().toLowerCase() !== cleanSubject.toLowerCase()) {
+            return false; // Parallel elective
+        }
+
+        return true;
+    });
+
+    // Cloud / Sheet check
     let sheetConflict = { exists: false };
     try {
         sheetConflict = await checkSheetSlotConflict(cleanDate, yearVal, sectionVal, cleanSlot, cleanSubject);
@@ -860,104 +964,57 @@ async function submitData(dateVal, rollRaw, yearVal, sectionVal, subjectVal, slo
         sheetConflict = { exists: false, offline: true };
     }
 
-    if (sheetConflict.exists) {
-        const existingSubj = String(sheetConflict.subject || '').trim();
-        const existingRolls = sheetConflict.rollNumbers || 'NIL';
-        const existingSec = String(sheetConflict.section || 'A').trim();
-        const sameSubject = existingSubj.toLowerCase() === cleanSubject.toLowerCase();
+    const hasConflict = !!existingEntry || !!(sheetConflict.exists && !sheetConflict.offline);
+    let finalRolls = formattedRolls;
+    let finalRollsArr = rollNumbersArray;
+    let conflictChoice = 'create';
 
-        const isComb1 = existingSec === 'ALL' || existingSec.toUpperCase() === 'ALL' || existingSec.toLowerCase().includes('combin');
-        const isComb2 = sectionVal === 'ALL' || (sectionVal || '').toUpperCase() === 'ALL' || (sectionVal || '').toLowerCase().includes('combin');
-        const isElec1 = isElectiveOrLanguageSubject(existingSubj);
-        const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
+    if (hasConflict) {
+        const prevSubj = existingEntry ? existingEntry.subject : (sheetConflict.subject || cleanSubject);
+        const prevRolls = existingEntry ? existingEntry.rollNumbers : (sheetConflict.rollNumbers || 'NIL');
 
-        if (isComb1 && isComb2 && isElec1 && isElec2 && !sameSubject) {
-            // For Combined sections with parallel electives, Kannada/Hindi/Sanskrit or DevOps/WCMS/OST in same slot are allowed in parallel!
-            sheetConflict.exists = false;
-        } else if (!sameSubject) {
-            const secLabel = existingSec === 'ALL' ? 'Combined (Sec A,B,C)' : `Sec ${existingSec}`;
-            const replaceOk = confirm(
-                'Already entered for this class & slot!\n\n' +
-                cleanDate + ' · ' + yearVal + ' (' + secLabel + ') · Slot ' + cleanSlot + '\n\n' +
-                'Existing entry: ' + (existingSubj || '(blank)') + ' (' + secLabel + ')\n' +
-                'Absentees: ' + existingRolls + '\n\n' +
-                'You are entering: ' + cleanSubject + ' (Sec ' + sectionVal + ')\n' +
-                'Absentees: ' + formattedRolls + '\n\n' +
-                'This slot is occupied. Replace/update the existing entry?'
-            );
-            if (!replaceOk) {
-                if (btnElem) btnElem.disabled = false;
-                if (textElem) textElem.style.opacity = '1';
-                return;
-            }
-        } else if (!existingEntry) {
-            // Same subject (e.g. Hindi again), entered on another phone — confirm roll update
-            const updateOk = confirm(
-                'This slot was already entered (possibly by another teacher).\n\n' +
-                cleanDate + ' · ' + yearVal + ' Sec ' + sectionVal + ' · ' + existingSubj + ' · Slot ' + cleanSlot + '\n\n' +
-                'Current absentees: ' + existingRolls + '\n' +
-                'Your absentees: ' + formattedRolls + '\n\n' +
-                'Update the sheet with your list?'
-            );
-            if (!updateOk) {
-                if (btnElem) btnElem.disabled = false;
-                if (textElem) textElem.style.opacity = '1';
-                return;
-            }
-        }
-    }
+        const userChoice = await showSlotConflictDialog({
+            date: cleanDate,
+            year: yearVal,
+            section: sectionVal,
+            slot: cleanSlot,
+            subject: cleanSubject,
+            existingSubj: prevSubj,
+            existingRolls: prevRolls,
+            newRolls: formattedRolls
+        });
 
-    const isUpdate = !!existingEntry || !!(sheetConflict.exists && !sheetConflict.offline);
-    const diff = existingEntry ? computeRollDiff(existingEntry.rollNumbers, formattedRolls) : {
-        prevRolls: sheetConflict.exists ? normalizeRollNumbers(sheetConflict.rollNumbers) : [],
-        newRolls: rollNumbersArray,
-        addedRolls: rollNumbersArray,
-        deletedRolls: [],
-        retainedRolls: []
-    };
-
-    if (existingEntry) {
-        const prevStr = diff.prevRolls.length > 0 ? diff.prevRolls.join(', ') : 'NIL';
-        const newStr = diff.newRolls.length > 0 ? diff.newRolls.join(', ') : 'NIL';
-        const addedStr = diff.addedRolls.length > 0 ? diff.addedRolls.join(', ') : 'None';
-        const deletedStr = diff.deletedRolls.length > 0 ? diff.deletedRolls.join(', ') : 'None';
-        const retainedStr = diff.retainedRolls.length > 0 ? diff.retainedRolls.join(', ') : 'None';
-
-        const confirmUpdate = confirm(
-            'Existing entry found on this phone!\n\n' +
-            'Updating ' + cleanDate + ' (' + yearVal + ' Sec ' + sectionVal + ', ' + subjectVal + ', Slot ' + cleanSlot + ')\n\n' +
-            '- Previous Absentees (' + diff.prevRolls.length + '): ' + prevStr + '\n' +
-            '- Updated Absentees (' + diff.newRolls.length + '): ' + newStr + '\n\n' +
-            'Changes:\n' +
-            '  + Added (' + diff.addedRolls.length + '): ' + addedStr + '\n' +
-            '  - Removed (' + diff.deletedRolls.length + '): ' + deletedStr + '\n' +
-            '  = Unchanged (' + diff.retainedRolls.length + '): ' + retainedStr + '\n\n' +
-            'Apply this update to Raw Data and the section sheet?'
-        );
-
-        if (!confirmUpdate) {
+        if (userChoice.action === 'cancel') {
             if (btnElem) btnElem.disabled = false;
             if (textElem) textElem.style.opacity = '1';
             return;
         }
+
+        conflictChoice = userChoice.action;
+        finalRolls = userChoice.mergedRolls;
+        finalRollsArr = userChoice.mergedArr;
     }
+
+    const isUpdate = hasConflict;
+    const prevRollsArr = existingEntry ? normalizeRollNumbers(existingEntry.rollNumbers) : (sheetConflict.exists ? normalizeRollNumbers(sheetConflict.rollNumbers) : []);
+    const diff = computeRollDiff(prevRollsArr.join(', '), finalRolls);
 
     const payload = {
         action: isUpdate ? 'update' : 'create',
         isUpdate: isUpdate,
         stream: currentDept,
         date: cleanDate,
-        rollNumbers: formattedRolls,
+        rollNumbers: finalRolls,
         year: yearVal,
         section: sectionVal,
-        subject: subjectVal,
+        subject: cleanSubject,
         slot: cleanSlot,
         previousRollNumbers: diff.prevRolls.length > 0 ? diff.prevRolls.join(', ') : 'NIL',
         addedRollNumbers: diff.addedRolls.length > 0 ? diff.addedRolls.join(', ') : 'NIL',
         deletedRollNumbers: diff.deletedRolls.length > 0 ? diff.deletedRolls.join(', ') : 'NIL',
         retainedRollNumbers: diff.retainedRolls.length > 0 ? diff.retainedRolls.join(', ') : 'NIL',
         changesSummary: isUpdate 
-            ? 'Added: ' + (diff.addedRolls.join(', ') || 'None') + ' | Removed: ' + (diff.deletedRolls.join(', ') || 'None')
+            ? (conflictChoice === 'merge' ? '🔀 Merged absentees from both entries' : '✏️ Replaced previous entry')
             : 'Initial Submission'
     };
 
@@ -2171,12 +2228,30 @@ function extractSubjNameAndSection(subj) {
     return { name: subj.name || subj.subject || '', section: subj.section || 'ALL' };
 }
 
+function normalizeSectionCode(sec) {
+    if (!sec) return 'ALL';
+    const s = String(sec).trim().toUpperCase();
+    if (s === 'ALL' || s === 'COMBINED' || s === 'ANY') return 'ALL';
+    if (s === 'A_B' || s === 'A&B' || s === 'A AND B') return 'A_B';
+    if (s === 'C (AIML)' || s === 'C AIML' || s === 'AIML' || s === 'C') return 'C';
+    if (s === 'C (TP)' || s === 'C TP' || s === 'TP') return 'C_TP';
+    if (s === 'C (AF)' || s === 'C AF' || s === 'AF' || s === 'D') return 'C_AF';
+    return s;
+}
+
 function isCustomSubjectMatchingSection(subjObj, targetSec) {
-    const sSec = subjObj.section || 'ALL';
-    if (targetSec === 'ALL' || sSec === 'ALL' || sSec === 'ANY') return true;
-    if (sSec === targetSec) return true;
-    if (sSec === 'A_B' && (targetSec === 'A' || targetSec === 'B')) return true;
-    if (targetSec === 'C' && (sSec === 'C (AIML)' || sSec === 'C (TP)' || sSec === 'C (AF)')) return true;
+    const sSecNorm = normalizeSectionCode(subjObj.section || 'ALL');
+    const targetNorm = normalizeSectionCode(targetSec || 'ALL');
+
+    if (targetNorm === 'ALL' || sSecNorm === 'ALL') return true;
+    if (sSecNorm === targetNorm) return true;
+    if (sSecNorm === 'A_B' && (targetNorm === 'A' || targetNorm === 'B')) return true;
+    if (targetNorm === 'A_B' && (sSecNorm === 'A' || sSecNorm === 'B')) return true;
+
+    // For Section C variations (AIML / TP / AF)
+    if (targetNorm === 'C' && (sSecNorm === 'C' || sSecNorm === 'C_TP' || sSecNorm === 'C_AF')) return true;
+    if (sSecNorm === 'C' && (targetNorm === 'C' || targetNorm === 'C_TP' || targetNorm === 'C_AF')) return true;
+
     return false;
 }
 
@@ -2186,18 +2261,27 @@ function getSubjectsForActiveYear(deptCode, yearStr, sectionStr) {
 
     let baseSubjects = [];
     const sec = sectionStr || 'ALL';
+    const targetNorm = normalizeSectionCode(sec);
 
     if (config.subjectsByYearAndSection && config.subjectsByYearAndSection[yearStr]) {
         const secMap = config.subjectsByYearAndSection[yearStr];
-        let targetKey = sec;
-        if (!secMap[targetKey]) {
-            if (targetKey === 'C' || targetKey === 'C TP' || targetKey.indexOf('TP') !== -1) targetKey = 'C (TP)';
-            else if (targetKey === 'D' || targetKey === 'C AF' || targetKey.indexOf('AF') !== -1) targetKey = 'C (AF)';
+        
+        if (sec !== 'ALL') {
+            let foundKey = null;
+            for (let k in secMap) {
+                if (normalizeSectionCode(k) === targetNorm) {
+                    foundKey = k;
+                    break;
+                }
+            }
+            if (foundKey && secMap[foundKey]) {
+                baseSubjects = [...secMap[foundKey]];
+            } else if (secMap[sec]) {
+                baseSubjects = [...secMap[sec]];
+            }
         }
-        if (sec !== 'ALL' && secMap[targetKey]) {
-            baseSubjects = [...secMap[targetKey]];
-        } else {
-            // Combine all unique subjects across sections for this year
+        
+        if (baseSubjects.length === 0 && sec === 'ALL') {
             const allSecSubjs = [];
             Object.values(secMap).forEach(arr => {
                 arr.forEach(s => {
@@ -2254,13 +2338,18 @@ function updateSubjectDropdowns(subjects, defaultSubject) {
     subjectSelects.forEach(selectEl => {
         if (!selectEl) return;
         selectEl.innerHTML = '';
-        if (subjects && Array.isArray(subjects)) {
+        if (subjects && Array.isArray(subjects) && subjects.length > 0) {
             subjects.forEach(subj => {
                 const opt = document.createElement('option');
                 opt.value = subj;
                 opt.textContent = subj;
                 selectEl.appendChild(opt);
             });
+        } else {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = '-- Add Subject via (+ Add Subject) button above --';
+            selectEl.appendChild(opt);
         }
         if (defaultSubject) {
             setSubjectValue(selectEl, defaultSubject);
@@ -2695,21 +2784,21 @@ function populateModalSectionOptions() {
     const year = directYearSelect ? directYearSelect.value : 'First Year';
     const isFirstYear = year === 'First Year' || year === '1' || year === '1st Year';
 
-    let options = [{ val: 'ALL', label: 'All Sections (General & Electives)' }];
+    let options = [{ val: 'ALL', label: '🌐 All Sections (Shared / Languages)' }];
 
     if (dept === 'BCA') {
         if (isFirstYear) {
-            options.push({ val: 'A_B', label: 'Section A & B (General BCA)' });
-            options.push({ val: 'C (AIML)', label: 'Section C (AIML)' });
+            options.push({ val: 'A_B', label: '🎯 Section A & B (General BCA)' });
+            options.push({ val: 'C (AIML)', label: '🤖 Section C (AIML)' });
         } else {
-            options.push({ val: 'A', label: 'Section A' });
-            options.push({ val: 'B', label: 'Section B' });
-            options.push({ val: 'C', label: 'Section C' });
+            options.push({ val: 'A', label: '📌 Section A' });
+            options.push({ val: 'B', label: '📌 Section B' });
+            options.push({ val: 'C', label: '📌 Section C' });
         }
     } else if (dept === 'BCM' || dept === 'BCOM') {
-        options.push({ val: 'A_B', label: 'Section A & B (General B.Com)' });
-        options.push({ val: 'C (TP)', label: 'Section C (TP - Tax Procedure)' });
-        options.push({ val: 'C (AF)', label: 'Section C (AF - Accounting & Finance)' });
+        options.push({ val: 'A_B', label: '🎯 Section A & B (General B.Com)' });
+        options.push({ val: 'C (TP)', label: '🏛️ Section C (TP - Tax Procedure)' });
+        options.push({ val: 'C (AF)', label: '📈 Section C (AF - Accounting & Finance)' });
     }
 
     options.forEach(o => {
@@ -2764,10 +2853,10 @@ function initSubjectManager() {
                 return;
             }
             const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
-            const isElecCheckbox = document.getElementById('newSubjectIsElectiveCheckbox');
-            const isElecChecked = isElecCheckbox ? isElecCheckbox.checked : false;
             const secSelectModal = document.getElementById('newSubjectSectionSelect');
             const targetSection = secSelectModal ? secSelectModal.value : 'ALL';
+            const targetSectionText = secSelectModal && secSelectModal.options[secSelectModal.selectedIndex] ? secSelectModal.options[secSelectModal.selectedIndex].text : 'All Sections';
+            const isElecChecked = targetSection === 'ALL';
             const subjObj = { name: val, section: targetSection };
 
             const store = getCustomSubjectsStore();
@@ -2801,11 +2890,11 @@ function initSubjectManager() {
                 .catch(e => console.warn('Subject add cloud sync error:', e));
 
             newSubjectInput.value = '';
-            if (isElecCheckbox) isElecCheckbox.checked = false;
             renderSubjectChips();
-            const yearSubjects = getSubjectsForActiveYear(currentDept, activeYear);
+            const activeSec = directSectionSelect ? directSectionSelect.value : 'ALL';
+            const yearSubjects = getSubjectsForActiveYear(currentDept, activeYear, activeSec);
             updateSubjectDropdowns(yearSubjects, val);
-            showCustomToast('⚡ Subject Synced to All Devices!', `"${val}" added as ${isElecChecked ? 'Combined Elective' : ('Section (' + targetSection + ') Subject')}.`);
+            showCustomToast('⚡ Subject Added & Synced!', `"${val}" added for ${targetSectionText}.`);
         });
     }
 

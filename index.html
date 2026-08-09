@@ -570,17 +570,11 @@
             <input type="text" id="newSubjectInput" class="form-input" placeholder="Type new subject name (e.g. AI Lab, Tax Procedure)">
             <button type="button" class="btn-primary" id="addSubjectBtn" style="white-space: nowrap; padding: 0 16px;">+ Add</button>
           </div>
-          <div style="display: flex; gap: 12px; align-items: center; margin-top: 8px; flex-wrap: wrap;">
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <label for="newSubjectSectionSelect" style="font-size: 0.82rem; font-weight: 600; color: var(--text-main); margin: 0; white-space: nowrap;">Target Section:</label>
-              <select id="newSubjectSectionSelect" class="form-select" style="padding: 3px 8px; font-size: 0.82rem; height: auto;">
-                <option value="ALL">All Sections (General & Electives)</option>
-              </select>
-            </div>
-            <div style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--text-dim);">
-              <input type="checkbox" id="newSubjectIsElectiveCheckbox" style="width: 15px; height: 15px; accent-color: var(--primary-color); cursor: pointer;">
-              <label for="newSubjectIsElectiveCheckbox" style="cursor: pointer; margin-bottom: 0; font-weight: 500;">⚡ Combined Elective / Language</label>
-            </div>
+          <div style="display: flex; gap: 8px; align-items: center; margin-top: 10px;">
+            <label for="newSubjectSectionSelect" style="font-size: 0.84rem; font-weight: 700; color: var(--text-main); margin: 0; white-space: nowrap;">Which Section is this subject for?</label>
+            <select id="newSubjectSectionSelect" class="form-select" style="padding: 6px 10px; font-size: 0.84rem; flex: 1;">
+              <option value="ALL">🌐 All Sections (Shared / Languages)</option>
+            </select>
           </div>
         </div>
 
