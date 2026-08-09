@@ -2164,10 +2164,27 @@ function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sec
             resolve(true);
         };
         document.body.appendChild(scriptEl);
+    }).finally(() => {
+        try { localStorage.setItem('mgm_subject_sync_trigger', String(Date.now())); } catch (e) {}
+    });
+}
+
+if (typeof window !== 'undefined') {
+    setInterval(() => {
+        fetchCloudSubjects();
+    }, 12000);
+}
+
+if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('storage', (e) => {
+        if (e.key === 'mgm_subject_sync_trigger') {
+            fetchCloudSubjects();
+        }
     });
 }
 
 function fetchCloudSubjects() {
+    if (typeof document === 'undefined' || !document.createElement) return;
     const targetUrl = getWebhookUrl(currentDept);
     const cbName = 'mgmSubjectsCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
     let scriptEl = null;
@@ -2660,6 +2677,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const secVal = directSectionSelect ? directSectionSelect.value : 'A';
             const yearSubjects = getSubjectsForActiveYear(currentDept, yrVal, secVal);
             updateSubjectDropdowns(yearSubjects, config ? config.defaultSubject : null);
+            fetchCloudSubjects();
         });
     }
 
@@ -2672,6 +2690,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const secVal = sectionSelect ? sectionSelect.value : 'A';
             const yearSubjects = getSubjectsForActiveYear(currentDept, yrVal, secVal);
             updateSubjectDropdowns(yearSubjects, config ? config.defaultSubject : null);
+            fetchCloudSubjects();
         });
     }
 
@@ -2682,6 +2701,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const yrVal = directYearSelect ? directYearSelect.value : 'First Year';
             const yearSubjects = getSubjectsForActiveYear(currentDept, yrVal, directSectionSelect.value);
             updateSubjectDropdowns(yearSubjects, config ? config.defaultSubject : null);
+            fetchCloudSubjects();
         });
     }
 
@@ -2691,6 +2711,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const yrVal = yearSelect ? yearSelect.value : 'First Year';
             const yearSubjects = getSubjectsForActiveYear(currentDept, yrVal, sectionSelect.value);
             updateSubjectDropdowns(yearSubjects, config ? config.defaultSubject : null);
+            fetchCloudSubjects();
         });
     }
 
