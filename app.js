@@ -2303,25 +2303,8 @@ function isElectiveOrLanguageSubject(subjectVal, deptCode, yearStr) {
 }
 
 function checkLanguageElectiveAutoCombined(subjectVal, sectionSelectElem, yearSelectElem, forceToast) {
-    if (!subjectVal || !sectionSelectElem) return;
-    const yrVal = yearSelectElem ? yearSelectElem.value : (directYearSelect ? directYearSelect.value : 'First Year');
-    const isElec = isElectiveOrLanguageSubject(subjectVal, currentDept, yrVal);
-
-    if (isElec) {
-        const wasNotAll = sectionSelectElem.value !== 'ALL';
-        sectionSelectElem.value = 'ALL';
-        if (wasNotAll || forceToast) {
-            showCustomToast(
-                'ℹ️ Combined Elective / Language Auto-Selected',
-                `"${subjectVal}" is a combined elective across sections. Automatically set to Combined (ALL).`
-            );
-        }
-    } else {
-        // Non-elective (Core/Lab): Must NOT be set to ALL. Reset to Section A.
-        if (sectionSelectElem.value === 'ALL') {
-            sectionSelectElem.value = 'A';
-        }
-    }
+    // Keep user's selected section completely intact. No auto-resetting of sections.
+    return;
 }
 
 function setSubjectValue(selectEl, subjectVal) {
@@ -2847,6 +2830,53 @@ function initSubjectManager() {
     }
 }
 
+function getSubjectSectionTagInfo(deptCode, yearStr, subjName) {
+    if (!subjName) return formatSectionTagLabel('ALL');
+    const targetName = typeof subjName === 'string' ? subjName.trim() : extractSubjNameAndSection(subjName).name.trim();
+
+    const customStore = getCustomSubjectsStore();
+    const deptCustom = customStore[deptCode] || {};
+    const customList = deptCustom[yearStr] || [];
+    for (let c of customList) {
+        const item = extractSubjNameAndSection(c);
+        if (item.name.trim().toLowerCase() === targetName.toLowerCase()) {
+            return formatSectionTagLabel(item.section);
+        }
+    }
+
+    const cloudStore = getCloudSubjectsStore();
+    const deptCloud = cloudStore[deptCode] || {};
+    const cloudList = deptCloud[yearStr] || [];
+    for (let c of cloudList) {
+        const item = extractSubjNameAndSection(c);
+        if (item.name.trim().toLowerCase() === targetName.toLowerCase()) {
+            return formatSectionTagLabel(item.section);
+        }
+    }
+
+    const config = DEPT_CONFIG[deptCode];
+    if (config && config.subjectsByYearAndSection && config.subjectsByYearAndSection[yearStr]) {
+        const secMap = config.subjectsByYearAndSection[yearStr];
+        for (let sKey in secMap) {
+            if (secMap[sKey].some(s => s.toLowerCase() === targetName.toLowerCase())) {
+                return formatSectionTagLabel(sKey);
+            }
+        }
+    }
+
+    return formatSectionTagLabel('ALL');
+}
+
+function formatSectionTagLabel(secCode) {
+    const sec = secCode || 'ALL';
+    if (sec === 'ALL') return { label: '🌐 All Sections', section: 'ALL', bg: 'rgba(234, 179, 8, 0.2)', color: '#eab308' };
+    if (sec === 'A_B') return { label: '🎯 Sec A & B', section: 'A_B', bg: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' };
+    if (sec === 'C (AIML)' || sec === 'AIML') return { label: '🤖 Sec C (AIML)', section: 'C (AIML)', bg: 'rgba(168, 85, 247, 0.2)', color: '#c084fc' };
+    if (sec === 'C (TP)' || sec === 'TP') return { label: '🏛️ Sec C (TP)', section: 'C (TP)', bg: 'rgba(168, 85, 247, 0.2)', color: '#c084fc' };
+    if (sec === 'C (AF)' || sec === 'AF') return { label: '📈 Sec C (AF)', section: 'C (AF)', bg: 'rgba(168, 85, 247, 0.2)', color: '#c084fc' };
+    return { label: `📌 Sec ${sec}`, section: sec, bg: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa' };
+}
+
 function renderSubjectChips() {
     const chipsContainer = document.getElementById('subjectChipsContainer');
     if (!chipsContainer) return;
@@ -2866,39 +2896,16 @@ function renderSubjectChips() {
         chip.style.alignItems = 'center';
         chip.style.gap = '6px';
 
-        const isElec = isElectiveOrLanguageSubject(subj, currentDept, activeYear);
+        const tagInfo = getSubjectSectionTagInfo(currentDept, activeYear, subj);
 
         const nameSpan = document.createElement('span');
         nameSpan.textContent = subj;
         chip.appendChild(nameSpan);
 
-        const badgeBtn = document.createElement('button');
-        badgeBtn.type = 'button';
-        badgeBtn.style.cssText = 'font-size: 0.68rem; padding: 2px 6px; border-radius: 12px; cursor: pointer; border: 1px solid rgba(255,255,255,0.2); font-weight: 600; line-height: 1; margin: 0;';
-        if (isElec) {
-            badgeBtn.textContent = '⚡ Combined';
-            badgeBtn.style.background = 'rgba(234, 179, 8, 0.2)';
-            badgeBtn.style.color = '#eab308';
-        } else {
-            badgeBtn.textContent = '📌 Section';
-            badgeBtn.style.background = 'rgba(59, 130, 246, 0.2)';
-            badgeBtn.style.color = '#60a5fa';
-        }
-        badgeBtn.title = 'Click to toggle between Combined Elective (across sections) and Section-Specific';
-        badgeBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const nextState = !isElec;
-            const key = (currentDept + '_' + activeYear + '_' + subj.trim()).toLowerCase();
-            const flags = getElectiveFlagsStore();
-            flags[key] = nextState;
-            saveElectiveFlagsStore(flags);
-            sendSubjectToCloud('add_subject', currentDept, activeYear, subj, nextState);
-            renderSubjectChips();
-            const yearSubjects = getSubjectsForActiveYear(currentDept, activeYear);
-            updateSubjectDropdowns(yearSubjects, subj);
-            showCustomToast('⚡ Subject Mode Updated', `"${subj}" set to ${nextState ? 'Combined Elective' : 'Section Subject'}.`);
-        });
-        chip.appendChild(badgeBtn);
+        const badgeSpan = document.createElement('span');
+        badgeSpan.style.cssText = `font-size: 0.68rem; padding: 2px 6px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); font-weight: 600; line-height: 1; margin: 0; background: ${tagInfo.bg}; color: ${tagInfo.color};`;
+        badgeSpan.textContent = tagInfo.label;
+        chip.appendChild(badgeSpan);
 
         const delBtn = document.createElement('button');
         delBtn.type = 'button';
