@@ -937,10 +937,9 @@ function openConfirmationModal(data) {
 function closeConfirmationModal() {
     confirmationModal.classList.remove('active');
     if (deleteBtn) deleteBtn.style.display = 'none';
-            resolve({ exists: false, offline: true });
-        };
-        document.body.appendChild(scriptEl);
-    });
+    if (modalAlertBox) modalAlertBox.style.display = 'none';
+    statusPill.className = 'status-pill';
+    statusText.textContent = 'Tap microphone to speak';
 }
 
 function showSlotConflictDialog(params) {
@@ -1975,14 +1974,14 @@ function initDepartmentManager() {
     });
 
     if (togglePassBtn && deptPasscode) {
-        togglePassBtn.addEventListener('click', () => {
-            if (deptPasscode.type === 'password') {
-                deptPasscode.type = 'text';
-                togglePassBtn.textContent = '🙈';
-            } else {
-                deptPasscode.type = 'password';
-                togglePassBtn.textContent = '👁️';
-            }
+        togglePassBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const showing = deptPasscode.getAttribute('type') === 'text';
+            deptPasscode.setAttribute('type', showing ? 'password' : 'text');
+            togglePassBtn.textContent = showing ? '👁️' : '🙈';
+            togglePassBtn.setAttribute('aria-label', showing ? 'Show passcode' : 'Hide passcode');
+            try { deptPasscode.focus(); } catch (err) {}
         });
     }
 
@@ -2028,6 +2027,25 @@ function initDepartmentManager() {
             let role = null;
             let loginDept = selectedDept;
             let serverAuth = { ok: false, offline: !navigator.onLine };
+
+            const matchLocalPass = () => {
+                if (passcode === adminPass) {
+                    return { role: 'ADMIN', loginDept: selectedDept };
+                }
+                const depts = ['BCA', 'BCM', 'BA', 'BSC'];
+                // Prefer selected dept first, then others
+                const ordered = [selectedDept].concat(depts.filter(d => d !== selectedDept));
+                for (let i = 0; i < ordered.length; i++) {
+                    const d = ordered[i];
+                    if (!DEPT_CONFIG[d]) continue;
+                    const tPass = (passcodes.teacher && passcodes.teacher[d]) || DEPT_CONFIG[d].passcode;
+                    const hPass = (passcodes.hod && passcodes.hod[d]) || ('hod' + d.toLowerCase());
+                    if (passcode === hPass) return { role: 'HOD', loginDept: d };
+                    if (passcode === tPass) return { role: 'TEACHER', loginDept: d };
+                }
+                return null;
+            };
+
             try {
                 if (navigator.onLine) {
                     serverAuth = await authenticateWithServer(selectedDept, passcode);
@@ -2048,34 +2066,34 @@ function initDepartmentManager() {
                     loginDept = serverAuth.stream;
                 }
                 syncLocalPasscodeFromLogin(loginDept, role, passcode);
-            } else if (serverAuth.offline) {
-                // Truly offline — match pass against any local dept (same as server behaviour)
-                if (passcode === adminPass) {
-                    role = 'ADMIN';
-                    loginDept = selectedDept;
-                } else {
-                    const depts = ['BCA', 'BCM', 'BA', 'BSC'];
-                    for (let i = 0; i < depts.length; i++) {
-                        const d = depts[i];
-                        const tPass = (passcodes.teacher && passcodes.teacher[d]) || DEPT_CONFIG[d].passcode;
-                        const hPass = (passcodes.hod && passcodes.hod[d]) || ('hod' + d.toLowerCase());
-                        if (passcode === hPass) { role = 'HOD'; loginDept = d; break; }
-                        if (passcode === tPass) { role = 'TEACHER'; loginDept = d; break; }
-                    }
-                }
-                if (!role && loginAlertBox) {
-                    loginAlertBox.style.display = 'block';
-                    loginAlertBox.textContent = 'Offline and passcode not recognized on this device. Connect to Wi‑Fi and try again.';
-                }
             } else {
-                if (loginAlertBox) {
-                    loginAlertBox.style.display = 'block';
-                    loginAlertBox.textContent = serverAuth.message ||
-                        ('Invalid passcode for ' + config.name + '. Tap the correct department card (BCA / B.Com / BA / B.Sc.), then try again.');
+                // Offline, slow network, OR server still has old passcodes after a local change:
+                // allow login from this device's saved passcodes so faculty are not locked out.
+                const localHit = matchLocalPass();
+                if (localHit) {
+                    role = localHit.role;
+                    loginDept = localHit.loginDept;
+                    if (loginAlertBox && !serverAuth.offline) {
+                        loginAlertBox.style.display = 'block';
+                        loginAlertBox.textContent = serverAuth.slow
+                            ? 'Server slow — logged in with saved passcode on this device.'
+                            : 'Logged in with this device’s saved passcode. If you just changed it, ask Super Admin to sync server passcodes.';
+                    }
+                } else if (serverAuth.offline) {
+                    if (loginAlertBox) {
+                        loginAlertBox.style.display = 'block';
+                        loginAlertBox.textContent = 'Offline and passcode not recognized on this device. Connect to Wi‑Fi and try again.';
+                    }
+                } else {
+                    if (loginAlertBox) {
+                        loginAlertBox.style.display = 'block';
+                        loginAlertBox.textContent = serverAuth.message ||
+                            ('Invalid passcode for ' + config.name + '. Tap the correct department card (BCA / B.Com / BA / B.Sc.), then try again.');
+                    }
+                    setLoginBusy(false, 'Login to Absentee Informer');
+                    deptPasscode.focus();
+                    return;
                 }
-                setLoginBusy(false, 'Login to Absentee Informer');
-                deptPasscode.focus();
-                return;
             }
 
             if (!role) {
@@ -3666,7 +3684,7 @@ function initSubjectManager() {
 
 // Version upgrade check to purge stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
-    const APP_VER = 'v27.11_auth_stream';
+    const APP_VER = 'v27.12_syntax_login';
     if (localStorage.getItem('mgm_app_ver') !== APP_VER) {
         localStorage.removeItem('mgm_cloud_subjects');
         localStorage.setItem('mgm_app_ver', APP_VER);
