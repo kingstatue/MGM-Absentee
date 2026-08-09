@@ -22,12 +22,17 @@ const COMMON_SUBJECTS = [
     'Database Systems for AI', 'Linux & Shell Scripting', 'Android Development', 'PHP', 'Computer Architecture', 'Soft Skills',
 
     // B.Com / BCM Subjects (General, TP, AF)
-    'Financial Accounting', 'Financial Accounting I', 'Corporate Accounting', 'Corporate Accounting II', 
-    'Cost Accounting', 'Advanced Cost Accounting', 'Income Tax', 'Income Tax Law & Practice I', 'Income Tax Law & Practice II', 
-    'Direct Tax Structure', 'Tax Planning & Management', 'Tax Planning', 'Auditing', 'Business Law', 'Company Law', 
-    'GST & Customs', 'Customs Duty & Customs Law', 'Banking & Insurance', 'Financial Management', 'Strategic Financial Management', 
-    'Business Statistics', 'Marketing Management', 'Financial Institutions & Markets', 'Security Analysis & Portfolio Management', 
-    'International Financial Reporting', 'E-Commerce',
+    'Financial Accounting', 'Financial Accounting-I', 'Financial Accounting I', 'Quantitative Techniques- I', 'Quantitative Techniques - I', 
+    'Foundation of Commerce-I', 'Individual and Team Management', 'Income Tax I', 'Income Tax - I', 'Goods and Service Tax I', 
+    'Computerised Accounting-I', 'Financial Management- I', 'Cost Accounting - I', 'Corporate Accounting-I', 'CA - I', 
+    'Cost and Management Accounting - I', 'Human Resource Management', 'Personal Investment Management', 'Income Tax - III', 
+    'Goods and Service Tax - III', 'CA - III', 'Fund Management', 'Financial Management-I', 'Cost and Management Accounting III', 
+    'Business Law', 'Employability Skills', 'PBL', 'Advance Income Tax', 'Costing I', 'Income Tax- III', 'SAPM', 'Computerized Accounting',
+    'Corporate Accounting', 'Corporate Accounting II', 'Cost Accounting', 'Advanced Cost Accounting', 'Income Tax', 
+    'Income Tax Law & Practice I', 'Income Tax Law & Practice II', 'Direct Tax Structure', 'Tax Planning & Management', 
+    'Auditing', 'Company Law', 'GST & Customs', 'Customs Duty & Customs Law', 'Banking & Insurance', 'Financial Management', 
+    'Strategic Financial Management', 'Business Statistics', 'Marketing Management', 'Financial Institutions & Markets', 
+    'Security Analysis & Portfolio Management', 'International Financial Reporting', 'E-Commerce',
 
     // B.A. Subjects
     'History', 'Political Science', 'Sociology', 'Economics', 'Journalism', 

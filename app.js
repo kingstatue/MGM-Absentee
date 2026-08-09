@@ -43,38 +43,38 @@ const DEPT_CONFIG = {
         passcode: 'bcm2026',
         badgeClass: 'bcm',
         hasSections: true,
-        defaultSubject: 'Financial Accounting',
+        defaultSubject: 'Financial Accounting-I',
         subjectsByYearAndSection: {
             'First Year': {
-                'A': ['Financial Accounting', 'Business Organization & Management', 'Principles of Marketing', 'Business Mathematics & Statistics', 'Digital Fluency', 'General English', 'Kannada', 'Hindi'],
-                'B': ['Financial Accounting', 'Business Organization & Management', 'Principles of Marketing', 'Business Mathematics & Statistics', 'Digital Fluency', 'General English', 'Kannada', 'Hindi'],
-                'C (TP)': ['Financial Accounting', 'Income Tax Law & Practice I', 'Direct Tax Structure', 'Business Organization & Management', 'General English', 'Kannada', 'Hindi', 'Digital Fluency'],
-                'C (AF)': ['Financial Accounting I', 'Financial Institutions & Markets', 'Business Mathematics & Statistics', 'General English', 'Kannada', 'Hindi', 'Digital Fluency']
+                'A': ['Financial Accounting-I', 'Quantitative Techniques- I', 'Foundation of Commerce-I', 'Individual and Team Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit', 'Digital Fluency'],
+                'B': ['Financial Accounting-I', 'Quantitative Techniques- I', 'Foundation of Commerce-I', 'Individual and Team Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit', 'Digital Fluency'],
+                'C (TP)': ['Financial Accounting-I', 'Income Tax I', 'Goods and Service Tax I', 'Individual and Team Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit', 'Digital Fluency'],
+                'C (AF)': ['Computerised Accounting-I', 'Financial Management- I', 'Quantitative Techniques - I', 'Cost Accounting - I', 'General English', 'Kannada', 'Hindi', 'Sanskrit', 'Digital Fluency']
             },
             'Second Year': {
-                'A': ['Corporate Accounting', 'Cost Accounting', 'Law & Practice of Income Tax', 'Business Law', 'Banking Law & Operations', 'Entrepreneurship'],
-                'B': ['Corporate Accounting', 'Cost Accounting', 'Law & Practice of Income Tax', 'Business Law', 'Banking Law & Operations', 'Entrepreneurship'],
-                'C (TP)': ['Income Tax Law & Practice II', 'Goods & Services Tax (GST)', 'Customs Duty & Customs Law', 'Corporate Accounting', 'Business Law'],
-                'C (AF)': ['Corporate Accounting II', 'Advanced Cost Accounting', 'Financial Management', 'Banking & Insurance Law', 'Business Law']
+                'A': ['Corporate Accounting-I', 'Income Tax - I', 'Cost and Management Accounting - I', 'Human Resource Management', 'Personal Investment Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit'],
+                'B': ['Corporate Accounting-I', 'Income Tax - I', 'Cost and Management Accounting - I', 'Human Resource Management', 'Personal Investment Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit'],
+                'C (TP)': ['CA - I', 'Income Tax - III', 'Goods and Service Tax - III', 'Human Resource Management', 'Personal Investment Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit'],
+                'C (AF)': ['CA - III', 'Income Tax - I', 'Fund Management', 'Human Resource Management', 'Personal Investment Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit']
             },
             'Third Year': {
-                'A': ['Management Accounting', 'Financial Management', 'Goods & Services Tax (GST)', 'Auditing & Corporate Governance', 'E-Filing & Financial Services'],
-                'B': ['Management Accounting', 'Financial Management', 'Goods & Services Tax (GST)', 'Auditing & Corporate Governance', 'E-Filing & Financial Services'],
-                'C (TP)': ['Tax Planning & Management', 'E-Filing of Tax Returns', 'Assessment Procedure & Auditing', 'Corporate Tax', 'Management Accounting'],
-                'C (AF)': ['Security Analysis & Portfolio Management', 'International Financial Reporting (IFRS)', 'Strategic Financial Management', 'Auditing & Assurance', 'E-Filing']
+                'A': ['Financial Management-I', 'Income Tax I', 'Cost and Management Accounting III', 'Business Law', 'Employability Skills', 'PBL'],
+                'B': ['Financial Management-I', 'Income Tax I', 'Cost and Management Accounting III', 'Business Law', 'Employability Skills', 'PBL'],
+                'C (TP)': ['Financial Management-I', 'Advance Income Tax', 'Costing I', 'Business Law', 'Employability Skills', 'PBL'],
+                'C (AF)': ['Income Tax- III', 'SAPM', 'Computerized Accounting', 'Business Law', 'Employability Skills', 'PBL']
             }
         },
         subjectsByYear: {
-            'First Year': ['Financial Accounting', 'Business Organization & Management', 'Principles of Marketing', 'Business Mathematics & Statistics', 'Digital Fluency', 'General English', 'Kannada', 'Hindi', 'Income Tax Law & Practice I', 'Direct Tax Structure', 'Financial Accounting I', 'Financial Institutions & Markets'],
-            'Second Year': ['Corporate Accounting', 'Cost Accounting', 'Law & Practice of Income Tax', 'Business Law', 'Banking Law & Operations', 'Entrepreneurship', 'Income Tax Law & Practice II', 'Goods & Services Tax (GST)', 'Customs Duty & Customs Law', 'Corporate Accounting II', 'Advanced Cost Accounting', 'Financial Management', 'Banking & Insurance Law'],
-            'Third Year': ['Management Accounting', 'Financial Management', 'Goods & Services Tax (GST)', 'Auditing & Corporate Governance', 'E-Filing & Financial Services', 'Tax Planning & Management', 'E-Filing of Tax Returns', 'Assessment Procedure & Auditing', 'Corporate Tax', 'Security Analysis & Portfolio Management', 'International Financial Reporting (IFRS)', 'Strategic Financial Management', 'Auditing & Assurance']
+            'First Year': ['Financial Accounting-I', 'Quantitative Techniques- I', 'Foundation of Commerce-I', 'Individual and Team Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit', 'Digital Fluency', 'Income Tax I', 'Goods and Service Tax I', 'Computerised Accounting-I', 'Financial Management- I', 'Cost Accounting - I'],
+            'Second Year': ['Corporate Accounting-I', 'Income Tax - I', 'Cost and Management Accounting - I', 'Human Resource Management', 'Personal Investment Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit', 'CA - I', 'Income Tax - III', 'Goods and Service Tax - III', 'CA - III', 'Fund Management'],
+            'Third Year': ['Financial Management-I', 'Income Tax I', 'Cost and Management Accounting III', 'Business Law', 'Employability Skills', 'PBL', 'Advance Income Tax', 'Costing I', 'Income Tax- III', 'SAPM', 'Computerized Accounting']
         },
-        subjects: ['Financial Accounting', 'Business Organization & Management', 'Principles of Marketing', 'Business Mathematics & Statistics', 'Digital Fluency', 'Corporate Accounting', 'Cost Accounting', 'Law & Practice of Income Tax', 'Business Law', 'Banking Law & Operations', 'Management Accounting', 'Financial Management', 'Goods & Services Tax (GST)', 'Auditing & Corporate Governance', 'E-Filing & Financial Services', 'General English', 'Kannada', 'Hindi', 'Income Tax Law & Practice I', 'Direct Tax Structure', 'Income Tax Law & Practice II', 'Customs Duty & Customs Law', 'Corporate Accounting II', 'Advanced Cost Accounting', 'Tax Planning & Management', 'E-Filing of Tax Returns', 'Assessment Procedure & Auditing', 'Corporate Tax', 'Security Analysis & Portfolio Management', 'International Financial Reporting (IFRS)', 'Strategic Financial Management', 'Auditing & Assurance'],
+        subjects: ['Financial Accounting-I', 'Quantitative Techniques- I', 'Foundation of Commerce-I', 'Individual and Team Management', 'General English', 'Kannada', 'Hindi', 'Sanskrit', 'Digital Fluency', 'Income Tax I', 'Goods and Service Tax I', 'Computerised Accounting-I', 'Financial Management- I', 'Cost Accounting - I', 'Corporate Accounting-I', 'Income Tax - I', 'Cost and Management Accounting - I', 'Human Resource Management', 'Personal Investment Management', 'CA - I', 'Income Tax - III', 'Goods and Service Tax - III', 'CA - III', 'Fund Management', 'Financial Management-I', 'Cost and Management Accounting III', 'Business Law', 'Employability Skills', 'PBL', 'Advance Income Tax', 'Costing I', 'Income Tax- III', 'SAPM', 'Computerized Accounting'],
         samplePresets: [
-            { label: '"101 108 Financial Accounting 1st Yr Sec A Slot 1"', phrase: '101 108 Financial Accounting First Year Sec A Slot 1' },
-            { label: '"Roll 101, 105 1st Yr Sec C Income Tax Slot 2"', phrase: 'Roll numbers 101, 105 1st Year BCOM Sec C Income Tax 10-10.55' },
-            { label: '"Roll 204, 212 2nd Yr Sec D Advanced Cost Accounting 10-10.55"', phrase: 'Roll numbers 204, 212 2nd Year BCOM Sec D Advanced Cost Accounting 10-10.55' },
-            { label: '"3rd Yr Sec A Auditing Slot 2 - Absentees 15, 22"', phrase: 'Third year Section A Auditing slot 2 absentees 15 22' }
+            { label: '"101 108 Financial Accounting 1st Yr Sec A Slot 1"', phrase: '101 108 Financial Accounting-I First Year Sec A Slot 1' },
+            { label: '"Roll 101, 105 1st Yr Sec C TP Income Tax Slot 2"', phrase: 'Roll numbers 101, 105 1st Year BCOM Sec C TP Income Tax I 10-10.55' },
+            { label: '"Roll 204, 212 2nd Yr Sec C AF Fund Management 10-10.55"', phrase: 'Roll numbers 204, 212 2nd Year BCOM Sec C AF Fund Management 10-10.55' },
+            { label: '"3rd Yr Sec A Business Law Slot 2 - Absentees 15, 22"', phrase: 'Third year Section A Business Law slot 2 absentees 15 22' }
         ]
     },
     BA: {
@@ -413,17 +413,16 @@ function checkDoubleEntryLive(dateVal, yearVal, sectionVal, subjectVal, slotVal,
             alertBoxElem.innerHTML = `
             <div style="display: flex; gap: 10px; align-items: flex-start;">
                 <div style="flex: 1; font-size: 0.85rem; line-height: 1.4;">
-                    <strong style="color: var(--primary-light, #818cf8);">Updating existing entry</strong><br>
-                    Slot ${cleanSlot} (${escapeHTML(existingEntry.subject)}) on ${escapeHTML(cleanDate)}<br>
-                    <span style="opacity: 0.9;">Previous Absentees (${diff.prevRolls.length}): <strong>${escapeHTML(prevStr)}</strong></span><br>
+                    <strong style="color: #fbbf24;">ℹ️ Entry already exists for ${escapeHTML(existingEntry.subject)} (Slot ${cleanSlot})</strong><br>
+                    Previous Teacher Entry: <strong>${escapeHTML(prevStr)}</strong><br>
+                    <span style="opacity: 0.9;">Submitting will merge absentees from both teachers so no data is lost.</span>
                     <div style="margin-top: 6px; padding: 6px 8px; background: rgba(0,0,0,0.25); border-radius: 6px; display: flex; flex-wrap: wrap; gap: 8px;">
-                        <span style="color: #34d399;"><strong>+ Added (${diff.addedRolls.length}):</strong> ${escapeHTML(addedStr)}</span>
-                        <span style="color: #f87171;"><strong>- Removed (${diff.deletedRolls.length}):</strong> ${escapeHTML(deletedStr)}</span>
-                        <span style="color: #a7f3d0;"><strong>Unchanged (${diff.retainedRolls.length}):</strong> ${escapeHTML(retainedStr)}</span>
+                        <span style="color: #34d399;"><strong>+ Added:</strong> ${escapeHTML(addedStr)}</span>
+                        <span style="color: #a7f3d0;"><strong>Unchanged:</strong> ${escapeHTML(retainedStr)}</span>
                     </div>
                 </div>
             </div>`;
-            if (submitBtnTextElem) submitBtnTextElem.textContent = 'Update Attendance Entry';
+            if (submitBtnTextElem) submitBtnTextElem.textContent = 'Merge & Save Attendance';
         }
         return existingEntry;
     }
@@ -3246,42 +3245,12 @@ function buildGroupedWhatsAppButtons(stream, dateVal, entries) {
                 </button>`;
             }
         } else if (stream === 'BCM' || stream === 'BCOM') {
-            const abEntries = yrEntries.filter(e => {
-                const sec = String(e.section || '').toUpperCase();
-                return sec === 'A' || sec === 'B' || sec === 'ALL' || sec === 'COMBINED';
-            });
-            const tpEntries = yrEntries.filter(e => {
-                const sec = String(e.section || '').toUpperCase();
-                return sec.includes('TP') || sec === 'C (TP)';
-            });
-            const afEntries = yrEntries.filter(e => {
-                const sec = String(e.section || '').toUpperCase();
-                return sec.includes('AF') || sec === 'C (AF)' || sec === 'D';
-            });
-
-            if (abEntries.length > 0) {
-                const title = `${yrLabel} B.Com - Section A & B Combined`;
-                const msg = buildCombinedGroupWhatsAppMessage(title, dateVal, abEntries);
-                html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
-                    📱 Share ${escapeHTML(title)} Report
-                </button>`;
-            }
-
-            if (tpEntries.length > 0) {
-                const title = `${yrLabel} B.Com - Section C (TP - Tax Procedure)`;
-                const msg = buildCombinedGroupWhatsAppMessage(title, dateVal, tpEntries);
-                html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
-                    📱 Share ${escapeHTML(title)} Report
-                </button>`;
-            }
-
-            if (afEntries.length > 0) {
-                const title = `${yrLabel} B.Com - Section C (AF - Accounting & Finance)`;
-                const msg = buildCombinedGroupWhatsAppMessage(title, dateVal, afEntries);
-                html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
-                    📱 Share ${escapeHTML(title)} Report
-                </button>`;
-            }
+            // B.Com: All sections (A, B, C-TP, C-AF) combined into a single parent group report per year
+            const title = `${yrLabel} B.Com Combined Report (Sec A, B, C-TP, C-AF)`;
+            const msg = buildCombinedGroupWhatsAppMessage(title, dateVal, yrEntries);
+            html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
+                📱 Share ${escapeHTML(title)}
+            </button>`;
         } else {
             // BA / BSC
             const title = `${yrLabel} ${streamCode}`;
