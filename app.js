@@ -2521,9 +2521,7 @@ function fetchCloudSubjects() {
             }
 
             const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
-            const yearSubjects = getSubjectsForActiveYear(currentDept, activeYear);
-            const config = DEPT_CONFIG[currentDept];
-            updateSubjectDropdowns(yearSubjects, config ? config.defaultSubject : null);
+            refreshSubjectDropdowns();
             renderSubjectChips();
         } else if (data && (data.error === 'Unauthorized' || data.result === 'error')) {
             console.warn('[Subjects] Cloud fetch failed:', data.message || data.error);
@@ -2708,27 +2706,66 @@ function normalizeSectionCode(sec) {
     if (!sec) return 'ALL';
     const s = String(sec).trim().toUpperCase();
     if (s === 'ALL' || s === 'COMBINED' || s === 'ANY') return 'ALL';
-    if (s === 'A_B' || s === 'A&B' || s === 'A AND B') return 'A_B';
-    if (s === 'C (AIML)' || s === 'C AIML' || s === 'AIML' || s === 'C') return 'C';
+    if (s === 'A_B' || s === 'A&B' || s === 'A AND B' || s === 'AB') return 'A_B';
+    if (s === 'C (AIML)' || s === 'C AIML' || s === 'AIML') return 'C_AIML';
     if (s === 'C (TP)' || s === 'C TP' || s === 'TP') return 'C_TP';
     if (s === 'C (AF)' || s === 'C AF' || s === 'AF' || s === 'D') return 'C_AF';
+    if (s === 'A' || s === 'B' || s === 'C') return s;
     return s;
 }
 
+/**
+ * Section visibility rules:
+ * - Combined (ALL): ONLY subjects tagged ALL (true electives/languages)
+ * - Sec A / B: A_B shared subjects + that letter + ALL electives — NOT C(AIML)
+ * - Sec C / C(AIML): C AIML subjects + ALL electives — NOT A_B
+ * - A_B (manage tag): A_B (+ A/B) + ALL electives — NOT C
+ */
 function isCustomSubjectMatchingSection(subjObj, targetSec) {
-    const sSecNorm = normalizeSectionCode(subjObj.section || 'ALL');
-    const targetNorm = normalizeSectionCode(targetSec || 'ALL');
+    const sSec = normalizeSectionCode(subjObj.section || 'ALL');
+    const target = normalizeSectionCode(targetSec || 'A');
 
-    if (targetNorm === 'ALL' || sSecNorm === 'ALL') return true;
-    if (sSecNorm === targetNorm) return true;
-    if (sSecNorm === 'A_B' && (targetNorm === 'A' || targetNorm === 'B')) return true;
-    if (targetNorm === 'A_B' && (sSecNorm === 'A' || sSecNorm === 'B')) return true;
+    // Combined attendance: electives/languages only
+    if (target === 'ALL') {
+        return sSec === 'ALL';
+    }
 
-    // For Section C variations (AIML / TP / AF)
-    if (targetNorm === 'C' && (sSecNorm === 'C' || sSecNorm === 'C_TP' || sSecNorm === 'C_AF')) return true;
-    if (sSecNorm === 'C' && (targetNorm === 'C' || targetNorm === 'C_TP' || targetNorm === 'C_AF')) return true;
+    // Elective / language pool is available in every concrete section
+    if (sSec === 'ALL') {
+        return true;
+    }
+
+    if (sSec === target) return true;
+
+    // BCA 1st year UI uses value "C" for AIML; subjects may be stored as "C (AIML)"
+    if ((sSec === 'C_AIML' && target === 'C') || (sSec === 'C' && target === 'C_AIML')) {
+        return true;
+    }
+
+    // General A/B share the A_B subject pool
+    if (sSec === 'A_B' && (target === 'A' || target === 'B')) {
+        return true;
+    }
+
+    // Manage-tag A_B: show A_B and single A/B — never AIML/C streams
+    if (target === 'A_B') {
+        return sSec === 'A_B' || sSec === 'A' || sSec === 'B';
+    }
+
+    // C (TP) / C (AF)
+    if (target === 'C_TP') return sSec === 'C_TP';
+    if (target === 'C_AF') return sSec === 'C_AF';
+    if (target === 'C_AIML') return sSec === 'C_AIML' || sSec === 'C';
 
     return false;
+}
+
+function refreshSubjectDropdowns(preferredSubject) {
+    const yr = directYearSelect ? directYearSelect.value : 'First Year';
+    const sec = directSectionSelect ? directSectionSelect.value : 'A';
+    const list = getSubjectsForActiveYear(currentDept, yr, sec);
+    const config = DEPT_CONFIG[currentDept];
+    updateSubjectDropdowns(list, preferredSubject || (config ? config.defaultSubject : null));
 }
 
 function getSubjectsForActiveYear(deptCode, yearStr, sectionStr) {
@@ -2736,83 +2773,96 @@ function getSubjectsForActiveYear(deptCode, yearStr, sectionStr) {
     if (!config) return [];
 
     let baseSubjects = [];
-    const sec = sectionStr || 'ALL';
+    const sec = sectionStr || 'A';
     const targetNorm = normalizeSectionCode(sec);
 
-    if (config.subjectsByYearAndSection && config.subjectsByYearAndSection[yearStr]) {
+    // Combined: do not dump every section's built-in list — only ALL-tagged customs below
+    if (targetNorm !== 'ALL' && config.subjectsByYearAndSection && config.subjectsByYearAndSection[yearStr]) {
         const secMap = config.subjectsByYearAndSection[yearStr];
-        
-        if (sec !== 'ALL') {
-            let foundKey = null;
-            for (let k in secMap) {
-                if (normalizeSectionCode(k) === targetNorm) {
-                    foundKey = k;
-                    break;
+
+        const pushUnique = (arr) => {
+            (arr || []).forEach(s => {
+                if (!baseSubjects.some(x => x.toLowerCase() === String(s).toLowerCase())) {
+                    baseSubjects.push(s);
                 }
-            }
-            if (foundKey && secMap[foundKey]) {
-                baseSubjects = [...secMap[foundKey]];
-            } else if (secMap[sec]) {
-                baseSubjects = [...secMap[sec]];
-            }
-        }
-        
-        if (baseSubjects.length === 0 && sec === 'ALL') {
-            const allSecSubjs = [];
-            Object.values(secMap).forEach(arr => {
-                arr.forEach(s => {
-                    if (!allSecSubjs.some(existing => existing.toLowerCase() === s.toLowerCase())) {
-                        allSecSubjs.push(s);
-                    }
-                });
             });
-            baseSubjects = allSecSubjs;
+        };
+
+        // Exact key match
+        for (let k in secMap) {
+            if (normalizeSectionCode(k) === targetNorm) pushUnique(secMap[k]);
         }
-    } else if (config.subjectsByYear && config.subjectsByYear[yearStr]) {
+        // A/B also get A_B pool from config if present
+        if (targetNorm === 'A' || targetNorm === 'B') {
+            for (let k in secMap) {
+                if (normalizeSectionCode(k) === 'A_B') pushUnique(secMap[k]);
+            }
+        }
+        // C (attendance) also try C / C (AIML) keys
+        if (targetNorm === 'C' || targetNorm === 'C_AIML') {
+            for (let k in secMap) {
+                const nk = normalizeSectionCode(k);
+                if (nk === 'C' || nk === 'C_AIML') pushUnique(secMap[k]);
+            }
+        }
+    } else if (targetNorm !== 'ALL' && config.subjectsByYear && config.subjectsByYear[yearStr]) {
         baseSubjects = [...config.subjectsByYear[yearStr]];
-    } else {
+    } else if (targetNorm !== 'ALL') {
         baseSubjects = [...(config.subjects || [])];
     }
 
-    // Merge Cloud Synced Subjects (from Google Sheet)
-    const cloudStore = getCloudSubjectsStore();
-    const deptCloud = cloudStore[deptCode] || {};
-    const cloudList = deptCloud[yearStr] || [];
-    cloudList.forEach(subj => {
-        const item = extractSubjNameAndSection(subj);
-        if (isCustomSubjectMatchingSection(item, sec)) {
-            if (!baseSubjects.some(s => s.toLowerCase() === item.name.toLowerCase())) {
-                baseSubjects.push(item.name);
+    const mergeList = (list) => {
+        (list || []).forEach(subj => {
+            const item = extractSubjNameAndSection(subj);
+            if (!item.name) return;
+            if (isCustomSubjectMatchingSection(item, sec)) {
+                if (!baseSubjects.some(s => s.toLowerCase() === item.name.toLowerCase())) {
+                    baseSubjects.push(item.name);
+                }
             }
-        }
-    });
+        });
+    };
 
-    // Merge Device Local Custom Subjects
+    const cloudStore = getCloudSubjectsStore();
+    mergeList((cloudStore[deptCode] || {})[yearStr] || []);
+
     const customStore = getCustomSubjectsStore();
-    const deptCustom = customStore[deptCode] || {};
-    const customList = deptCustom[yearStr] || [];
-    customList.forEach(subj => {
-        const item = extractSubjNameAndSection(subj);
-        if (isCustomSubjectMatchingSection(item, sec)) {
-            if (!baseSubjects.some(s => s.toLowerCase() === item.name.toLowerCase())) {
-                baseSubjects.push(item.name);
-            }
-        }
-    });
+    mergeList((customStore[deptCode] || {})[yearStr] || []);
 
     const deletedStore = getDeletedSubjectsStore();
-    const deptDeleted = deletedStore[deptCode] || {};
-    const deletedList = deptDeleted[yearStr] || [];
-
+    const deletedList = ((deletedStore[deptCode] || {})[yearStr]) || [];
     baseSubjects = baseSubjects.filter(subj => !deletedList.some(d => d.toLowerCase() === subj.toLowerCase()));
 
     return baseSubjects;
+}
+
+/** All subjects for the year (manage chips) — not filtered by attendance section. */
+function getAllSubjectsForYearManage(deptCode, yearStr) {
+    const names = [];
+    const seen = new Set();
+    const add = (subj) => {
+        const item = extractSubjNameAndSection(subj);
+        const key = item.name.trim().toLowerCase();
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        names.push(item.name.trim());
+    };
+
+    const cloudStore = getCloudSubjectsStore();
+    ((cloudStore[deptCode] || {})[yearStr] || []).forEach(add);
+    const customStore = getCustomSubjectsStore();
+    ((customStore[deptCode] || {})[yearStr] || []).forEach(add);
+
+    const deletedStore = getDeletedSubjectsStore();
+    const deletedList = ((deletedStore[deptCode] || {})[yearStr]) || [];
+    return names.filter(n => !deletedList.some(d => d.toLowerCase() === n.toLowerCase()));
 }
 
 function updateSubjectDropdowns(subjects, defaultSubject) {
     const subjectSelects = [directSubjectInput, subjectInput];
     subjectSelects.forEach(selectEl => {
         if (!selectEl) return;
+        const prev = selectEl.value;
         selectEl.innerHTML = '';
         if (subjects && Array.isArray(subjects) && subjects.length > 0) {
             subjects.forEach(subj => {
@@ -2827,8 +2877,10 @@ function updateSubjectDropdowns(subjects, defaultSubject) {
             opt.textContent = '-- Add Subject via (+ Add Subject) button above --';
             selectEl.appendChild(opt);
         }
-        if (defaultSubject) {
+        if (defaultSubject && subjects && subjects.some(s => s.toLowerCase() === String(defaultSubject).toLowerCase())) {
             setSubjectValue(selectEl, defaultSubject);
+        } else if (prev && subjects && subjects.some(s => s.toLowerCase() === String(prev).toLowerCase())) {
+            selectEl.value = prev;
         }
     });
 }
@@ -2836,35 +2888,39 @@ function updateSubjectDropdowns(subjects, defaultSubject) {
 function isElectiveOrLanguageSubject(subjectVal, deptCode, yearStr) {
     if (!subjectVal) return false;
     const cleanSubj = subjectVal.trim().toLowerCase();
-
     const dept = deptCode || currentDept || 'BCA';
     const yr = yearStr || (directYearSelect ? directYearSelect.value : 'First Year');
-    const key = (dept + '_' + yr + '_' + cleanSubj).toLowerCase();
 
+    // Prefer explicit section tag from custom/cloud store
+    const resolveStored = (list) => {
+        for (let i = 0; i < (list || []).length; i++) {
+            const item = extractSubjNameAndSection(list[i]);
+            if (item.name.trim().toLowerCase() === cleanSubj) {
+                return normalizeSectionCode(item.section) === 'ALL';
+            }
+        }
+        return null;
+    };
+    const cloudList = ((getCloudSubjectsStore()[dept] || {})[yr]) || [];
+    const customList = ((getCustomSubjectsStore()[dept] || {})[yr]) || [];
+    const fromCloud = resolveStored(cloudList);
+    if (fromCloud !== null) return fromCloud;
+    const fromCustom = resolveStored(customList);
+    if (fromCustom !== null) return fromCustom;
+
+    const key = (dept + '_' + yr + '_' + cleanSubj).toLowerCase();
     const flags = getElectiveFlagsStore();
-    // 1. Check exact key (Dept + Year + Subject)
     if (flags[key] !== undefined) {
         return Boolean(flags[key]);
     }
 
-    // 2. Check general subject name key across any store entry (exact or fuzzy language root)
-    for (let fKey in flags) {
-        const fSubj = fKey.includes('_') ? fKey.split('_').pop() : fKey;
-        if (fSubj === cleanSubj || fKey.endsWith('_' + cleanSubj) || 
-            (fSubj.startsWith('sansk') && cleanSubj.startsWith('sansk')) || 
-            (fSubj.startsWith('kan') && cleanSubj.startsWith('kan')) || 
-            (fSubj.startsWith('hin') && cleanSubj.startsWith('hin'))) {
-            return Boolean(flags[fKey]);
-        }
-    }
-
-    // Explicit Labs / Practicals are ALWAYS section-specific unless explicitly overridden in flags above
+    // Labs are never auto-elective
     if (/\b(lab|practical)\b/i.test(cleanSubj)) {
         return false;
     }
 
-    // 3. Fallback regex matching languages & electives
-    return /\b(kannada|kanada|kanad|kan|hindi|hindhi|hind|hin|sanskrit|sanskrith|sanskritha|sanskrut|sanskrutha|sanskritam|sansk|sans|devops|wcms|ost|open\s*source|digital\s*fluency|cyber\s*security|e-?filing|journalism|optional\s*english|human\s*rights|elective)\b/i.test(cleanSubj);
+    // Name fallback only for known language/elective titles (not plain "English")
+    return /\b(kannada|kanada|kanad|hindi|hindhi|sanskrit|sanskrith|sanskritha|sanskrut|sanskrutha|sanskritam|devops|wcms|digital\s*fluency|cyber\s*security|e-?filing|optional\s*english|human\s*rights)\b/i.test(cleanSubj);
 }
 
 function checkLanguageElectiveAutoCombined(subjectVal, sectionSelectElem, yearSelectElem, forceToast) {
@@ -3266,22 +3322,33 @@ function populateModalSectionOptions() {
     const year = directYearSelect ? directYearSelect.value : 'First Year';
     const isFirstYear = year === 'First Year' || year === '1' || year === '1st Year';
 
-    let options = [{ val: 'ALL', label: '🌐 All Sections (Shared / Languages)' }];
+    // Concrete sections first — ALL is only for Elective checkbox path
+    let options = [];
+    let defaultVal = 'A';
 
     if (dept === 'BCA') {
         if (isFirstYear) {
-            options.push({ val: 'A_B', label: '🎯 Section A & B (General BCA)' });
-            options.push({ val: 'C (AIML)', label: '🤖 Section C (AIML)' });
+            options.push({ val: 'A_B', label: 'Section A & B (General BCA)' });
+            options.push({ val: 'C (AIML)', label: 'Section C (AIML)' });
+            defaultVal = 'A_B';
         } else {
-            options.push({ val: 'A', label: '📌 Section A' });
-            options.push({ val: 'B', label: '📌 Section B' });
-            options.push({ val: 'C', label: '📌 Section C' });
+            options.push({ val: 'A', label: 'Section A' });
+            options.push({ val: 'B', label: 'Section B' });
+            options.push({ val: 'C', label: 'Section C' });
+            defaultVal = 'A';
         }
     } else if (dept === 'BCM' || dept === 'BCOM') {
-        options.push({ val: 'A_B', label: '🎯 Section A & B (General B.Com)' });
-        options.push({ val: 'C (TP)', label: '🏛️ Section C (TP - Tax Procedure)' });
-        options.push({ val: 'C (AF)', label: '📈 Section C (AF - Accounting & Finance)' });
+        options.push({ val: 'A_B', label: 'Section A & B (General B.Com)' });
+        options.push({ val: 'C (TP)', label: 'Section C (TP - Tax Procedure)' });
+        options.push({ val: 'C (AF)', label: 'Section C (AF - Accounting & Finance)' });
+        defaultVal = 'A_B';
+    } else {
+        options.push({ val: 'A', label: 'Section A' });
+        options.push({ val: 'B', label: 'Section B' });
+        options.push({ val: 'C', label: 'Section C' });
     }
+
+    options.push({ val: 'ALL', label: 'All Sections (only with Elective checked)' });
 
     options.forEach(o => {
         const opt = document.createElement('option');
@@ -3289,6 +3356,7 @@ function populateModalSectionOptions() {
         opt.textContent = o.label;
         secSelect.appendChild(opt);
     });
+    secSelect.value = defaultVal;
 }
 
 function initSubjectManager() {
@@ -3340,12 +3408,19 @@ function initSubjectManager() {
             const electiveCheck = document.getElementById('newSubjectElectiveCheck');
             const oldNameInput = document.getElementById('editingSubjectOldName');
             const oldName = oldNameInput ? oldNameInput.value.trim() : '';
-            let targetSection = secSelectModal ? secSelectModal.value : 'ALL';
-            const isElecChecked = !!(electiveCheck && electiveCheck.checked) || targetSection === 'ALL';
-            if (isElecChecked) targetSection = 'ALL';
+            let targetSection = secSelectModal ? secSelectModal.value : 'A_B';
+            const isElecChecked = !!(electiveCheck && electiveCheck.checked);
+
+            if (isElecChecked) {
+                targetSection = 'ALL';
+            } else if (normalizeSectionCode(targetSection) === 'ALL') {
+                alert('For All Sections subjects, tick "Elective / Language".\nOtherwise choose Section A & B or Section C (AIML).');
+                return;
+            }
+
             const targetSectionText = secSelectModal && secSelectModal.options[secSelectModal.selectedIndex]
                 ? secSelectModal.options[secSelectModal.selectedIndex].text
-                : 'All Sections';
+                : targetSection;
 
             upsertLocalSubject(currentDept, activeYear, val, targetSection, isElecChecked, oldName || null);
 
@@ -3362,9 +3437,7 @@ function initSubjectManager() {
 
             clearSubjectEditForm();
             renderSubjectChips();
-            const activeSec = directSectionSelect ? directSectionSelect.value : 'ALL';
-            const yearSubjects = getSubjectsForActiveYear(currentDept, activeYear, activeSec);
-            updateSubjectDropdowns(yearSubjects, val);
+            refreshSubjectDropdowns(val);
             showCustomToast(
                 oldName ? 'Subject Updated & Synced!' : 'Subject Added & Synced!',
                 '"' + val + '" saved for ' + targetSectionText + (isElecChecked ? ' (Elective)' : '') + '.'
@@ -3376,10 +3449,19 @@ function initSubjectManager() {
     const secSelectEl = document.getElementById('newSubjectSectionSelect');
     if (electiveCheckEl && secSelectEl) {
         electiveCheckEl.addEventListener('change', () => {
-            if (electiveCheckEl.checked) secSelectEl.value = 'ALL';
+            if (electiveCheckEl.checked) {
+                secSelectEl.value = 'ALL';
+            } else if (normalizeSectionCode(secSelectEl.value) === 'ALL') {
+                const hasAB = Array.from(secSelectEl.options).some(o => o.value === 'A_B');
+                secSelectEl.value = hasAB ? 'A_B' : 'A';
+            }
         });
         secSelectEl.addEventListener('change', () => {
-            if (secSelectEl.value === 'ALL') electiveCheckEl.checked = true;
+            if (normalizeSectionCode(secSelectEl.value) === 'ALL') {
+                electiveCheckEl.checked = true;
+            } else {
+                electiveCheckEl.checked = false;
+            }
         });
     }
 
@@ -3426,8 +3508,7 @@ function initSubjectManager() {
 
                 const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
                 renderSubjectChips();
-                const yearSubjects = getSubjectsForActiveYear(dept, activeYear);
-                updateSubjectDropdowns(yearSubjects, null);
+                refreshSubjectDropdowns();
                 showCustomToast('All Subjects Cleared!', 'Cleared for ' + dept + '. Old sheet subjects marked deleted so they stay gone.');
             }
         });
@@ -3494,7 +3575,7 @@ function renderSubjectChips() {
     const chipsContainer = document.getElementById('subjectChipsContainer');
     if (!chipsContainer) return;
     const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
-    const subjects = getSubjectsForActiveYear(currentDept, activeYear);
+    const subjects = getAllSubjectsForYearManage(currentDept, activeYear);
 
     chipsContainer.innerHTML = '';
     if (subjects.length === 0) {
@@ -3553,9 +3634,7 @@ function renderSubjectChips() {
             e.stopPropagation();
             deleteSubject(currentDept, activeYear, subj);
             renderSubjectChips();
-            const yearSubjects = getSubjectsForActiveYear(currentDept, activeYear);
-            const config = DEPT_CONFIG[currentDept];
-            updateSubjectDropdowns(yearSubjects, config ? config.defaultSubject : null);
+            refreshSubjectDropdowns();
         });
         chip.appendChild(delBtn);
 
