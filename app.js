@@ -906,45 +906,53 @@ function showSlotConflictDialog(params) {
         const oldModal = document.getElementById('slotConflictModalDialog');
         if (oldModal && oldModal.parentNode) oldModal.parentNode.removeChild(oldModal);
 
+        document.body.style.overflow = 'hidden';
+
         const dialog = document.createElement('div');
         dialog.id = 'slotConflictModalDialog';
-        dialog.className = 'modal-backdrop active';
-        dialog.style.cssText = 'position: fixed; inset: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);';
+        dialog.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; z-index: 9999999; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.88); padding: 16px; box-sizing: border-box; overflow-y: auto;';
 
         dialog.innerHTML = `
-            <div class="modal-card" style="max-width: 480px; width: 92%; padding: 22px; border-top: 4px solid #f59e0b; background: var(--bg-card, #1e293b); color: var(--text-main, #f8fafc); border-radius: 14px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
-                    <h3 style="margin: 0; font-size: 1.15rem; color: #fbbf24; display: flex; align-items: center; gap: 8px;">
+            <div class="modal-card" style="max-width: 480px; width: 100%; padding: 20px; border: 2px solid #eab308; background: #0f172a; color: #ffffff; border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9); box-sizing: border-box;">
+                
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #334155;">
+                    <h3 style="margin: 0; font-size: 1.15rem; color: #f59e0b; font-weight: 800; display: flex; align-items: center; gap: 8px;">
                         ⚠️ Slot Entry Conflict (Slot ${escapeHTML(String(params.slot))})
                     </h3>
                 </div>
-                <div style="font-size: 0.88rem; line-height: 1.5; margin-bottom: 16px;">
-                    <p style="margin: 0 0 10px 0; color: var(--text-dim, #94a3b8);">An entry already exists for <strong>Slot ${escapeHTML(String(params.slot))}</strong> on <strong>${escapeHTML(params.date)}</strong> (${escapeHTML(params.year)} Sec ${escapeHTML(params.section)}).</p>
-                    <div style="background: rgba(255,255,255,0.06); padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; border-left: 3px solid #f87171;">
-                        <div style="font-weight: 600; color: #f87171;">Previous Teacher / Slot Entry:</div>
-                        <div style="font-size: 0.85rem;">Subject: <strong>${escapeHTML(params.existingSubj || params.subject)}</strong></div>
-                        <div style="font-size: 0.85rem;">Absentees: <strong>${escapeHTML(params.existingRolls || 'NIL')}</strong></div>
+
+                <div style="font-size: 0.88rem; line-height: 1.5; margin-bottom: 14px; color: #cbd5e1;">
+                    An entry already exists for <strong>Slot ${escapeHTML(String(params.slot))}</strong> on <strong>${escapeHTML(params.date)}</strong> (${escapeHTML(params.year)} Sec ${escapeHTML(params.section)}).
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px;">
+                    <div style="background: #1e293b; padding: 12px; border-radius: 10px; border-left: 4px solid #ef4444;">
+                        <div style="font-weight: 700; color: #fca5a5; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.5px;">Previous Teacher / Slot Entry:</div>
+                        <div style="font-size: 0.9rem; color: #ffffff; margin-top: 2px;">Subject: <strong>${escapeHTML(params.existingSubj || params.subject)}</strong></div>
+                        <div style="font-size: 0.9rem; color: #f87171; font-weight: 700; margin-top: 2px;">Absentees: ${escapeHTML(params.existingRolls || 'NIL')}</div>
                     </div>
-                    <div style="background: rgba(255,255,255,0.06); padding: 10px 12px; border-radius: 8px; border-left: 3px solid #60a5fa;">
-                        <div style="font-weight: 600; color: #60a5fa;">Your Current Entry:</div>
-                        <div style="font-size: 0.85rem;">Subject: <strong>${escapeHTML(params.subject)}</strong></div>
-                        <div style="font-size: 0.85rem;">Absentees: <strong>${escapeHTML(params.newRolls || 'NIL')}</strong></div>
+
+                    <div style="background: #1e293b; padding: 12px; border-radius: 10px; border-left: 4px solid #3b82f6;">
+                        <div style="font-weight: 700; color: #93c5fd; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.5px;">Your Current Entry:</div>
+                        <div style="font-size: 0.9rem; color: #ffffff; margin-top: 2px;">Subject: <strong>${escapeHTML(params.subject)}</strong></div>
+                        <div style="font-size: 0.9rem; color: #60a5fa; font-weight: 700; margin-top: 2px;">Absentees: ${escapeHTML(params.newRolls || 'NIL')}</div>
                     </div>
                 </div>
 
-                <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); padding: 10px 12px; border-radius: 8px; margin-bottom: 18px; font-size: 0.85rem; color: #34d399;">
-                    <strong>🔀 Combined Result if Merged:</strong><br>
-                    <span style="font-size: 0.95rem; font-weight: 700; color: #6ee7b7;">${escapeHTML(mergedStr)}</span> (${mergedRollsArr.length} total absentees)
+                <div style="background: #064e3b; border: 1px solid #10b981; padding: 12px; border-radius: 10px; margin-bottom: 16px; color: #ecfdf5;">
+                    <div style="font-weight: 800; color: #34d399; font-size: 0.85rem; text-transform: uppercase;">🔀 Combined Result if Merged:</div>
+                    <div style="font-size: 1rem; font-weight: 800; color: #6ee7b7; margin-top: 4px; word-break: break-word;">${escapeHTML(mergedStr)}</div>
+                    <div style="font-size: 0.78rem; color: #a7f3d0; margin-top: 2px;">Total absentees combined: ${mergedRollsArr.length} students</div>
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 10px;">
-                    <button type="button" id="conflictMergeBtn" class="btn-primary" style="background: #10b981; border: none; font-weight: 700; padding: 12px; font-size: 0.9rem; border-radius: 8px; cursor: pointer; color: #fff;">
-                        🔀 Merge Both Entries (${mergedRollsArr.length} Absentees)
+                    <button type="button" id="conflictMergeBtn" style="background: #059669; color: #ffffff; border: none; font-weight: 800; padding: 14px; font-size: 0.95rem; border-radius: 10px; cursor: pointer; width: 100%; min-height: 48px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); touch-action: manipulation;">
+                        🔀 MERGE BOTH ENTRIES (${mergedRollsArr.length} Absentees)
                     </button>
-                    <button type="button" id="conflictReplaceBtn" class="btn-secondary" style="border: 1px solid rgba(239, 68, 68, 0.5); color: #f87171; padding: 10px; font-size: 0.85rem; border-radius: 8px; cursor: pointer; background: transparent;">
+                    <button type="button" id="conflictReplaceBtn" style="background: #991b1b; color: #ffffff; border: none; font-weight: 700; padding: 12px; font-size: 0.88rem; border-radius: 10px; cursor: pointer; width: 100%; min-height: 44px; touch-action: manipulation;">
                         ✏️ Overwrite / Replace with My List Only
                     </button>
-                    <button type="button" id="conflictCancelBtn" class="btn-secondary" style="opacity: 0.7; padding: 8px; font-size: 0.82rem; border-radius: 8px; cursor: pointer; background: transparent; color: var(--text-dim, #94a3b8);">
+                    <button type="button" id="conflictCancelBtn" style="background: #334155; color: #cbd5e1; border: none; font-weight: 600; padding: 10px; font-size: 0.84rem; border-radius: 10px; cursor: pointer; width: 100%; min-height: 40px; touch-action: manipulation;">
                         ❌ Cancel Submission
                     </button>
                 </div>
@@ -953,7 +961,13 @@ function showSlotConflictDialog(params) {
 
         document.body.appendChild(dialog);
 
+        const card = dialog.querySelector('.modal-card');
+        if (card && card.scrollIntoView) {
+            card.scrollIntoView({ block: 'center', behavior: 'instant' });
+        }
+
         const cleanup = (choice) => {
+            document.body.style.overflow = '';
             if (dialog && dialog.parentNode) {
                 dialog.parentNode.removeChild(dialog);
             }
@@ -2652,7 +2666,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Live Double Entry warning listeners & Auto-Combined for languages/electives
-    [dateInput, yearSelect, sectionSelect, subjectInput, slotSelect].forEach(elem => {
+    [dateInput, yearSelect, sectionSelect, subjectInput, slotSelect, rollNumbersInput].forEach(elem => {
         if (elem) {
             elem.addEventListener('change', () => {
                 if (elem === subjectInput || elem === sectionSelect) checkLanguageElectiveAutoCombined(subjectInput.value, sectionSelect, yearSelect);
@@ -2665,7 +2679,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    [directDateInput, directYearSelect, directSectionSelect, directSubjectInput, directSlotSelect].forEach(elem => {
+    [directDateInput, directYearSelect, directSectionSelect, directSubjectInput, directSlotSelect, directRollInput].forEach(elem => {
         if (elem) {
             elem.addEventListener('change', () => {
                 if (elem === directSubjectInput || elem === directSectionSelect) checkLanguageElectiveAutoCombined(directSubjectInput.value, directSectionSelect, directYearSelect);
@@ -2952,7 +2966,7 @@ function initSubjectManager() {
 
     if (resetSubjectsBtn) {
         resetSubjectsBtn.addEventListener('click', () => {
-            if (confirm('Reset subjects to default Mangalore University syllabus for ' + currentDept + '?')) {
+            if (confirm('Clear all stored subjects for ' + currentDept + '? This will let you add fresh subjects.')) {
                 const customStore = getCustomSubjectsStore();
                 delete customStore[currentDept];
                 saveCustomSubjectsStore(customStore);
@@ -2961,15 +2975,28 @@ function initSubjectManager() {
                 delete deletedStore[currentDept];
                 saveDeletedSubjectsStore(deletedStore);
 
+                const cloudStore = getCloudSubjectsStore();
+                delete cloudStore[currentDept];
+                saveCloudSubjectsStore(cloudStore);
+
                 const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
                 renderSubjectChips();
                 const yearSubjects = getSubjectsForActiveYear(currentDept, activeYear);
-                const config = DEPT_CONFIG[currentDept];
-                updateSubjectDropdowns(yearSubjects, config ? config.defaultSubject : null);
+                updateSubjectDropdowns(yearSubjects, null);
+                showCustomToast('🧹 Subjects Cleared!', 'All cached subjects cleared for ' + currentDept + '.');
             }
         });
     }
 }
+
+// Version upgrade check to purge stale cached cloud subjects on GitHub Pages update
+(function checkAppCacheVersion() {
+    const APP_VER = 'v26.8_clean_subj';
+    if (localStorage.getItem('mgm_app_ver') !== APP_VER) {
+        localStorage.removeItem('mgm_cloud_subjects');
+        localStorage.setItem('mgm_app_ver', APP_VER);
+    }
+})();
 
 function getSubjectSectionTagInfo(deptCode, yearStr, subjName) {
     if (!subjName) return formatSectionTagLabel('ALL');
