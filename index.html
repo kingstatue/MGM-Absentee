@@ -573,9 +573,9 @@
             <input type="text" id="newSubjectInput" class="form-input" placeholder="Type new subject name (e.g. AI Lab, Tax Procedure)">
             <button type="button" class="btn-primary" id="addSubjectBtn" style="white-space: nowrap; padding: 0 16px;">+ Add</button>
           </div>
-          <div style="display: flex; gap: 8px; align-items: center; margin-top: 10px;">
-            <label for="newSubjectSectionSelect" style="font-size: 0.84rem; font-weight: 700; color: var(--text-main); margin: 0; white-space: nowrap;">Which Section is this subject for?</label>
-            <select id="newSubjectSectionSelect" class="form-select" style="padding: 6px 10px; font-size: 0.84rem; flex: 1;">
+          <div style="margin-top: 12px;">
+            <label for="newSubjectSectionSelect" style="font-size: 0.85rem; font-weight: 700; color: var(--text-main); display: block; margin-bottom: 6px;">Which Section is this subject for?</label>
+            <select id="newSubjectSectionSelect" class="form-select" style="width: 100%; padding: 10px 12px; font-size: 0.9rem; border-radius: var(--radius-md, 8px);">
               <option value="ALL">🌐 All Sections (Shared / Languages)</option>
             </select>
           </div>
@@ -589,7 +589,7 @@
         </div>
 
         <div class="modal-buttons" style="margin-top: 14px;">
-          <button type="button" class="btn-secondary" id="resetSubjectsBtn">Reset Defaults</button>
+          <button type="button" class="btn-secondary" id="resetSubjectsBtn" style="border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171;">🧹 Clear All Stored Subjects</button>
           <button type="button" class="btn-primary" id="doneSubjectModalBtn">Done</button>
         </div>
       </div>

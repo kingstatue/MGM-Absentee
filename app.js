@@ -2183,24 +2183,36 @@ function fetchCloudSubjects() {
         if (scriptEl && scriptEl.parentNode) scriptEl.parentNode.removeChild(scriptEl);
 
         if (data && data.result === 'success') {
-            if (data.customSubjects) {
-                saveCloudSubjectsStore(data.customSubjects);
-            }
+            const deletedStore = getDeletedSubjectsStore();
 
             if (data.deletedSubjects) {
-                saveDeletedSubjectsStore(data.deletedSubjects);
+                // Merge cloud deletedSubjects with local deletedStore
+                for (let dDept in data.deletedSubjects) {
+                    if (!deletedStore[dDept]) deletedStore[dDept] = {};
+                    for (let dYr in data.deletedSubjects[dDept]) {
+                        if (!deletedStore[dDept][dYr]) deletedStore[dDept][dYr] = [];
+                        const cloudDelArr = data.deletedSubjects[dDept][dYr] || [];
+                        cloudDelArr.forEach(s => {
+                            if (!deletedStore[dDept][dYr].some(x => x.toLowerCase() === s.toLowerCase())) {
+                                deletedStore[dDept][dYr].push(s);
+                            }
+                        });
+                    }
+                }
+                saveDeletedSubjectsStore(deletedStore);
 
-                // Purge cloud-deleted subjects from local device customStore & cloudStore
+                // Purge cloud-deleted subjects from local device customStore
                 const customStore = getCustomSubjectsStore();
                 let customChanged = false;
-                for (let dDept in data.deletedSubjects) {
-                    for (let dYr in data.deletedSubjects[dDept]) {
-                        const delList = data.deletedSubjects[dDept][dYr] || [];
+                for (let dDept in deletedStore) {
+                    for (let dYr in deletedStore[dDept]) {
+                        const delList = deletedStore[dDept][dYr] || [];
                         if (customStore[dDept] && customStore[dDept][dYr]) {
                             const beforeLen = customStore[dDept][dYr].length;
-                            customStore[dDept][dYr] = customStore[dDept][dYr].filter(s =>
-                                !delList.some(d => d.toLowerCase() === s.toLowerCase())
-                            );
+                            customStore[dDept][dYr] = customStore[dDept][dYr].filter(s => {
+                                const item = extractSubjNameAndSection(s);
+                                return !delList.some(d => d.toLowerCase() === item.name.toLowerCase());
+                            });
                             if (customStore[dDept][dYr].length !== beforeLen) customChanged = true;
                         }
                     }
@@ -2208,6 +2220,23 @@ function fetchCloudSubjects() {
                 if (customChanged) {
                     saveCustomSubjectsStore(customStore);
                 }
+            }
+
+            if (data.customSubjects) {
+                // Filter out ANY deleted subjects BEFORE saving to cloudSubjectsStore so page refreshes never resurrect deleted subjects!
+                const cleanedCloudSubjects = {};
+                for (let deptKey in data.customSubjects) {
+                    cleanedCloudSubjects[deptKey] = {};
+                    for (let yrKey in data.customSubjects[deptKey]) {
+                        const subjs = data.customSubjects[deptKey][yrKey] || [];
+                        const delList = (deletedStore[deptKey] && deletedStore[deptKey][yrKey]) ? deletedStore[deptKey][yrKey] : [];
+                        cleanedCloudSubjects[deptKey][yrKey] = subjs.filter(s => {
+                            const item = extractSubjNameAndSection(s);
+                            return !delList.some(d => d.toLowerCase() === item.name.toLowerCase());
+                        });
+                    }
+                }
+                saveCloudSubjectsStore(cleanedCloudSubjects);
             }
 
             if (data.electiveSubjects) {
@@ -2979,11 +3008,13 @@ function initSubjectManager() {
                 delete cloudStore[currentDept];
                 saveCloudSubjectsStore(cloudStore);
 
+                sendSubjectToCloud('clear_subjects', currentDept, 'ALL', '').catch(e => console.warn('Cloud subject clear error:', e));
+
                 const activeYear = directYearSelect ? directYearSelect.value : 'First Year';
                 renderSubjectChips();
                 const yearSubjects = getSubjectsForActiveYear(currentDept, activeYear);
                 updateSubjectDropdowns(yearSubjects, null);
-                showCustomToast('🧹 Subjects Cleared!', 'All cached subjects cleared for ' + currentDept + '.');
+                showCustomToast('🧹 All Subjects Cleared!', 'All custom and cloud subjects cleared for ' + currentDept + '.');
             }
         });
     }
