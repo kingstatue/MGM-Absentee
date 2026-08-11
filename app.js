@@ -1133,21 +1133,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         const targetUrl = getWebhookUrl(currentDept);
         await postWithRetry(targetUrl, withAuth(payload), 2);
 
-        const verify = await verifyAttendanceOnSheet(payload);
-        if (verify.verified) {
-            saveToLocalHistory({
-                ...payload,
-                offline: false,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            });
-            closeConfirmationModal();
-            resetAllInputs();
-            showSuccessToast(payload);
-            setTimeout(fetchTodayServerHistory, 800);
-            return { status: 'ok' };
-        }
-
-        // Opaque POST may have failed — keep as pending sync
+        // Always show in Today's list immediately (do not wait for sheet verify)
         saveToLocalHistory({
             ...payload,
             offline: true,
@@ -1155,10 +1141,26 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         });
         closeConfirmationModal();
         resetAllInputs();
+
+        // Give Apps Script a moment to finish writing before verify
+        await new Promise(r => setTimeout(r, 1200));
+        const verify = await verifyAttendanceOnSheet(payload);
+        if (verify.verified) {
+            saveToLocalHistory({
+                ...payload,
+                offline: false,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+            showSuccessToast(payload);
+            setTimeout(fetchTodayServerHistory, 600);
+            return { status: 'ok' };
+        }
+
         showCustomToast(
-            verify.offline ? 'Saved locally (could not verify sheet)' : 'Saved locally — sheet not updated yet',
-            'Will auto-sync when online. Tap Sync in Today\'s History if needed.'
+            verify.offline ? 'Saved — verifying sheet…' : 'Saved locally — will confirm sheet sync',
+            'Entry is in Today\'s list. Tap Sync if the sheet badge stays pending.'
         );
+        setTimeout(fetchTodayServerHistory, 1500);
         return { status: 'offline' };
 
     } catch (error) {
@@ -1461,9 +1463,42 @@ const SLOT_TIME_LABELS = {
     8: '4-4.55'
 };
 
+function normalizeHistoryDate(val) {
+    if (!val && val !== 0) return '';
+    if (val instanceof Date && !isNaN(val.getTime())) {
+        const y = val.getFullYear();
+        const m = String(val.getMonth() + 1).padStart(2, '0');
+        const d = String(val.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + d;
+    }
+    const s = String(val).trim();
+    if (!s) return '';
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+    // DD/MM/YYYY or DD-MM-YYYY
+    const parts = s.split(/[\sT]+/)[0].split(/[\/\.-]/);
+    if (parts.length === 3) {
+        const p0 = parseInt(parts[0], 10);
+        const p1 = parseInt(parts[1], 10);
+        const p2 = parseInt(parts[2], 10);
+        if (p2 > 1000) {
+            const day = (p1 > 12 && p0 <= 12) ? p1 : p0;
+            const month = (p1 > 12 && p0 <= 12) ? p0 : p1;
+            return p2 + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+        }
+        if (p0 > 1000) {
+            return p0 + '-' + String(p1).padStart(2, '0') + '-' + String(p2).padStart(2, '0');
+        }
+    }
+    const parsed = new Date(s);
+    if (!isNaN(parsed.getTime())) {
+        return normalizeHistoryDate(parsed);
+    }
+    return s;
+}
+
 function entryKey(item) {
     return [
-        item.date || '',
+        normalizeHistoryDate(item.date) || '',
         item.year || '',
         item.section || '',
         (item.subject || '').trim().toLowerCase(),
@@ -1492,12 +1527,13 @@ function compactAttendanceHistory(history) {
     const MAX_SYNCED_TODAY = 60;
 
     return history.filter(item => {
+        const itemDate = normalizeHistoryDate(item.date);
         if (item.offline === true) {
             if (offlineKept >= MAX_OFFLINE) return false;
             offlineKept++;
             return true;
         }
-        if (item.date === today) {
+        if (itemDate === today) {
             if (syncedTodayKept >= MAX_SYNCED_TODAY) return false;
             syncedTodayKept++;
             return true;
@@ -1516,9 +1552,9 @@ function getTodayEntries() {
     const today = getTodayISOString();
     const deptItems = readAllHistory().filter(item => (item.stream || 'BCA') === currentDept);
     // Show today's rows + any still-pending offline rows from other dates
-    const pendingOtherDays = deptItems.filter(item => item.offline === true && item.date !== today);
-    const todayItems = deptItems.filter(item => item.date === today);
-    return [...pendingOtherDays, ...todayItems].slice(0, 30);
+    const pendingOtherDays = deptItems.filter(item => item.offline === true && normalizeHistoryDate(item.date) !== today);
+    const todayItems = deptItems.filter(item => normalizeHistoryDate(item.date) === today);
+    return [...pendingOtherDays, ...todayItems].slice(0, 60);
 }
 
 function updateTodayBadge() {
@@ -1552,7 +1588,7 @@ function updateTodayBadge() {
 // Local log + durable offline queue (offline rows survive past midnight)
 function saveToLocalHistory(entry) {
     const today = getTodayISOString();
-    const entryDate = entry.date || today;
+    const entryDate = normalizeHistoryDate(entry.date) || today;
     let history = readAllHistory();
 
     const normalized = {
@@ -1669,55 +1705,59 @@ function fetchTodayServerHistory() {
     const timeout = setTimeout(() => {
         isFetchingServerHistory = false;
         try { delete window[cbName]; } catch (e) {}
-    }, 6000);
+    }, 8000);
 
     window[cbName] = function (data) {
         clearTimeout(timeout);
         isFetchingServerHistory = false;
         try { delete window[cbName]; } catch (e) {}
 
-        if (data && data.result === 'success' && Array.isArray(data.entries)) {
-            const serverEntries = data.entries.map(e => ({
-                stream: stream,
-                date: dateVal,
-                year: e.year || 'First Year',
-                section: e.section || 'A',
-                subject: e.subject || 'Subject',
-                slot: parseInt(e.slot, 10) || 1,
-                rollNumbers: e.rollNumbers || 'NIL',
-                offline: false,
-                timestamp: 'From Sheet'
-            }));
-
-            const history = readAllHistory();
-            const byKey = new Map();
-
-            // Keep offline queue (any date) + other streams / other dates
-            history.forEach(item => {
-                const k = historyMatchKey(item);
-                if (item.offline === true) {
-                    byKey.set(k, item);
-                    return;
-                }
-                const itemStream = item.stream || 'BCA';
-                if (itemStream !== stream || item.date !== dateVal) {
-                    byKey.set(k, item);
-                }
-                // today's synced rows for this stream come from server below
-            });
-
-            // Sheet is source of truth for today's synced list (cross-device)
-            serverEntries.forEach(sEntry => {
-                const k = historyMatchKey(sEntry);
-                const existing = byKey.get(k);
-                if (existing && existing.offline === true) return; // pending local edit wins until synced
-                byKey.set(k, sEntry);
-            });
-
-            const merged = compactAttendanceHistory(Array.from(byKey.values()));
-            localStorage.setItem('mgm_attendance_history', JSON.stringify(merged));
+        if (!(data && data.result === 'success' && Array.isArray(data.entries))) {
+            // Keep whatever is already in Today's list if sheet sync fails
             renderHistoryList();
+            return;
         }
+
+        const serverEntries = data.entries.map(e => ({
+            stream: stream,
+            date: normalizeHistoryDate(e.date) || dateVal,
+            year: e.year || 'First Year',
+            section: e.section || 'A',
+            subject: e.subject || 'Subject',
+            slot: parseInt(e.slot, 10) || 1,
+            rollNumbers: e.rollNumbers || 'NIL',
+            offline: false,
+            timestamp: 'From Sheet'
+        })).filter(e => normalizeHistoryDate(e.date) === dateVal || !e.date);
+
+        const history = readAllHistory();
+        const byKey = new Map();
+
+        // Always keep offline queue + other streams / other dates + local today rows
+        history.forEach(item => {
+            const k = historyMatchKey(item);
+            byKey.set(k, item);
+        });
+
+        // If sheet returned nothing, do NOT wipe local Today's entries
+        if (serverEntries.length === 0) {
+            const mergedEmpty = compactAttendanceHistory(Array.from(byKey.values()));
+            localStorage.setItem('mgm_attendance_history', JSON.stringify(mergedEmpty));
+            renderHistoryList();
+            return;
+        }
+
+        // Merge sheet rows into local (sheet wins for same key unless local offline pending)
+        serverEntries.forEach(sEntry => {
+            const k = historyMatchKey(sEntry);
+            const existing = byKey.get(k);
+            if (existing && existing.offline === true) return;
+            byKey.set(k, sEntry);
+        });
+
+        const merged = compactAttendanceHistory(Array.from(byKey.values()));
+        localStorage.setItem('mgm_attendance_history', JSON.stringify(merged));
+        renderHistoryList();
     };
 
     const params = new URLSearchParams({
@@ -1734,6 +1774,7 @@ function fetchTodayServerHistory() {
         clearTimeout(timeout);
         isFetchingServerHistory = false;
         try { delete window[cbName]; } catch (e) {}
+        renderHistoryList();
     };
     document.body.appendChild(scriptEl);
 }
