@@ -754,6 +754,23 @@ function getTodayISOString() {
     return `${yyyy}-${mm}-${dd}`;
 }
 
+/** Block future dates — classes not started yet, no absentee entry for tomorrow+. */
+function clampAttendanceDate(dateStr) {
+    const today = getTodayISOString();
+    const d = normalizeHistoryDate(dateStr) || today;
+    return d > today ? today : d;
+}
+
+function applyNoFutureDateLimits() {
+    const today = getTodayISOString();
+    const fields = [dateInput, directDateInput, document.getElementById('hodDatePicker')];
+    fields.forEach(el => {
+        if (!el) return;
+        el.setAttribute('max', today);
+        if (el.value && el.value > today) el.value = today;
+    });
+}
+
 
 function wipeHODPortalState() {
     currentHODData = null;
@@ -947,7 +964,8 @@ function autoProcessSpeech(text) {
     if (!parsedData.subject) parsedData.subject = deptConfig.defaultSubject;
     console.log('Parsed Attendance Data:', parsedData);
 
-    const todayStr = parsedData.date || getTodayISOString();
+    const todayStr = clampAttendanceDate(parsedData.date || getTodayISOString());
+    if (parsedData) parsedData.date = todayStr;
 
     const directDurationSelect = document.getElementById('directDurationSelect');
     const durationSelect = document.getElementById('durationSelect');
@@ -990,7 +1008,7 @@ function openConfirmationModal(data) {
 
     const deptConfig = DEPT_CONFIG[currentDept] || DEPT_CONFIG.BCA;
 
-    dateInput.value = data.date || getTodayISOString();
+    dateInput.value = clampAttendanceDate(data.date || getTodayISOString());
     rollNumbersInput.value = Array.isArray(data.rollNumbers) ? data.rollNumbers.join(', ') : data.rollNumbers;
     yearSelect.value = data.year || 'First Year';
     sectionSelect.value = data.section || 'A';
@@ -1163,7 +1181,9 @@ function showCombinedSectionBlockDialog(params) {
 }
 
 async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectVal, slotVal, btnElem, textElem, spinnerElem) {
-    const cleanDate = dateVal || getTodayISOString();
+    const cleanDate = clampAttendanceDate(dateVal || getTodayISOString());
+    if (dateInput && dateInput.value !== cleanDate) dateInput.value = cleanDate;
+    if (directDateInput && directDateInput.value !== cleanDate) directDateInput.value = cleanDate;
     const cleanSlot = parseInt(slotVal, 10) || 1;
     let cleanSubject = (subjectVal || '').trim();
     let cleanSection = sectionVal || 'A';
@@ -1622,6 +1642,7 @@ function resetAllInputs() {
     manualTextInput.value = '';
     directDateInput.value = todayStr;
     dateInput.value = todayStr;
+    applyNoFutureDateLimits();
     directRollInput.value = '';
     setSubjectValue(directSubjectInput, deptConfig.defaultSubject);
     setSubjectValue(subjectInput, deptConfig.defaultSubject);
@@ -2335,6 +2356,7 @@ let currentDateTrack = getTodayISOString();
 
 function checkAndRefreshDate() {
     const freshDate = getTodayISOString();
+    applyNoFutureDateLimits();
     if (freshDate !== currentDateTrack) {
         currentDateTrack = freshDate;
         if (dateInput) dateInput.value = freshDate;
@@ -3326,6 +3348,18 @@ document.addEventListener('DOMContentLoaded', () => {
     currentDateTrack = todayStr;
     if (dateInput) dateInput.value = todayStr;
     if (directDateInput) directDateInput.value = todayStr;
+    applyNoFutureDateLimits();
+    [dateInput, directDateInput, document.getElementById('hodDatePicker')].forEach(el => {
+        if (!el) return;
+        el.addEventListener('change', () => {
+            const clamped = clampAttendanceDate(el.value);
+            if (el.value !== clamped) {
+                el.value = clamped;
+                showCustomToast('Future date not allowed', 'Attendance can only be for today or earlier.');
+            }
+            applyNoFutureDateLimits();
+        });
+    });
     if (todayBadge) {
         const options = { month: 'short', day: 'numeric', year: 'numeric' };
         todayBadge.textContent = 'Today - ' + new Date().toLocaleDateString(undefined, options);
