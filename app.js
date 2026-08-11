@@ -416,6 +416,29 @@ function computeRollDiff(prevRollInput, newRollInput) {
     };
 }
 
+function isCombinedSectionValue(sec) {
+    const n = normalizeSectionCode(sec);
+    if (!n) return false;
+    const raw = String(sec || '').toUpperCase();
+    return n === 'ALL' || raw.includes('COMBIN');
+}
+
+function subjectsAreSame(subj1, subj2) {
+    const a = String(subj1 || '').trim().toLowerCase();
+    const b = String(subj2 || '').trim().toLowerCase();
+    if (!a || !b) return false;
+    return a === b;
+}
+
+/** Parallel Combined electives (Kannada / Hindi / Sanskrit) share a slot but must stay separate. */
+function isParallelCombinedSubjectEntry(sec1, subj1, sec2, subj2) {
+    if (!isCombinedSectionValue(sec1) || !isCombinedSectionValue(sec2)) return false;
+    const a = String(subj1 || '').trim();
+    const b = String(subj2 || '').trim();
+    if (!a || !b) return false;
+    return !subjectsAreSame(a, b);
+}
+
 function isSectionOverlap(sec1, sec2) {
     const n1 = normalizeSectionCode(sec1);
     const n2 = normalizeSectionCode(sec2);
@@ -435,10 +458,12 @@ function checkDoubleEntryLive(dateVal, yearVal, sectionVal, subjectVal, slotVal,
     const cleanSubject = (subjectVal || '').trim();
     const cleanYear = yearVal || 'First Year';
     const cleanStream = currentDept || 'BCA';
+    const effectiveSection = isElectiveOrLanguageSubject(cleanSubject) ? 'ALL' : (sectionVal || 'A');
 
     const localHistory = JSON.parse(localStorage.getItem('mgm_attendance_history') || '[]');
     
     // Find any existing entry for same Date + Stream + Year + Slot with overlapping Section
+    // Combined + different subject (Kannada vs Sanskrit) = parallel, not a conflict
     const existingEntry = localHistory.find(item => {
         if ((item.stream || 'BCA') !== cleanStream) return false;
         if (item.date !== cleanDate) return false;
@@ -446,25 +471,18 @@ function checkDoubleEntryLive(dateVal, yearVal, sectionVal, subjectVal, slotVal,
         if (parseInt(item.slot, 10) !== cleanSlot) return false;
 
         const sec1 = item.section || 'A';
-        const sec2 = sectionVal || 'A';
+        const sec2 = effectiveSection || 'A';
         if (!isSectionOverlap(sec1, sec2)) return false;
 
-        const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || sec1.toLowerCase().includes('combin');
-        const isComb2 = sec2 === 'ALL' || sec2.toUpperCase() === 'ALL' || sec2.toLowerCase().includes('combin');
-        const isElec1 = isElectiveOrLanguageSubject(item.subject);
-        const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
-
-        // If BOTH are Combined AND BOTH are Elective/Language subjects with different names, they are parallel electives!
-        if (isComb1 && isComb2 && isElec1 && isElec2 && cleanSubject.length > 0 && item.subject.trim().toLowerCase() !== cleanSubject.toLowerCase()) {
-            return false; // Not a conflict!
+        if (isParallelCombinedSubjectEntry(sec1, item.subject, sec2, cleanSubject)) {
+            return false;
         }
 
-        return true; // Conflict or Match found!
+        return true;
     });
 
     if (existingEntry) {
-        const sameSubject = cleanSubject.length > 0 &&
-            existingEntry.subject.trim().toLowerCase() === cleanSubject.toLowerCase();
+        const sameSubject = subjectsAreSame(existingEntry.subject, cleanSubject);
         const diff = computeRollDiff(existingEntry.rollNumbers, rollVal);
         const prevStr = diff.prevRolls.length > 0 ? diff.prevRolls.join(', ') : 'NIL';
 
@@ -472,7 +490,7 @@ function checkDoubleEntryLive(dateVal, yearVal, sectionVal, subjectVal, slotVal,
         alertBoxElem.className = 'alert-banner active';
 
         if (!sameSubject) {
-            const secLabel = existingEntry.section === 'ALL' ? 'Combined (Sec A,B,C)' : `Sec ${existingEntry.section}`;
+            const secLabel = isCombinedSectionValue(existingEntry.section) ? 'Combined (Sec A,B,C)' : `Sec ${existingEntry.section}`;
             alertBoxElem.innerHTML = `
             <div style="display: flex; gap: 10px; align-items: flex-start;">
                 <div style="flex: 1; font-size: 0.85rem; line-height: 1.4;">
@@ -485,7 +503,6 @@ function checkDoubleEntryLive(dateVal, yearVal, sectionVal, subjectVal, slotVal,
             if (submitBtnTextElem) submitBtnTextElem.textContent = 'Replace Existing Entry';
         } else {
             const addedStr = diff.addedRolls.length > 0 ? diff.addedRolls.join(', ') : 'None';
-            const deletedStr = diff.deletedRolls.length > 0 ? diff.deletedRolls.join(', ') : 'None';
             const retainedStr = diff.retainedRolls.length > 0 ? diff.retainedRolls.join(', ') : 'None';
             alertBoxElem.innerHTML = `
             <div style="display: flex; gap: 10px; align-items: flex-start;">
@@ -502,6 +519,27 @@ function checkDoubleEntryLive(dateVal, yearVal, sectionVal, subjectVal, slotVal,
             if (submitBtnTextElem) submitBtnTextElem.textContent = 'Merge & Save Attendance';
         }
         return existingEntry;
+    }
+
+    // Soft note when another Combined language already exists in this slot
+    const parallelPeer = localHistory.find(item => {
+        if ((item.stream || 'BCA') !== cleanStream) return false;
+        if (item.date !== cleanDate) return false;
+        if (item.year !== cleanYear) return false;
+        if (parseInt(item.slot, 10) !== cleanSlot) return false;
+        return isParallelCombinedSubjectEntry(item.section, item.subject, effectiveSection, cleanSubject);
+    });
+    if (parallelPeer && isCombinedSectionValue(effectiveSection)) {
+        alertBoxElem.style.display = 'block';
+        alertBoxElem.className = 'alert-banner active';
+        alertBoxElem.innerHTML = `
+            <div style="font-size: 0.85rem; line-height: 1.4;">
+                <strong style="color: #34d399;">✅ Parallel Combined elective</strong><br>
+                <strong>${escapeHTML(parallelPeer.subject)}</strong> already has absentees for this slot.
+                Your <strong>${escapeHTML(cleanSubject || 'subject')}</strong> will be saved as a <strong>separate</strong> entry (no merge).
+            </div>`;
+        if (submitBtnTextElem) submitBtnTextElem.textContent = 'Submit Absentee (Separate Subject)';
+        return null;
     }
 
     alertBoxElem.style.display = 'none';
@@ -984,13 +1022,9 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         const sec2 = cleanSection || 'A';
         if (!isSectionOverlap(sec1, sec2)) return false;
 
-        const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || sec1.toLowerCase().includes('combin');
-        const isComb2 = cleanSection === 'ALL' || (cleanSection || '').toUpperCase() === 'ALL' || (cleanSection || '').toLowerCase().includes('combin');
-        const isElec1 = isElectiveOrLanguageSubject(item.subject);
-        const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
-
-        if (isComb1 && isComb2 && isElec1 && isElec2 && item.subject.trim().toLowerCase() !== cleanSubject.toLowerCase()) {
-            return false; // Parallel elective
+        // Combined + different subject = parallel language/elective — never conflict
+        if (isParallelCombinedSubjectEntry(sec1, item.subject, sec2, cleanSubject)) {
+            return false;
         }
 
         return true;
@@ -1004,7 +1038,16 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         sheetConflict = { exists: false, offline: true };
     }
 
-    const hasConflict = !!existingEntry || !!(sheetConflict.exists && !sheetConflict.offline);
+    // Sheet may still report a different Combined subject as conflict on older deployments —
+    // never merge/overwrite across different subjects for Combined electives.
+    if (sheetConflict.exists && !sheetConflict.offline) {
+        const sheetSec = sheetConflict.section || cleanSection;
+        if (isParallelCombinedSubjectEntry(sheetSec, sheetConflict.subject, cleanSection, cleanSubject)) {
+            sheetConflict = { exists: false, parallelElective: true };
+        }
+    }
+
+    let hasConflict = !!existingEntry || !!(sheetConflict.exists && !sheetConflict.offline);
     let finalRolls = formattedRolls;
     let finalRollsArr = rollNumbersArray;
     let conflictChoice = 'create';
@@ -1017,25 +1060,38 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         const prevRolls = (sheetConflict.exists && sheetConflict.rollNumbers != null)
             ? sheetConflict.rollNumbers
             : (existingEntry ? existingEntry.rollNumbers : 'NIL');
+        const prevSec = (sheetConflict.exists && sheetConflict.section)
+            ? sheetConflict.section
+            : (existingEntry ? existingEntry.section : cleanSection);
 
-        const userChoice = await showSlotConflictDialog({
-            date: cleanDate,
-            year: yearVal,
-            section: cleanSection,
-            slot: cleanSlot,
-            subject: cleanSubject,
-            existingSubj: prevSubj,
-            existingRolls: prevRolls,
-            newRolls: formattedRolls
-        });
+        // Safety: different Combined subjects must never open Merge dialog
+        if (isParallelCombinedSubjectEntry(prevSec, prevSubj, cleanSection, cleanSubject)) {
+            hasConflict = false;
+            conflictChoice = 'create';
+        } else if (!subjectsAreSame(prevSubj, cleanSubject) && isCombinedSectionValue(cleanSection)) {
+            // Combined but subject mismatch (edge case) → create separate row
+            hasConflict = false;
+            conflictChoice = 'create';
+        } else {
+            const userChoice = await showSlotConflictDialog({
+                date: cleanDate,
+                year: yearVal,
+                section: cleanSection,
+                slot: cleanSlot,
+                subject: cleanSubject,
+                existingSubj: prevSubj,
+                existingRolls: prevRolls,
+                newRolls: formattedRolls
+            });
 
-        if (!userChoice || userChoice.action === 'cancel') {
-            return { status: 'cancelled' };
+            if (!userChoice || userChoice.action === 'cancel') {
+                return { status: 'cancelled' };
+            }
+
+            conflictChoice = userChoice.action;
+            finalRolls = userChoice.mergedRolls;
+            finalRollsArr = userChoice.mergedArr;
         }
-
-        conflictChoice = userChoice.action;
-        finalRolls = userChoice.mergedRolls;
-        finalRollsArr = userChoice.mergedArr;
     }
 
     // Now disable button & show spinner during actual HTTP POST transmission
