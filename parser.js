@@ -13,34 +13,14 @@ const NUMBER_WORDS = {
 };
 
 const COMMON_SUBJECTS = [
-    // BCA Subjects (General & AIML)
-    'English', 'Environmental Studies', 'Java', 'Database', 'DBMS', 'Database Management', 
-    'C++', 'C Programming', 'Python', 'Data Structures', 'Web Technology', 'Web Development', 
-    'Computer Networks', 'Operating Systems', 'Software Engineering', 'Mathematics', 
-    'Discrete Math', 'Cloud Computing', 'Cloud Computing Essentials', 'Cyber Security', 'Artificial Intelligence', 
-    'AI', 'Fundamentals of AI & ML', 'Python Programming for AI', 'Data Science & Visualization', 
+    // BCA Subjects (General & AIML) + language electives
+    'English', 'Environmental Studies', 'Java', 'Database', 'DBMS', 'Database Management',
+    'C++', 'C Programming', 'Python', 'Data Structures', 'Web Technology', 'Web Development',
+    'Computer Networks', 'Operating Systems', 'Software Engineering', 'Mathematics',
+    'Discrete Math', 'Cloud Computing', 'Cloud Computing Essentials', 'Cyber Security', 'Artificial Intelligence',
+    'AI', 'Fundamentals of AI & ML', 'Python Programming for AI', 'Data Science & Visualization',
     'Database Systems for AI', 'Linux & Shell Scripting', 'Android Development', 'PHP', 'Computer Architecture', 'Soft Skills',
-
-    // B.Com / BCM Subjects (General, TP, AF)
-    'Financial Accounting', 'Financial Accounting-I', 'Financial Accounting I', 'Quantitative Techniques- I', 'Quantitative Techniques - I', 
-    'Foundation of Commerce-I', 'Individual and Team Management', 'Income Tax I', 'Income Tax - I', 'Goods and Service Tax I', 
-    'Computerised Accounting-I', 'Financial Management- I', 'Cost Accounting - I', 'Corporate Accounting-I', 'CA - I', 
-    'Cost and Management Accounting - I', 'Human Resource Management', 'Personal Investment Management', 'Income Tax - III', 
-    'Goods and Service Tax - III', 'CA - III', 'Fund Management', 'Financial Management-I', 'Cost and Management Accounting III', 
-    'Business Law', 'Employability Skills', 'PBL', 'Advance Income Tax', 'Costing I', 'Income Tax- III', 'SAPM', 'Computerized Accounting',
-    'Corporate Accounting', 'Corporate Accounting II', 'Cost Accounting', 'Advanced Cost Accounting', 'Income Tax', 
-    'Income Tax Law & Practice I', 'Income Tax Law & Practice II', 'Direct Tax Structure', 'Tax Planning & Management', 
-    'Auditing', 'Company Law', 'GST & Customs', 'Customs Duty & Customs Law', 'Banking & Insurance', 'Financial Management', 
-    'Strategic Financial Management', 'Business Statistics', 'Marketing Management', 'Financial Institutions & Markets', 
-    'Security Analysis & Portfolio Management', 'International Financial Reporting', 'E-Commerce',
-
-    // B.A. Subjects
-    'History', 'Political Science', 'Sociology', 'Economics', 'Journalism', 
-    'Optional English', 'Kannada', 'Hindi', 'Sanskrit', 'Sanskrith', 'Sanskritha', 'Sanskrutha', 'Sanskritam', 'Human Rights',
-
-    // B.Sc. Subjects
-    'Physics', 'Chemistry', 'Botany', 'Zoology', 'Electronics', 'Statistics', 
-    'Biotechnology', 'Physics Lab', 'Chemistry Lab', 'Maths'
+    'Kannada', 'Hindi', 'Sanskrit', 'Sanskrith', 'Sanskritha', 'Sanskrutha', 'Sanskritam'
 ];
 
 // Slot Time Range mapping
@@ -96,11 +76,11 @@ function parseAttendanceSpeech(text, activeDept) {
 
     // 1. Extract Year
     let year = '';
-    if (/\b(3rd|third|final)\b/i.test(lowerText) || /3rd\s*yr/i.test(lowerText) || /(bca|bcom|bcm|ba|bsc)\s*3/i.test(lowerText)) {
+    if (/\b(3rd|third|final)\b/i.test(lowerText) || /3rd\s*yr/i.test(lowerText) || /bca\s*3/i.test(lowerText)) {
         year = 'Third Year';
-    } else if (/\b(2nd|second)\b/i.test(lowerText) || /2nd\s*yr/i.test(lowerText) || /(bca|bcom|bcm|ba|bsc)\s*2/i.test(lowerText)) {
+    } else if (/\b(2nd|second)\b/i.test(lowerText) || /2nd\s*yr/i.test(lowerText) || /bca\s*2/i.test(lowerText)) {
         year = 'Second Year';
-    } else if (/\b(1st|first)\b/i.test(lowerText) || /1st\s*yr/i.test(lowerText) || /(bca|bcom|bcm|ba|bsc)\s*1/i.test(lowerText)) {
+    } else if (/\b(1st|first)\b/i.test(lowerText) || /1st\s*yr/i.test(lowerText) || /bca\s*1/i.test(lowerText)) {
         year = 'First Year';
     }
 
@@ -134,11 +114,9 @@ function parseAttendanceSpeech(text, activeDept) {
             section = (secVal === 'COMBINED' || secVal === 'ALL') ? 'ALL' : secVal;
         } else {
             if (/\b(combined|all\s*sec|all\s*sections?)\b/i.test(lowerText)) section = 'ALL';
-            else if (/\bsec(?:tion)?\s*c\s*\(?af\)?\b|\bsec(?:tion)?\s*c\s*af\b|\bsec\s*d\b|\bsection\s*d\b|\baf\b/i.test(lowerText)) section = 'C (AF)';
-            else if (/\bsec(?:tion)?\s*c\s*\(?tp\)?\b|\bsec(?:tion)?\s*c\s*tp\b|\btp\b/i.test(lowerText)) section = 'C (TP)';
-            else if (/\bsec\s*c\b|\bsection\s*c\b/i.test(lowerText) || /\b([1-3]\s*yr|[1-3](?:st|nd|rd)\s*year|bca|bcom|bcm)\s*c\b/i.test(lowerText) || /\bsec(?:tion)?\s*c\s*\(?aiml\)?\b|\baiml\b/i.test(lowerText)) section = 'C';
-            else if (/\bsec\s*b\b|\bsection\s*b\b/i.test(lowerText) || /\b([1-3]\s*yr|[1-3](?:st|nd|rd)\s*year|bca|bcom|bcm)\s*b\b/i.test(lowerText)) section = 'B';
-            else if (/\bsec\s*a\b|\bsection\s*a\b/i.test(lowerText) || /\b([1-3]\s*yr|[1-3](?:st|nd|rd)\s*year|bca|bcom|bcm)\s*a\b/i.test(lowerText)) section = 'A';
+            else if (/\bsec\s*c\b|\bsection\s*c\b/i.test(lowerText) || /\b([1-3]\s*yr|[1-3](?:st|nd|rd)\s*year|bca)\s*c\b/i.test(lowerText) || /\bsec(?:tion)?\s*c\s*\(?aiml\)?\b|\baiml\b/i.test(lowerText)) section = 'C';
+            else if (/\bsec\s*b\b|\bsection\s*b\b/i.test(lowerText) || /\b([1-3]\s*yr|[1-3](?:st|nd|rd)\s*year|bca)\s*b\b/i.test(lowerText)) section = 'B';
+            else if (/\bsec\s*a\b|\bsection\s*a\b/i.test(lowerText) || /\b([1-3]\s*yr|[1-3](?:st|nd|rd)\s*year|bca)\s*a\b/i.test(lowerText)) section = 'A';
         }
     }
 

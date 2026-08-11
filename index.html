@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>MGM College - Absentee Informer</title>
-  <meta name="description" content="Absentee logger & management portal for MGM College faculty (BCA, B.Com, B.A., B.Sc.).">
+  <meta name="description" content="Absentee logger & management portal for MGM College BCA faculty.">
   
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -24,70 +24,25 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <link rel="stylesheet" href="styles.css?v=v27.16">
+  <link rel="stylesheet" href="styles.css?v=v28.1-open">
 </head>
 <body>
 
   <!-- Main Mobile Frame Container -->
   <main class="app-frame" id="appFrame">
     
-    <!-- Department Login Screen Overlay -->
-    <div class="dept-login-overlay active" id="deptLoginModal">
+    <!-- Login overlay kept in DOM for legacy refs, but never shown (open access) -->
+    <div class="dept-login-overlay" id="deptLoginModal" style="display: none;" aria-hidden="true">
       <div class="dept-login-card">
-        <div class="dept-login-header">
-          <div class="brand-logo-circle">MGM</div>
-          <h2>Faculty & HOD Login</h2>
-          <p>Select Department & Enter Passcode to Access Portal</p>
-          <div style="font-size: 0.78rem; color: var(--primary-light, #818cf8); opacity: 0.9; margin-top: 4px;">Designed by <strong>Kingstatue</strong> for <strong>MGM College, Udupi</strong></div>
-        </div>
-        
         <form id="deptLoginForm" onsubmit="return false;">
-          <div class="dept-grid">
-            <button type="button" class="dept-card active" data-dept="BCA">
-              <div class="dept-badge-pill bca">BCA</div>
-              <span class="dept-name">Bachelor of Computer Applications</span>
-            </button>
-            <button type="button" class="dept-card" data-dept="BCM">
-              <div class="dept-badge-pill bcm">B.COM</div>
-              <span class="dept-name">Bachelor of Commerce</span>
-            </button>
-            <button type="button" class="dept-card" data-dept="BA">
-              <div class="dept-badge-pill ba">B.A.</div>
-              <span class="dept-name">Bachelor of Arts</span>
-            </button>
-            <button type="button" class="dept-card" data-dept="BSC">
-              <div class="dept-badge-pill bsc">B.SC.</div>
-              <span class="dept-name">Bachelor of Science</span>
-            </button>
-          </div>
-
-          <div class="form-group" style="margin-top: 16px;">
-            <label for="deptPasscode">Department Passcode / PIN</label>
-            <div class="passcode-input-wrapper">
-              <input type="password" id="deptPasscode" class="form-input" placeholder="Enter department passcode" required>
-              <button type="button" class="btn-toggle-pass" id="togglePassBtn">👁️</button>
-            </div>
-          </div>
-
-          <div class="remember-checkbox-group">
-            <label><input type="checkbox" id="rememberDeptCheck" checked> Remember my login</label>
-          </div>
-
+          <button type="button" class="dept-card active" data-dept="BCA" style="display:none;"></button>
+          <input type="password" id="deptPasscode" style="display:none;" tabindex="-1" aria-hidden="true">
+          <input type="checkbox" id="rememberDeptCheck" style="display:none;" tabindex="-1" aria-hidden="true">
           <div class="login-alert-box" id="loginAlertBox" style="display: none;"></div>
-
-          <button type="submit" class="btn-primary btn-login" id="deptLoginBtn">
-            <span>Login to Absentee Informer</span>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-              <polyline points="12 5 19 12 12 19"></polyline>
-            </svg>
-          </button>
-          <button type="button" class="btn-secondary" id="mobileForceRefreshBtn" style="width: 100%; margin-top: 10px; font-size: 0.8rem; font-weight: 600; padding: 10px;">
-            Phone stuck / frozen? Tap to clear cache &amp; reload
-          </button>
-          <button type="button" class="btn-secondary" id="cancelHODLoginBtn" onclick="cancelHODLoginAndReturnToLogger()" style="width: 100%; margin-top: 8px; font-size: 0.84rem; font-weight: 600; padding: 10px; display: none;">
-            ← Back to Attendance Logger / Manual Entry
-          </button>
+          <button type="button" id="togglePassBtn" style="display:none;" tabindex="-1" aria-hidden="true"></button>
+          <button type="submit" class="btn-primary btn-login" id="deptLoginBtn" style="display:none;" tabindex="-1" aria-hidden="true"><span>Login</span></button>
+          <button type="button" id="mobileForceRefreshBtn" style="display:none;" tabindex="-1" aria-hidden="true"></button>
+          <button type="button" id="cancelHODLoginBtn" style="display:none;" tabindex="-1" aria-hidden="true"></button>
         </form>
       </div>
     </div>
@@ -135,7 +90,7 @@
         </div>
       </div>
       <div class="header-actions">
-        <button class="dept-active-badge bca" id="activeDeptBadge" title="Click to switch department">
+        <button class="dept-active-badge bca" id="activeDeptBadge" title="BCA Department" type="button">
           <span id="activeDeptText">BCA</span>
         </button>
         <button class="history-pill-btn" id="historyBtn" title="Today's entries — edit or delete" aria-label="Today's entries">
@@ -146,7 +101,7 @@
           <span>Today</span>
           <span class="today-count-badge" id="todayCountBadge" hidden>0</span>
         </button>
-        <button class="logout-btn" id="logoutBtn" title="Exit Department / Logout" aria-label="Exit Department">
+        <button class="logout-btn" id="logoutBtn" title="Exit Department / Logout" aria-label="Exit Department" style="display: none;">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
             <polyline points="16 17 21 12 16 7"></polyline>
@@ -401,27 +356,24 @@
                 <span id="hodRoleBadge" class="badge badge-success" style="font-size: 0.72rem; font-weight: 800;">🔒 HOD Mode</span>
               </h2>
               <p style="font-size: 0.82rem; color: var(--text-muted);">
-                Select stream & date to fetch section-wise absentees and generate parent WhatsApp messages.
+                Select date to fetch BCA section-wise absentees and generate parent WhatsApp messages.
               </p>
             </div>
             <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
               <button type="button" class="btn-secondary" onclick="switchMode('typing')" style="padding: 6px 12px; font-size: 0.78rem; font-weight: 600;">
                 ← Back to Attendance Logger
               </button>
-              <button type="button" class="btn-secondary" id="hodPasscodeSettingsBtn" style="padding: 6px 12px; font-size: 0.78rem;">
+              <button type="button" class="btn-secondary" id="hodPasscodeSettingsBtn" style="padding: 6px 12px; font-size: 0.78rem; display: none;">
                 ⚙️ Change Passcodes
               </button>
             </div>
           </div>
           
           <div class="hod-filter-row">
-            <div class="form-group" style="flex: 1; min-width: 140px;">
+            <div class="form-group" style="flex: 1; min-width: 140px; display: none;">
               <label for="hodStreamSelect">Department</label>
               <select id="hodStreamSelect" class="form-select">
-                <option value="BCA">BCA (Bachelor of Computer Applications)</option>
-                <option value="BCM">B.Com (Bachelor of Commerce)</option>
-                <option value="BA">B.A. (Bachelor of Arts)</option>
-                <option value="BSC">B.Sc. (Bachelor of Science)</option>
+                <option value="BCA" selected>BCA (Bachelor of Computer Applications)</option>
               </select>
             </div>
             
@@ -674,42 +626,6 @@
             </div>
           </div>
 
-          <!-- B.Com Passcodes -->
-          <div id="group_BCM">
-            <div class="form-group" style="margin-bottom: 8px;">
-              <label for="passTeacher_BCM">B.Com Teacher Passcode (Attendance Entry)</label>
-              <input type="text" id="passTeacher_BCM" class="form-input" required />
-            </div>
-            <div class="form-group" style="margin-bottom: 12px;">
-              <label for="passHOD_BCM" style="color: var(--primary-color); font-weight: 700;">🔒 B.Com HOD Portal Passcode</label>
-              <input type="text" id="passHOD_BCM" class="form-input" required />
-            </div>
-          </div>
-
-          <!-- B.A. Passcodes -->
-          <div id="group_BA">
-            <div class="form-group" style="margin-bottom: 8px;">
-              <label for="passTeacher_BA">B.A. Teacher Passcode (Attendance Entry)</label>
-              <input type="text" id="passTeacher_BA" class="form-input" required />
-            </div>
-            <div class="form-group" style="margin-bottom: 12px;">
-              <label for="passHOD_BA" style="color: var(--primary-color); font-weight: 700;">🔒 B.A. HOD Portal Passcode</label>
-              <input type="text" id="passHOD_BA" class="form-input" required />
-            </div>
-          </div>
-
-          <!-- B.Sc Passcodes -->
-          <div id="group_BSC">
-            <div class="form-group" style="margin-bottom: 8px;">
-              <label for="passTeacher_BSC">B.Sc. Teacher Passcode (Attendance Entry)</label>
-              <input type="text" id="passTeacher_BSC" class="form-input" required />
-            </div>
-            <div class="form-group" style="margin-bottom: 12px;">
-              <label for="passHOD_BSC" style="color: var(--primary-color); font-weight: 700;">🔒 B.Sc. HOD Portal Passcode</label>
-              <input type="text" id="passHOD_BSC" class="form-input" required />
-            </div>
-          </div>
-
           <!-- Master Admin -->
           <div class="form-group" style="margin-bottom: 14px;" id="groupADMIN">
             <label for="passADMIN" style="color: #fbbf24; font-weight: 700;">👑 Super Admin Master Passcode</label>
@@ -736,7 +652,7 @@
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js?v=v27.16"></script>
-  <script src="app.js?v=v27.16"></script>
+  <script src="parser.js?v=v28.1-open"></script>
+  <script src="app.js?v=v28.1-open"></script>
 </body>
 </html>

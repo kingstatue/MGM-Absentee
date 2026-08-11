@@ -1,4 +1,4 @@
-// Department & Multi-Stream Configuration (User-Driven Subjects)
+// Department Configuration — BCA only (User-Driven Subjects)
 const DEPT_CONFIG = {
     BCA: {
         code: 'BCA',
@@ -19,69 +19,17 @@ const DEPT_CONFIG = {
         },
         subjects: [],
         samplePresets: []
-    },
-    BCM: {
-        code: 'BCM',
-        name: 'Bachelor of Commerce (B.Com)',
-        passcode: 'bcm2026',
-        badgeClass: 'bcm',
-        hasSections: true,
-        defaultSubject: '',
-        subjectsByYearAndSection: {
-            'First Year': { 'A': [], 'B': [], 'C (TP)': [], 'C (AF)': [] },
-            'Second Year': { 'A': [], 'B': [], 'C (TP)': [], 'C (AF)': [] },
-            'Third Year': { 'A': [], 'B': [], 'C (TP)': [], 'C (AF)': [] }
-        },
-        subjectsByYear: {
-            'First Year': [],
-            'Second Year': [],
-            'Third Year': []
-        },
-        subjects: [],
-        samplePresets: []
-    },
-    BA: {
-        code: 'BA',
-        name: 'Bachelor of Arts (B.A.)',
-        passcode: 'ba2026',
-        badgeClass: 'ba',
-        hasSections: false,
-        defaultSubject: '',
-        subjectsByYear: {
-            'First Year': [],
-            'Second Year': [],
-            'Third Year': []
-        },
-        subjects: [],
-        samplePresets: []
-    },
-    BSC: {
-        code: 'BSC',
-        name: 'Bachelor of Science (B.Sc.)',
-        passcode: 'bsc2026',
-        badgeClass: 'bsc',
-        hasSections: false,
-        defaultSubject: '',
-        subjectsByYear: {
-            'First Year': [],
-            'Second Year': [],
-            'Third Year': []
-        },
-        subjects: [],
-        samplePresets: []
     }
 };
 
 
-// Google Apps Script Webhook Endpoints (Supports dedicated Google Sheets per Stream/HOD)
+// Google Apps Script Webhook Endpoints
+// Paste your Web App URL in BOTH places below (keep the quotes).
 const STREAM_WEBHOOK_URLS = {
-    BCA: 'YOUR_BCA_GOOGLE_SCRIPT_URL_HERE',
-    BCM: 'YOUR_BCM_GOOGLE_SCRIPT_URL_HERE',
-    BA:  'YOUR_BA_GOOGLE_SCRIPT_URL_HERE',
-    BSC: 'YOUR_BSC_GOOGLE_SCRIPT_URL_HERE'
+    BCA: 'https://script.google.com/macros/s/AKfycbzsk5c_tKkt5ysv7ZsNUBMAl4G13vxpeC_p-2fNcbH_Sj3eTm2YwxLFJ-mAh8VgD-i8oQ/exec'
 };
 
-const DEFAULT_GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzg-HkInidAz7Yt9udCNvDAbfnM1OEtOU3LbJRcupLaU4Mvkf-ANM3G49Cw2Rvn7Qfsiw/exec';
+const DEFAULT_GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzsk5c_tKkt5ysv7ZsNUBMAl4G13vxpeC_p-2fNcbH_Sj3eTm2YwxLFJ-mAh8VgD-i8oQ/exec';
 
 function getWebhookUrl(deptCode) {
     const dept = deptCode || currentDept;
@@ -91,23 +39,12 @@ function getWebhookUrl(deptCode) {
     return DEFAULT_GOOGLE_SCRIPT_URL;
 }
 
-/** Session auth sent with every sheet request (validated by Apps Script). */
+/** Session auth sent with every sheet request (open access — login not required). */
 function getAuthPayload() {
-    let pass = '';
-    try { pass = sessionStorage.getItem('mgm_auth_pass') || ''; } catch (e) {}
-    // Mobile browsers / PWAs often wipe sessionStorage when the app is killed.
-    if (!pass) {
-        try {
-            pass = localStorage.getItem('mgm_session_pass') ||
-                localStorage.getItem('mgm_remember_pass') || '';
-            if (pass) sessionStorage.setItem('mgm_auth_pass', pass);
-        } catch (e) {}
-    }
     return {
-        authPasscode: pass,
-        authRole: localStorage.getItem('mgm_role') || currentRole || 'TEACHER',
-        // Prefer the stream the passcode was validated for (fixes sync after dept switch / wrong card)
-        authStream: localStorage.getItem('mgm_auth_stream') || currentDept || 'BCA'
+        authPasscode: 'open',
+        authRole: currentRole || 'ADMIN',
+        authStream: 'BCA'
     };
 }
 
@@ -358,8 +295,8 @@ async function postWithRetry(url, payload, maxRetries = 2) {
 
 // State Management
 let currentDept = 'BCA';
-let currentRole = localStorage.getItem('mgm_role') || 'TEACHER';
-let isHODAuthenticated = false;
+let currentRole = 'ADMIN';
+let isHODAuthenticated = true;
 let currentHODData = null;
 let currentHODYearFilter = 'ALL';
 let pendingHODTabSwitch = false;
@@ -703,10 +640,6 @@ function switchMode(mode) {
     const cancelBtn = document.getElementById('cancelHODLoginBtn');
     if (mode === 'voice') {
         if (cancelBtn) cancelBtn.style.display = 'none';
-        if (currentDept !== 'BCA') {
-            switchMode('typing');
-            return;
-        }
         if (voiceModeTab) voiceModeTab.classList.add('active');
         if (typingModeTab) typingModeTab.classList.remove('active');
         if (hodModeTab) hodModeTab.classList.remove('active');
@@ -725,19 +658,8 @@ function switchMode(mode) {
         if (isListening) stopListening();
         wipeHODPortalState();
     } else if (mode === 'hod') {
-        if (currentRole === 'TEACHER' || !isHODAuthenticated) {
-            pendingHODTabSwitch = true;
-            const deptLabel = currentDept === 'BCM' ? 'B.Com' : (currentDept === 'BA' ? 'B.A.' : (currentDept === 'BSC' ? 'B.Sc.' : currentDept));
-            if (loginAlertBox) {
-                loginAlertBox.style.display = 'block';
-                loginAlertBox.textContent = '🔒 Enter HOD Passcode for ' + deptLabel + ' (or Super Admin Passcode) to access HOD Portal';
-            }
-            if (cancelBtn) cancelBtn.style.display = 'block';
-            if (deptLoginModal) deptLoginModal.classList.add('active');
-            if (deptPasscode) deptPasscode.focus();
-            return;
-        }
         if (cancelBtn) cancelBtn.style.display = 'none';
+        isHODAuthenticated = true;
 
         if (hodModeTab) hodModeTab.classList.add('active');
         if (voiceModeTab) voiceModeTab.classList.remove('active');
@@ -1933,32 +1855,20 @@ function getPasscodeStore() {
         const store = JSON.parse(localStorage.getItem('mgm_custom_passcodes') || '{}');
         return {
             teacher: {
-                BCA: store.teacherBCA || DEPT_CONFIG.BCA.passcode,
-                BCM: store.teacherBCM || DEPT_CONFIG.BCM.passcode,
-                BA: store.teacherBA || DEPT_CONFIG.BA.passcode,
-                BSC: store.teacherBSC || DEPT_CONFIG.BSC.passcode
+                BCA: store.teacherBCA || DEPT_CONFIG.BCA.passcode
             },
             hod: {
-                BCA: store.hodBCA || 'hodbca',
-                BCM: store.hodBCM || 'hodbcm',
-                BA: store.hodBA || 'hodba',
-                BSC: store.hodBSC || 'hodbsc'
+                BCA: store.hodBCA || 'hodbca'
             },
             ADMIN: store.ADMIN || 'admin2026'
         };
     } catch (e) {
         return {
             teacher: {
-                BCA: DEPT_CONFIG.BCA.passcode,
-                BCM: DEPT_CONFIG.BCM.passcode,
-                BA: DEPT_CONFIG.BA.passcode,
-                BSC: DEPT_CONFIG.BSC.passcode
+                BCA: DEPT_CONFIG.BCA.passcode
             },
             hod: {
-                BCA: 'hodbca',
-                BCM: 'hodbcm',
-                BA: 'hodba',
-                BSC: 'hodbsc'
+                BCA: 'hodbca'
             },
             ADMIN: 'admin2026'
         };
@@ -1969,311 +1879,62 @@ function savePasscodeStore(store) {
     localStorage.setItem('mgm_custom_passcodes', JSON.stringify(store));
 }
 
-// Department Authentication & Multi-Stream Manager
+// Open BCA immediately — no login / passcode gate
 function initDepartmentManager() {
-    const deptCards = document.querySelectorAll('.dept-card');
-    let selectedDept = 'BCA';
+    currentRole = 'ADMIN';
+    isHODAuthenticated = true;
+    pendingHODTabSwitch = false;
+    localStorage.setItem('mgm_dept', 'BCA');
+    localStorage.setItem('mgm_role', 'ADMIN');
+    localStorage.setItem('mgm_auth_stream', 'BCA');
+    try { sessionStorage.setItem('mgm_auth_pass', 'open'); } catch (e) {}
+    try { localStorage.setItem('mgm_session_pass', 'open'); } catch (e) {}
 
-    deptCards.forEach(card => {
-        card.addEventListener('click', () => {
-            deptCards.forEach(c => c.classList.remove('active'));
-            card.classList.add('active');
-            selectedDept = card.getAttribute('data-dept');
-        });
-    });
-
-    if (togglePassBtn && deptPasscode) {
-        togglePassBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const showing = deptPasscode.getAttribute('type') === 'text';
-            deptPasscode.setAttribute('type', showing ? 'password' : 'text');
-            togglePassBtn.textContent = showing ? '👁️' : '🙈';
-            togglePassBtn.setAttribute('aria-label', showing ? 'Show passcode' : 'Hide passcode');
-            try { deptPasscode.focus(); } catch (err) {}
-        });
-    }
-
-    if (deptLoginForm) {
-        const finishLoginSuccess = (role, loginDept, passcode, rememberChecked) => {
-            selectedDept = loginDept;
-            document.querySelectorAll('.dept-card').forEach(c => {
-                c.classList.toggle('active', c.getAttribute('data-dept') === loginDept);
-            });
-
-            setAuthSession(passcode, role, loginDept, rememberChecked);
-            subjectsAuthPrompted = false;
-            isHODAuthenticated = (role === 'HOD' || role === 'ADMIN');
-            if (loginAlertBox) loginAlertBox.style.display = 'none';
-
-            if (rememberChecked) {
-                localStorage.setItem('mgm_dept', loginDept);
-            } else {
-                localStorage.removeItem('mgm_dept');
-            }
-
-            if (role === 'TEACHER' && pendingHODTabSwitch) {
-                if (loginAlertBox) {
-                    loginAlertBox.style.display = 'block';
-                    loginAlertBox.textContent = 'Teacher passcode entered. Please enter HOD Passcode to access HOD Portal.';
-                }
-                deptLoginModal.classList.add('active');
-                return;
-            }
-
-            applyDepartment(loginDept);
-            applyRoleUI();
-            deptLoginModal.classList.remove('active');
-            if (deptPasscode) deptPasscode.value = '';
-
-            if (pendingHODTabSwitch && (role === 'HOD' || role === 'ADMIN')) {
-                pendingHODTabSwitch = false;
-                switchMode('hod');
-            }
-        };
-
-        const runLogin = async () => {
-            const passcode = (deptPasscode && deptPasscode.value ? deptPasscode.value : '').trim();
-            if (!passcode) {
-                if (loginAlertBox) {
-                    loginAlertBox.style.display = 'block';
-                    loginAlertBox.textContent = 'Please enter your passcode.';
-                }
-                return;
-            }
-
-            const activeCard = document.querySelector('.dept-card.active');
-            if (activeCard && activeCard.getAttribute('data-dept')) {
-                selectedDept = activeCard.getAttribute('data-dept');
-            }
-
-            const passcodes = getPasscodeStore();
-            const config = DEPT_CONFIG[selectedDept] || DEPT_CONFIG.BCA;
-            const adminPass = passcodes.ADMIN || 'admin2026';
-            const loginBtn = document.getElementById('deptLoginBtn');
-            const loginBtnLabel = loginBtn ? loginBtn.querySelector('span') : null;
-            const rememberChecked = !!(rememberDeptCheck && rememberDeptCheck.checked);
-            const setLoginBusy = (busy, label) => {
-                if (loginBtn) loginBtn.disabled = !!busy;
-                if (loginBtnLabel) loginBtnLabel.textContent = label || 'Login to Absentee Informer';
-            };
-
-            const matchLocalPass = () => {
-                if (passcode === adminPass) {
-                    return { role: 'ADMIN', loginDept: selectedDept };
-                }
-                const depts = ['BCA', 'BCM', 'BA', 'BSC'];
-                const ordered = [selectedDept].concat(depts.filter(d => d !== selectedDept));
-                for (let i = 0; i < ordered.length; i++) {
-                    const d = ordered[i];
-                    if (!DEPT_CONFIG[d]) continue;
-                    const tPass = (passcodes.teacher && passcodes.teacher[d]) || DEPT_CONFIG[d].passcode;
-                    const hPass = (passcodes.hod && passcodes.hod[d]) || ('hod' + d.toLowerCase());
-                    if (passcode === hPass) return { role: 'HOD', loginDept: d };
-                    if (passcode === tPass) return { role: 'TEACHER', loginDept: d };
-                }
-                return null;
-            };
-
-            // MOBILE FIX: unlock instantly from local pass — never freeze waiting on Apps Script
-            const localHitFirst = matchLocalPass();
-            if (localHitFirst) {
-                setLoginBusy(true, 'Signing in…');
-                try {
-                    finishLoginSuccess(localHitFirst.role, localHitFirst.loginDept, passcode, rememberChecked);
-                    if (navigator.onLine) {
-                        authenticateWithServer(localHitFirst.loginDept, passcode)
-                            .then(res => {
-                                if (res && res.ok) {
-                                    syncLocalPasscodeFromLogin(localHitFirst.loginDept, res.role || localHitFirst.role, passcode);
-                                }
-                            })
-                            .catch(() => {});
-                    }
-                } finally {
-                    setLoginBusy(false, 'Login to Absentee Informer');
-                }
-                return;
-            }
-
-            setLoginBusy(true, 'Verifying…');
-            if (loginAlertBox) {
-                loginAlertBox.style.display = 'block';
-                loginAlertBox.textContent = navigator.onLine
-                    ? 'Checking passcode with server…'
-                    : 'Offline — passcode not found on this device.';
-            }
-
-            let serverAuth = { ok: false, offline: !navigator.onLine };
-            try {
-                if (navigator.onLine) {
-                    serverAuth = await authenticateWithServer(selectedDept, passcode);
-                } else {
-                    serverAuth = { ok: false, offline: true };
-                }
-            } catch (err) {
-                serverAuth = {
-                    ok: false,
-                    offline: !navigator.onLine,
-                    slow: true,
-                    message: 'Login check failed. Please try again.'
-                };
-            }
-
-            try {
-                if (serverAuth.ok) {
-                    let loginDept = selectedDept;
-                    const role = serverAuth.role;
-                    if (serverAuth.stream && DEPT_CONFIG[serverAuth.stream]) {
-                        loginDept = serverAuth.stream;
-                    }
-                    syncLocalPasscodeFromLogin(loginDept, role, passcode);
-                    finishLoginSuccess(role, loginDept, passcode, rememberChecked);
-                } else {
-                    if (loginAlertBox) {
-                        loginAlertBox.style.display = 'block';
-                        loginAlertBox.textContent = serverAuth.offline
-                            ? 'Offline and passcode not recognized on this device. Connect to Wi-Fi or use a passcode saved on this phone.'
-                            : (serverAuth.message ||
-                                ('Invalid passcode for ' + config.name + '. Tap the correct department card, then try again.'));
-                    }
-                    if (deptPasscode) deptPasscode.focus();
-                }
-            } finally {
-                setLoginBusy(false, 'Login to Absentee Informer');
-            }
-        };
-
-        deptLoginForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            runLogin();
-        });
-
-        const loginBtnEl = document.getElementById('deptLoginBtn');
-        if (loginBtnEl) {
-            loginBtnEl.addEventListener('click', (e) => {
-                e.preventDefault();
-                runLogin();
-            });
-        }
-    }
-    if (activeDeptBadge) {
-        activeDeptBadge.addEventListener('click', () => {
-            isHODAuthenticated = false;
-            wipeHODPortalState();
-            if (loginAlertBox) loginAlertBox.style.display = 'none';
-            // Pre-select the current department card so B.Com login isn't checked as BCA
-            document.querySelectorAll('.dept-card').forEach(c => {
-                const d = c.getAttribute('data-dept');
-                c.classList.toggle('active', d === currentDept);
-                if (d === currentDept) selectedDept = currentDept;
-            });
-            deptLoginModal.classList.add('active');
-        });
-    }
+    if (deptLoginModal) deptLoginModal.classList.remove('active');
 
     const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', () => {
-            isHODAuthenticated = false;
-            pendingHODTabSwitch = false;
-            clearAuthSession();
-            localStorage.removeItem('mgm_dept');
-            localStorage.removeItem('mgm_role');
-            if (deptPasscode) deptPasscode.value = '';
-            if (loginAlertBox) loginAlertBox.style.display = 'none';
-            wipeHODPortalState();
-            if (currentDept === 'BCA') {
-                switchMode('voice');
-            } else {
-                switchMode('typing');
-            }
-            deptLoginModal.classList.add('active');
-            if (deptPasscode) deptPasscode.focus();
-        });
+    if (logoutBtn) logoutBtn.style.display = 'none';
+
+    if (activeDeptBadge) {
+        activeDeptBadge.style.cursor = 'default';
+        activeDeptBadge.title = 'BCA Department';
     }
 
-    // Auto Login from localStorage — then re-check against server if passcode was changed
-    const savedDept = localStorage.getItem('mgm_dept');
-    if (savedDept && DEPT_CONFIG[savedDept]) {
-        restoreAuthSessionFromRemember();
-        currentRole = localStorage.getItem('mgm_role') || 'TEACHER';
-        isHODAuthenticated = (currentRole === 'HOD' || currentRole === 'ADMIN');
-        applyDepartment(savedDept);
-        applyRoleUI();
-        deptLoginModal.classList.remove('active');
-
-        const savedPass = getAuthPayload().authPasscode;
-        if (savedPass && navigator.onLine) {
-            authenticateWithServer(savedDept, savedPass).then((res) => {
-                if (res && res.ok) {
-                    syncLocalPasscodeFromLogin(savedDept, res.role || currentRole, savedPass);
-                    if (res.role) {
-                        currentRole = res.role;
-                        localStorage.setItem('mgm_role', res.role);
-                        isHODAuthenticated = (res.role === 'HOD' || res.role === 'ADMIN');
-                        applyRoleUI();
-                    }
-                    return;
-                }
-                if (res && !res.offline && !res.slow) {
-                    // Old remembered pass rejected after server passcode change
-                    clearAuthSession();
-                    localStorage.removeItem('mgm_dept');
-                    isHODAuthenticated = false;
-                    if (loginAlertBox) {
-                        loginAlertBox.style.display = 'block';
-                        loginAlertBox.textContent =
-                            'Passcode was changed. Please enter the new passcode to continue.';
-                    }
-                    if (deptPasscode) deptPasscode.value = '';
-                    deptLoginModal.classList.add('active');
-                }
-                // slow/offline: keep session; sync will retry
-            }).catch(() => {});
-        }
-    } else {
-        deptLoginModal.classList.add('active');
-        applyDepartment('BCA');
-        applyRoleUI();
-    }
+    applyDepartment('BCA');
+    applyRoleUI();
 }
 
 function applyRoleUI() {
     const hodRoleBadge = document.getElementById('hodRoleBadge');
     const hodStreamSelect = document.getElementById('hodStreamSelect');
     const hodFetchBtnText = document.getElementById('hodFetchBtnText');
-    const deptNameShort = currentDept === 'BCM' ? 'B.Com' : (currentDept === 'BA' ? 'B.A.' : (currentDept === 'BSC' ? 'B.Sc.' : currentDept));
+
+    if (hodStreamSelect) {
+        hodStreamSelect.value = 'BCA';
+        hodStreamSelect.disabled = true;
+    }
 
     if (currentRole === 'ADMIN') {
         if (hodRoleBadge) {
             hodRoleBadge.className = 'badge badge-warning';
             hodRoleBadge.textContent = '👑 Super Admin Mode';
         }
-        if (hodStreamSelect) {
-            hodStreamSelect.disabled = false;
-        }
         if (hodFetchBtnText) {
-            const activeStream = hodStreamSelect ? hodStreamSelect.value : currentDept;
-            const label = activeStream === 'BCM' ? 'B.Com' : (activeStream === 'BA' ? 'B.A.' : (activeStream === 'BSC' ? 'B.Sc.' : activeStream));
-            hodFetchBtnText.textContent = '🔄 Fetch ' + label + ' Absentees';
+            hodFetchBtnText.textContent = '🔄 Fetch BCA Absentees';
         }
     } else {
         if (hodRoleBadge) {
             hodRoleBadge.className = 'badge badge-success';
-            hodRoleBadge.textContent = '🔒 HOD Mode (' + deptNameShort + ')';
-        }
-        if (hodStreamSelect) {
-            hodStreamSelect.value = currentDept;
-            hodStreamSelect.disabled = true;
+            hodRoleBadge.textContent = '🔒 HOD Mode (BCA)';
         }
         if (hodFetchBtnText) {
-            hodFetchBtnText.textContent = '🔄 Fetch ' + deptNameShort + ' Absentees';
+            hodFetchBtnText.textContent = '🔄 Fetch BCA Absentees';
         }
     }
 }
 
 function applyDepartment(deptCode) {
+    deptCode = 'BCA';
     if (!DEPT_CONFIG[deptCode]) return;
     currentDept = deptCode;
     wipeHODPortalState();
@@ -2286,29 +1947,15 @@ function applyDepartment(deptCode) {
         activeDeptBadge.className = 'dept-active-badge ' + config.badgeClass;
     }
 
-    // Voice assistant stream restriction: Available ONLY for BCA, hidden for BCM, BSC, BA
+    // Voice assistant always available for BCA
     if (voiceModeTab) {
-        if (deptCode === 'BCA') {
-            voiceModeTab.style.display = '';
-        } else {
-            voiceModeTab.style.display = 'none';
-        }
+        voiceModeTab.style.display = '';
     }
 
-    // If active section was voice and switching to non-BCA stream, default to typing mode
-    if (deptCode !== 'BCA') {
-        const isVoiceActive = voiceModeTab && voiceModeTab.classList.contains('active');
-        const isVoiceSectionVisible = voiceSection && voiceSection.style.display !== 'none';
-        const isHodActive = hodSection && hodSection.style.display !== 'none';
-        if (isVoiceActive || (isVoiceSectionVisible && !isHodActive)) {
-            switchMode('typing');
-        }
-    }
-
-    // Stream-specific Year dropdown labels
+    // Year dropdown labels
     updateYearSelects(config);
 
-    // Section visibility & dropdown options (BCA/BCM have sections; BA/BSC do not)
+    // Section visibility & dropdown options
     const initialYear = directYearSelect ? directYearSelect.value : 'First Year';
     updateSectionSelects(config.hasSections, deptCode, initialYear);
 
@@ -2329,10 +1976,7 @@ function applyDepartment(deptCode) {
 
 function updateYearSelects(config) {
     const yearSelects = [directYearSelect, yearSelect];
-    let streamLabel = config.code;
-    if (config.code === 'BCM') streamLabel = 'B.Com';
-    else if (config.code === 'BA') streamLabel = 'B.A.';
-    else if (config.code === 'BSC') streamLabel = 'B.Sc.';
+    const streamLabel = (config && config.code) || 'BCA';
 
     yearSelects.forEach(selectEl => {
         if (!selectEl) return;
@@ -2482,12 +2126,6 @@ function fetchCloudSubjects() {
     if (typeof document === 'undefined' || !document.createElement) return;
     if (subjectsFetchInFlight) return;
 
-    const authPass = (getAuthPayload().authPasscode || '').trim();
-    if (!authPass) {
-        // No session yet (login screen) — skip silently
-        return;
-    }
-
     subjectsFetchInFlight = true;
     const targetUrl = getWebhookUrl(currentDept);
     const cbName = 'mgmSubjectsCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
@@ -2608,28 +2246,7 @@ function fetchCloudSubjects() {
                 renderSubjectChips();
             }
         } else if (data && (data.error === 'Unauthorized' || data.result === 'error')) {
-            const msg = String(data.message || data.error || '');
-            const isUnauth = /unauthor|invalid passcode|missing auth/i.test(msg) ||
-                String(data.error || '').toLowerCase() === 'unauthorized';
-            console.warn('[Subjects] Cloud fetch failed:', msg);
-            if (isUnauth && !subjectsAuthPrompted) {
-                subjectsAuthPrompted = true;
-                showCustomToast(
-                    'Passcode expired or changed',
-                    'Please log in again with the current passcode (tap department badge).'
-                );
-                // Force re-login so mobile is not stuck with a dead old session
-                try {
-                    const modal = document.getElementById('deptLoginModal');
-                    const alertBox = document.getElementById('loginAlertBox');
-                    if (alertBox) {
-                        alertBox.style.display = 'block';
-                        alertBox.textContent =
-                            'Passcode expired or was changed. Enter the new passcode to sync subjects.';
-                    }
-                    if (modal) modal.classList.add('active');
-                } catch (e) {}
-            }
+            console.warn('[Subjects] Cloud fetch failed:', data.message || data.error || '');
         }
     };
 
@@ -3149,28 +2766,11 @@ function updateSectionSelects(hasSections, deptCode, yearStr) {
             if (formGroup) formGroup.style.display = '';
             let options = [];
 
-            if (dept === 'BCA') {
-                if (isFirstYear) {
-                    options = [
-                        { val: 'A', label: 'Section A (General BCA)' },
-                        { val: 'B', label: 'Section B (General BCA)' },
-                        { val: 'C', label: 'Section C (AIML)' },
-                        { val: 'ALL', label: 'Combined (Sec A, B, C / Electives)' }
-                    ];
-                } else {
-                    options = [
-                        { val: 'A', label: 'Section A' },
-                        { val: 'B', label: 'Section B' },
-                        { val: 'C', label: 'Section C' },
-                        { val: 'ALL', label: 'Combined (Sec A, B, C / Electives)' }
-                    ];
-                }
-            } else if (dept === 'BCM' || dept === 'BCOM') {
+            if (isFirstYear) {
                 options = [
-                    { val: 'A', label: 'Section A (General B.Com)' },
-                    { val: 'B', label: 'Section B (General B.Com)' },
-                    { val: 'C (TP)', label: 'Section C (TP - Tax Procedure)' },
-                    { val: 'C (AF)', label: 'Section C (AF - Accounting & Finance)' },
+                    { val: 'A', label: 'Section A (General BCA)' },
+                    { val: 'B', label: 'Section B (General BCA)' },
+                    { val: 'C', label: 'Section C (AIML)' },
                     { val: 'ALL', label: 'Combined (Sec A, B, C / Electives)' }
                 ];
             } else {
@@ -3498,34 +3098,13 @@ function populateModalSectionOptions() {
     let options = [];
     let defaultVal = 'COMMON';
 
-    if (dept === 'BCA') {
-        if (isFirstYear) {
-            options = [
-                { val: 'A_B', label: '1) A & B only (General BCA)' },
-                { val: 'C (AIML)', label: '2) C (AIML) only' },
-                { val: 'COMMON', label: '3) Common to all classes (English, CONST, FOC…) — not Combined' },
-                { val: 'ALL', label: '4) Combined elective (Kannada / Hindi / Sanskrit)' }
-            ];
-            defaultVal = 'COMMON';
-        } else {
-            options = [
-                { val: 'A', label: 'Section A only' },
-                { val: 'B', label: 'Section B only' },
-                { val: 'C', label: 'Section C only' },
-                { val: 'COMMON', label: 'Common to all classes — not Combined' },
-                { val: 'ALL', label: 'Combined elective (languages)' }
-            ];
-            defaultVal = 'COMMON';
-        }
-    } else if (dept === 'BCM' || dept === 'BCOM') {
+    if (isFirstYear) {
         options = [
-            { val: 'A_B', label: '1) A & B only (General B.Com)' },
-            { val: 'C (TP)', label: '2) C (TP) only' },
-            { val: 'C (AF)', label: '3) C (AF) only' },
-            { val: 'COMMON', label: '4) Common to all classes — not Combined' },
-            { val: 'ALL', label: '5) Combined elective (languages)' }
+            { val: 'A_B', label: '1) A & B only (General BCA)' },
+            { val: 'C (AIML)', label: '2) C (AIML) only' },
+            { val: 'COMMON', label: '3) Common to all classes (English, CONST, FOC…) — not Combined' },
+            { val: 'ALL', label: '4) Combined elective (Kannada / Hindi / Sanskrit)' }
         ];
-        defaultVal = 'COMMON';
     } else {
         options = [
             { val: 'A', label: 'Section A only' },
@@ -3535,6 +3114,7 @@ function populateModalSectionOptions() {
             { val: 'ALL', label: 'Combined elective (languages)' }
         ];
     }
+    defaultVal = 'COMMON';
 
     options.forEach(o => {
         const opt = document.createElement('option');
@@ -3879,10 +3459,10 @@ function fetchHODAbsentees() {
     const container = document.getElementById('hodSectionCardsContainer');
     const globalShareContainer = document.getElementById('hodGlobalShareContainer');
 
-    const stream = (currentRole !== 'ADMIN') ? currentDept : (hodStreamSelect ? hodStreamSelect.value : currentDept);
+    const stream = 'BCA';
     const dateVal = hodDatePicker ? hodDatePicker.value : getTodayISOString();
 
-    const activeLabel = stream === 'BCM' ? 'B.Com' : (stream === 'BA' ? 'B.A.' : (stream === 'BSC' ? 'B.Sc.' : stream));
+    const activeLabel = 'BCA';
 
     if (hodFetchBtnText) hodFetchBtnText.textContent = 'Fetching ' + activeLabel + '...';
     if (hodFetchSpinner) hodFetchSpinner.style.display = 'inline-block';
@@ -4123,8 +3703,6 @@ function renderHODSectionCards(data) {
 
 function buildGroupedWhatsAppButtons(stream, dateVal, entries) {
     let html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
-    const streamCode = stream === 'BCM' ? 'B.Com' : (stream === 'BA' ? 'B.A.' : (stream === 'BSC' ? 'B.Sc.' : stream));
-
     const yrPrefixes = ['I', 'II', 'III'];
 
     yrPrefixes.forEach(yrCode => {
@@ -4140,52 +3718,36 @@ function buildGroupedWhatsAppButtons(stream, dateVal, entries) {
 
         const yrLabel = yrCode === 'I' ? '1st Year' : (yrCode === 'II' ? '2nd Year' : '3rd Year');
 
-        if (stream === 'BCA') {
-            if (yrCode === 'I') {
-                // 1st Year BCA: Sec A & B combined together, Sec C (AIML) separate
-                const abEntries = yrEntries.filter(e => {
-                    const sec = String(e.section || '').toUpperCase();
-                    return sec === 'A' || sec === 'B' || sec === 'ALL' || sec === 'COMBINED';
-                });
-                // C (AIML) also gets Combined (ALL) language/elective rows — same as A&B
-                const cEntries = yrEntries.filter(e => {
-                    const sec = String(e.section || '').toUpperCase();
-                    return sec === 'C' || sec.includes('AIML') || sec === 'ALL' || sec === 'COMBINED';
-                });
+        if (yrCode === 'I') {
+            // 1st Year BCA: Sec A & B combined together, Sec C (AIML) separate
+            const abEntries = yrEntries.filter(e => {
+                const sec = String(e.section || '').toUpperCase();
+                return sec === 'A' || sec === 'B' || sec === 'ALL' || sec === 'COMBINED';
+            });
+            // C (AIML) also gets Combined (ALL) language/elective rows — same as A&B
+            const cEntries = yrEntries.filter(e => {
+                const sec = String(e.section || '').toUpperCase();
+                return sec === 'C' || sec.includes('AIML') || sec === 'ALL' || sec === 'COMBINED';
+            });
 
-                if (abEntries.length > 0) {
-                    const title = `1st Year BCA - Section A & B Combined`;
-                    const msg = buildCombinedGroupWhatsAppMessage(title, dateVal, abEntries);
-                    html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
-                        📱 Share ${escapeHTML(title)} Report
-                    </button>`;
-                }
-
-                if (cEntries.length > 0) {
-                    const cTitle = `1st Year BCA - Section C (AIML)`;
-                    const msg = buildCombinedGroupWhatsAppMessage(cTitle, dateVal, cEntries);
-                    html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
-                        📱 Share ${escapeHTML(cTitle)} Report
-                    </button>`;
-                }
-            } else {
-                // 2nd & 3rd Year BCA: All Sections A, B & C combined together
-                const title = `${yrLabel} BCA - Section A, B & C Combined`;
-                const msg = buildCombinedGroupWhatsAppMessage(title, dateVal, yrEntries);
+            if (abEntries.length > 0) {
+                const title = `1st Year BCA - Section A & B Combined`;
+                const msg = buildCombinedGroupWhatsAppMessage(title, dateVal, abEntries);
                 html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
                     📱 Share ${escapeHTML(title)} Report
                 </button>`;
             }
-        } else if (stream === 'BCM' || stream === 'BCOM') {
-            // B.Com: All sections (A, B, C-TP, C-AF) combined into a single parent group report per year
-            const title = `${yrLabel} B.Com Combined Report (Sec A, B, C-TP, C-AF)`;
-            const msg = buildCombinedGroupWhatsAppMessage(title, dateVal, yrEntries);
-            html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
-                📱 Share ${escapeHTML(title)}
-            </button>`;
+
+            if (cEntries.length > 0) {
+                const cTitle = `1st Year BCA - Section C (AIML)`;
+                const msg = buildCombinedGroupWhatsAppMessage(cTitle, dateVal, cEntries);
+                html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
+                    📱 Share ${escapeHTML(cTitle)} Report
+                </button>`;
+            }
         } else {
-            // BA / BSC
-            const title = `${yrLabel} ${streamCode}`;
+            // 2nd & 3rd Year BCA: All Sections A, B & C combined together
+            const title = `${yrLabel} BCA - Section A, B & C Combined`;
             const msg = buildCombinedGroupWhatsAppMessage(title, dateVal, yrEntries);
             html += `<button type="button" class="btn-whatsapp-global" onclick="openWhatsAppShare('${encodeURIComponent(msg)}')">
                 📱 Share ${escapeHTML(title)} Report
@@ -4373,12 +3935,6 @@ function initPasscodeManager() {
 
     const passTeacher_BCA = document.getElementById('passTeacher_BCA');
     const passHOD_BCA = document.getElementById('passHOD_BCA');
-    const passTeacher_BCM = document.getElementById('passTeacher_BCM');
-    const passHOD_BCM = document.getElementById('passHOD_BCM');
-    const passTeacher_BA = document.getElementById('passTeacher_BA');
-    const passHOD_BA = document.getElementById('passHOD_BA');
-    const passTeacher_BSC = document.getElementById('passTeacher_BSC');
-    const passHOD_BSC = document.getElementById('passHOD_BSC');
     const passADMIN = document.getElementById('passADMIN');
 
     const titleEl = document.getElementById('passcodeModalTitle');
@@ -4390,43 +3946,20 @@ function initPasscodeManager() {
 
         if (passTeacher_BCA) passTeacher_BCA.value = store.teacher.BCA;
         if (passHOD_BCA) passHOD_BCA.value = store.hod.BCA;
-        
-        if (passTeacher_BCM) passTeacher_BCM.value = store.teacher.BCM;
-        if (passHOD_BCM) passHOD_BCM.value = store.hod.BCM;
-
-        if (passTeacher_BA) passTeacher_BA.value = store.teacher.BA;
-        if (passHOD_BA) passHOD_BA.value = store.hod.BA;
-
-        if (passTeacher_BSC) passTeacher_BSC.value = store.teacher.BSC;
-        if (passHOD_BSC) passHOD_BSC.value = store.hod.BSC;
-
         if (passADMIN) passADMIN.value = store.ADMIN;
 
         const groupBCA = document.getElementById('group_BCA');
-        const groupBCM = document.getElementById('group_BCM');
-        const groupBA = document.getElementById('group_BA');
-        const groupBSC = document.getElementById('group_BSC');
         const groupADMIN = document.getElementById('groupADMIN');
 
-        const deptLabel = currentDept === 'BCM' ? 'B.Com' : (currentDept === 'BA' ? 'B.A.' : (currentDept === 'BSC' ? 'B.Sc.' : currentDept));
+        if (groupBCA) groupBCA.style.display = 'block';
 
         if (currentRole === 'ADMIN') {
-            if (titleEl) titleEl.textContent = 'Manage All Department & Admin Passcodes';
-            if (subtitleEl) subtitleEl.textContent = 'Super Admin mode: Update Teacher & HOD passcodes for all departments or the Master Admin passcode.';
-
-            if (groupBCA) groupBCA.style.display = 'block';
-            if (groupBCM) groupBCM.style.display = 'block';
-            if (groupBA) groupBA.style.display = 'block';
-            if (groupBSC) groupBSC.style.display = 'block';
+            if (titleEl) titleEl.textContent = 'Manage BCA & Admin Passcodes';
+            if (subtitleEl) subtitleEl.textContent = 'Super Admin mode: Update BCA Teacher & HOD passcodes or the Master Admin passcode.';
             if (groupADMIN) groupADMIN.style.display = 'block';
         } else {
-            if (titleEl) titleEl.textContent = 'Change ' + deptLabel + ' Passcodes';
-            if (subtitleEl) subtitleEl.textContent = 'Update Teacher & HOD passcodes for ' + deptLabel + ' department.';
-
-            if (groupBCA) groupBCA.style.display = currentDept === 'BCA' ? 'block' : 'none';
-            if (groupBCM) groupBCM.style.display = currentDept === 'BCM' ? 'block' : 'none';
-            if (groupBA) groupBA.style.display = currentDept === 'BA' ? 'block' : 'none';
-            if (groupBSC) groupBSC.style.display = currentDept === 'BSC' ? 'block' : 'none';
+            if (titleEl) titleEl.textContent = 'Change BCA Passcodes';
+            if (subtitleEl) subtitleEl.textContent = 'Update Teacher & HOD passcodes for BCA department.';
             if (groupADMIN) groupADMIN.style.display = 'none';
         }
 
@@ -4442,25 +3975,15 @@ function initPasscodeManager() {
             e.preventDefault();
             const store = getPasscodeStore();
             const updatedCustom = {
-                teacherBCA: (currentRole === 'ADMIN' || currentDept === 'BCA') ? (passTeacher_BCA ? passTeacher_BCA.value.trim() : store.teacher.BCA) : store.teacher.BCA,
-                hodBCA: (currentRole === 'ADMIN' || currentDept === 'BCA') ? (passHOD_BCA ? passHOD_BCA.value.trim() : store.hod.BCA) : store.hod.BCA,
-
-                teacherBCM: (currentRole === 'ADMIN' || currentDept === 'BCM') ? (passTeacher_BCM ? passTeacher_BCM.value.trim() : store.teacher.BCM) : store.teacher.BCM,
-                hodBCM: (currentRole === 'ADMIN' || currentDept === 'BCM') ? (passHOD_BCM ? passHOD_BCM.value.trim() : store.hod.BCM) : store.hod.BCM,
-
-                teacherBA: (currentRole === 'ADMIN' || currentDept === 'BA') ? (passTeacher_BA ? passTeacher_BA.value.trim() : store.teacher.BA) : store.teacher.BA,
-                hodBA: (currentRole === 'ADMIN' || currentDept === 'BA') ? (passHOD_BA ? passHOD_BA.value.trim() : store.hod.BA) : store.hod.BA,
-
-                teacherBSC: (currentRole === 'ADMIN' || currentDept === 'BSC') ? (passTeacher_BSC ? passTeacher_BSC.value.trim() : store.teacher.BSC) : store.teacher.BSC,
-                hodBSC: (currentRole === 'ADMIN' || currentDept === 'BSC') ? (passHOD_BSC ? passHOD_BSC.value.trim() : store.hod.BSC) : store.hod.BSC,
-
+                teacherBCA: passTeacher_BCA ? passTeacher_BCA.value.trim() : store.teacher.BCA,
+                hodBCA: passHOD_BCA ? passHOD_BCA.value.trim() : store.hod.BCA,
                 ADMIN: currentRole === 'ADMIN' ? (passADMIN ? passADMIN.value.trim() : store.ADMIN) : store.ADMIN
             };
             savePasscodeStore(updatedCustom);
 
             // Push to Apps Script Script Properties (ADMIN required on server)
             (function syncPasscodesToServer(storeObj) {
-                const targetUrl = getWebhookUrl(currentDept);
+                const targetUrl = getWebhookUrl('BCA');
                 const payload = withAuth(Object.assign({ action: 'set_passcodes' }, storeObj));
                 submitViaHiddenForm(targetUrl, payload).catch(function () {});
                 const cbName = 'mgmPassSync_' + Date.now();
@@ -4494,16 +4017,6 @@ function initPasscodeManager() {
                 const store = getPasscodeStore();
                 if (passTeacher_BCA) passTeacher_BCA.value = store.teacher.BCA;
                 if (passHOD_BCA) passHOD_BCA.value = store.hod.BCA;
-
-                if (passTeacher_BCM) passTeacher_BCM.value = store.teacher.BCM;
-                if (passHOD_BCM) passHOD_BCM.value = store.hod.BCM;
-
-                if (passTeacher_BA) passTeacher_BA.value = store.teacher.BA;
-                if (passHOD_BA) passHOD_BA.value = store.hod.BA;
-
-                if (passTeacher_BSC) passTeacher_BSC.value = store.teacher.BSC;
-                if (passHOD_BSC) passHOD_BSC.value = store.hod.BSC;
-
                 if (passADMIN) passADMIN.value = store.ADMIN;
                 alert('Passcodes reset to default!');
             }

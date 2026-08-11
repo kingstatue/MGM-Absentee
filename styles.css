@@ -1241,24 +1241,6 @@ body {
   border: 1px solid rgba(99, 102, 241, 0.4);
 }
 
-.dept-badge-pill.bcm, .dept-active-badge.bcm {
-  background: rgba(16, 185, 129, 0.2);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.4);
-}
-
-.dept-badge-pill.ba, .dept-active-badge.ba {
-  background: rgba(245, 158, 11, 0.2);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.4);
-}
-
-.dept-badge-pill.bsc, .dept-active-badge.bsc {
-  background: rgba(6, 182, 212, 0.2);
-  color: #38bdf8;
-  border: 1px solid rgba(6, 182, 212, 0.4);
-}
-
 .dept-name {
   font-size: 0.72rem;
   color: var(--text-muted);
