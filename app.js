@@ -1820,14 +1820,18 @@ function slotSheetKey(item) {
 /**
  * After a subject is confirmed on sheet for a slot, other local subjects for that
  * same slot are no longer on Raw Data (overwrite). Mark them pending/replaced.
+ * Combined electives (Kannada/Hindi/Sanskrit) share a slot as parallel rows — never demote.
  */
 function demoteReplacedLocalSubjects(savedEntry) {
+    if (isCombinedSectionValue(savedEntry && savedEntry.section)) return;
+
     const savedKey = slotSheetKey(savedEntry);
     const savedSubj = String(savedEntry.subject || '').trim().toLowerCase();
     const history = readAllHistory();
     let changed = false;
     const next = history.map(item => {
         if ((item.stream || 'BCA') !== (savedEntry.stream || 'BCA')) return item;
+        if (isCombinedSectionValue(item.section)) return item;
         if (slotSheetKey(item) !== savedKey) return item;
         if (String(item.subject || '').trim().toLowerCase() === savedSubj) return item;
         changed = true;
@@ -2134,8 +2138,9 @@ function fetchTodayServerHistory() {
             byKey.set(k, sEntry);
         });
 
-        // Reconcile: badge "Synced" only if this exact subject is on the sheet.
-        // Same section+slot with a DIFFERENT subject on sheet = overwritten, not synced.
+        // Reconcile badges:
+        // - Combined: many subjects per slot (Kannada/Hindi/Sanskrit) — never "replaced by"
+        // - Sec A/B/C: one subject per slot — different subject on sheet = replaced
         byKey.forEach((item, k) => {
             if ((item.stream || 'BCA') !== stream) return;
             if (normalizeHistoryDate(item.date) !== dateVal) return;
@@ -2143,6 +2148,20 @@ function fetchTodayServerHistory() {
             const onSheetExact = serverKeys.has(k);
             if (onSheetExact) {
                 byKey.set(k, { ...item, offline: false, syncNote: '' });
+                return;
+            }
+
+            if (isCombinedSectionValue(item.section)) {
+                const peerOnSheet = serverEntries.some(s =>
+                    isCombinedSectionValue(s.section) &&
+                    slotSheetKey(s) === slotSheetKey(item) &&
+                    subjectsAreSame(s.subject, item.subject)
+                );
+                if (peerOnSheet) {
+                    byKey.set(k, { ...item, offline: false, syncNote: '' });
+                } else {
+                    byKey.set(k, { ...item, offline: true, syncNote: item.syncNote || 'missing_on_sheet' });
+                }
                 return;
             }
 
