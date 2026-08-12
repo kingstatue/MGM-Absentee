@@ -3076,41 +3076,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderHistoryList();
 
-    // PWA Service Worker with Auto Update Capability
+    // SW already registered from index.html bootstrap (versioned URL + auto-reload).
+    // Keep a backup update check here in case bootstrap was bypassed.
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('./sw.js')
-                .then(reg => {
-                    console.log('[PWA] Service Worker Registered:', reg.scope);
-                    reg.update(); // Force check for SW update on every app launch
-
-                    reg.onupdatefound = () => {
-                        const installingWorker = reg.installing;
-                        if (installingWorker) {
-                            installingWorker.onstatechange = () => {
-                                if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                    showCustomToast(
-                                        '⚡ App Updated to Latest Version!',
-                                        'Loading updated department structures & features...'
-                                    );
-                                    setTimeout(() => {
-                                        window.location.reload(true);
-                                    }, 800);
-                                }
-                            };
-                        }
-                    };
-                })
-                .catch(err => console.warn('[PWA] Service Worker Registration failed:', err));
-        });
-
-        let refreshing = false;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (!refreshing) {
-                refreshing = true;
-                window.location.reload(true);
+        navigator.serviceWorker.getRegistration().then(function (reg) {
+            if (reg) {
+                try { reg.update(); } catch (e) {}
             }
-        });
+        }).catch(function () {});
     }
 });
 
@@ -3622,6 +3595,23 @@ function getSlotTimeLabel(slotNum) {
     return SLOT_TIME_MAP[s] || `Slot ${s}`;
 }
 
+/** Compact WhatsApp times — avoid dd.mm auto-link (use : for mid-day slots). */
+const SLOT_TIME_SHORT_MAP = {
+    1: '9-9.55',
+    2: '10-10.55',
+    3: '11:10-12:05',
+    4: '12:10-1:05',
+    5: '1:05-2:00',
+    6: '2-2.55',
+    7: '3-3.55',
+    8: '4-4.55'
+};
+
+function getSlotTimeShortLabel(slotNum) {
+    const s = parseInt(slotNum, 10) || 1;
+    return SLOT_TIME_SHORT_MAP[s] || ('Slot ' + s);
+}
+
 function renderHODSectionCards(data) {
     const container = document.getElementById('hodSectionCardsContainer');
     const globalShareContainer = document.getElementById('hodGlobalShareContainer');
@@ -3839,22 +3829,16 @@ function formatWhatsAppRolls(rollNumbers) {
     return '*' + (cleaned || raw) + '*';
 }
 
-/** True only when there is at least one real absentee (NIL slots are hidden in WA). */
-function hasWhatsAppAbsentees(entry) {
-    const raw = entry && entry.rollNumbers != null ? String(entry.rollNumbers).trim() : '';
-    if (!raw) return false;
-    const u = raw.toUpperCase();
-    if (u === 'NIL' || u === 'NONE' || u === 'NIL (ALL PRESENT)' || u.indexOf('ALL PRESENT') !== -1) {
-        return false;
-    }
-    return raw.split(/[,;\s]+/).some(s => s.trim().length > 0);
+/** Include every submitted slot (NIL shown as *NIL*). */
+function isWhatsAppSlotEntry(entry) {
+    return !!(entry && (entry.subject || entry.slot || entry.rollNumbers != null));
 }
 
-/** One period line: plain full clock time + plain subject, bold rolls only. */
+/** Short line with blank line between slots: 9-9.55 *Subject*: *rolls* */
 function formatWhatsAppPeriodLine(entry, includeSecTag) {
     const slotNum = parseInt(entry.slot, 10) || 1;
-    const timeLabel = getSlotTimeLabel(slotNum);
-    const subject = entry.subject || 'Subject';
+    const timeLabel = getSlotTimeShortLabel(slotNum);
+    const subject = String(entry.subject || 'Subject').trim();
     let secTag = '';
     if (includeSecTag && entry.section) {
         const secU = String(entry.section).trim().toUpperCase();
@@ -3864,7 +3848,7 @@ function formatWhatsAppPeriodLine(entry, includeSecTag) {
             secTag = ' [Sec ' + entry.section + ']';
         }
     }
-    return '• ' + timeLabel + secTag + ' [' + subject + ']: ' + formatWhatsAppRolls(entry.rollNumbers);
+    return timeLabel + secTag + ' *' + subject + '*: ' + formatWhatsAppRolls(entry.rollNumbers);
 }
 
 function entriesSpanMultipleSections(entries) {
@@ -3878,15 +3862,18 @@ function entriesSpanMultipleSections(entries) {
 
 function buildCombinedGroupWhatsAppMessage(groupTitle, dateStr, entries) {
     const formattedDate = formatWhatsAppDateDDMMYYYY(dateStr);
-    let msg = '📌 *MGM COLLEGE — ABSENTEE NOTICE*\n';
-    msg += groupTitle + ' · ' + formattedDate + '\n\n';
+    let msg = '*MGM COLLEGE — ABSENTEE NOTICE*\n';
+    msg += groupTitle + '\n';
+    msg += formattedDate + '\n\n';
 
-    const list = (entries || []).filter(hasWhatsAppAbsentees);
+    const list = (entries || []).filter(isWhatsAppSlotEntry);
     list.sort((a, b) => {
+        const slotDiff = (parseInt(a.slot, 10) || 1) - (parseInt(b.slot, 10) || 1);
+        if (slotDiff !== 0) return slotDiff;
         const secA = String(a.section || '').toUpperCase();
         const secB = String(b.section || '').toUpperCase();
         if (secA !== secB) return secA.localeCompare(secB);
-        return (parseInt(a.slot, 10) || 1) - (parseInt(b.slot, 10) || 1);
+        return String(a.subject || '').localeCompare(String(b.subject || ''));
     });
 
     if (list.length === 0) {
@@ -3895,7 +3882,8 @@ function buildCombinedGroupWhatsAppMessage(groupTitle, dateStr, entries) {
     }
 
     const showSec = entriesSpanMultipleSections(list);
-    list.forEach(e => {
+    list.forEach((e, idx) => {
+        if (idx > 0) msg += '\n';
         msg += formatWhatsAppPeriodLine(e, showSec) + '\n';
     });
 
@@ -3904,18 +3892,24 @@ function buildCombinedGroupWhatsAppMessage(groupTitle, dateStr, entries) {
 
 function buildSectionWhatsAppMessage(sectionTitle, dateStr, entries) {
     const formattedDate = formatWhatsAppDateDDMMYYYY(dateStr);
-    let msg = '📌 *MGM COLLEGE — ABSENTEE NOTICE*\n';
-    msg += sectionTitle + ' · ' + formattedDate + '\n\n';
+    let msg = '*MGM COLLEGE — ABSENTEE NOTICE*\n';
+    msg += sectionTitle + '\n';
+    msg += formattedDate + '\n\n';
 
-    const list = (entries || []).filter(hasWhatsAppAbsentees);
-    list.sort((a, b) => (parseInt(a.slot, 10) || 1) - (parseInt(b.slot, 10) || 1));
+    const list = (entries || []).filter(isWhatsAppSlotEntry);
+    list.sort((a, b) => {
+        const slotDiff = (parseInt(a.slot, 10) || 1) - (parseInt(b.slot, 10) || 1);
+        if (slotDiff !== 0) return slotDiff;
+        return String(a.subject || '').localeCompare(String(b.subject || ''));
+    });
 
     if (list.length === 0) {
         msg += 'No absentees recorded.\n';
         return msg.trim();
     }
 
-    list.forEach(e => {
+    list.forEach((e, idx) => {
+        if (idx > 0) msg += '\n';
         msg += formatWhatsAppPeriodLine(e, false) + '\n';
     });
 
@@ -3927,14 +3921,17 @@ function buildYearWhatsAppMessage(yearLabel, stream, dateStr, entries) {
     const yrPrefix = yearLabel.includes('1st') || yearLabel === 'I' ? 'I' :
                      yearLabel.includes('2nd') || yearLabel === 'II' ? 'II' : 'III';
 
-    let msg = '📌 *MGM COLLEGE — ABSENTEE NOTICE*\n';
-    msg += yrPrefix + ' ' + stream + ' · ' + formattedDate + '\n\n';
+    let msg = '*MGM COLLEGE — ABSENTEE NOTICE*\n';
+    msg += yrPrefix + ' ' + stream + '\n';
+    msg += formattedDate + '\n\n';
 
     const groupedBySec = {};
-    (entries || []).filter(hasWhatsAppAbsentees).forEach(e => {
-        const secLabel = e.section ? ('Sec ' + e.section) : 'General';
-        if (!groupedBySec[secLabel]) groupedBySec[secLabel] = [];
-        groupedBySec[secLabel].push(e);
+    (entries || []).filter(isWhatsAppSlotEntry).forEach(e => {
+        const sec = e.section || 'A';
+        const secU = String(sec).toUpperCase();
+        const key = (secU === 'ALL' || secU.indexOf('COMBIN') !== -1) ? 'Combined' : ('Sec ' + sec);
+        if (!groupedBySec[key]) groupedBySec[key] = [];
+        groupedBySec[key].push(e);
     });
 
     const secKeys = Object.keys(groupedBySec).sort();
@@ -3944,10 +3941,11 @@ function buildYearWhatsAppMessage(yearLabel, stream, dateStr, entries) {
     }
 
     secKeys.forEach(secKey => {
-        msg += yrPrefix + ' ' + stream + ' - ' + secKey + '\n';
+        msg += '*' + yrPrefix + ' ' + stream + ' — ' + secKey + '*\n';
         const secEntries = groupedBySec[secKey];
         secEntries.sort((a, b) => (parseInt(a.slot, 10) || 1) - (parseInt(b.slot, 10) || 1));
-        secEntries.forEach(e => {
+        secEntries.forEach((e, idx) => {
+            if (idx > 0) msg += '\n';
             msg += formatWhatsAppPeriodLine(e, false) + '\n';
         });
         msg += '\n';
