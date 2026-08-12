@@ -3824,9 +3824,8 @@ function formatWhatsAppRolls(rollNumbers) {
     if (!raw || raw.toUpperCase() === 'NIL' || raw.toUpperCase() === 'NONE') {
         return '*NIL*';
     }
-    // Keep one space after commas — readable for mixed codes like 24678, C0987
-    const cleaned = raw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean).join(', ');
-    return '*' + (cleaned || raw) + '*';
+    // Plain rolls (easier scan after bold slot/subject); keep commas readable
+    return raw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean).join(', ') || raw;
 }
 
 /** Include every submitted slot (NIL shown as *NIL*). */
@@ -3834,21 +3833,25 @@ function isWhatsAppSlotEntry(entry) {
     return !!(entry && (entry.subject || entry.slot || entry.rollNumbers != null));
 }
 
-/** Short line with blank line between slots: 9-9.55 *Subject*: *rolls* */
+/** Slot + section + subject emphasized (WhatsApp has no blue/underline — bold is the clear highlight).
+ *  Example: *9-9.55 [Sec A] Prog in C*: *12, 25*
+ */
 function formatWhatsAppPeriodLine(entry, includeSecTag) {
     const slotNum = parseInt(entry.slot, 10) || 1;
     const timeLabel = getSlotTimeShortLabel(slotNum);
     const subject = String(entry.subject || 'Subject').trim();
     let secTag = '';
-    if (includeSecTag && entry.section) {
+    const showSec = includeSecTag !== false;
+    if (showSec && entry.section) {
         const secU = String(entry.section).trim().toUpperCase();
         if (secU === 'ALL' || secU.indexOf('COMBIN') !== -1) {
             secTag = ' [Combined]';
         } else {
-            secTag = ' [Sec ' + entry.section + ']';
+            secTag = ' [Sec ' + String(entry.section).trim() + ']';
         }
     }
-    return timeLabel + secTag + ' *' + subject + '*: ' + formatWhatsAppRolls(entry.rollNumbers);
+    // Bold the whole "time + section + subject" block so it stands out from roll numbers
+    return '*' + timeLabel + secTag + ' ' + subject + '*: ' + formatWhatsAppRolls(entry.rollNumbers);
 }
 
 function entriesSpanMultipleSections(entries) {
@@ -3910,7 +3913,7 @@ function buildSectionWhatsAppMessage(sectionTitle, dateStr, entries) {
 
     list.forEach((e, idx) => {
         if (idx > 0) msg += '\n';
-        msg += formatWhatsAppPeriodLine(e, false) + '\n';
+        msg += formatWhatsAppPeriodLine(e, true) + '\n';
     });
 
     return msg.trim();
@@ -3946,7 +3949,7 @@ function buildYearWhatsAppMessage(yearLabel, stream, dateStr, entries) {
         secEntries.sort((a, b) => (parseInt(a.slot, 10) || 1) - (parseInt(b.slot, 10) || 1));
         secEntries.forEach((e, idx) => {
             if (idx > 0) msg += '\n';
-            msg += formatWhatsAppPeriodLine(e, false) + '\n';
+            msg += formatWhatsAppPeriodLine(e, true) + '\n';
         });
         msg += '\n';
     });
