@@ -1999,11 +1999,21 @@ async function syncOfflineEntries() {
             });
 
             try {
+                // Already on sheet? Mark synced — do NOT POST again (that flipped CREATED → UPDATED).
+                const already = await verifyAttendanceOnSheet(payload);
+                if (already.verified) {
+                    history[i].offline = false;
+                    history[i].syncNote = '';
+                    syncedCount++;
+                    continue;
+                }
+
                 await postWithRetry(targetUrl, payload, 2);
                 await new Promise(r => setTimeout(r, 900));
                 const verify = await verifyAttendanceOnSheet(payload);
                 if (verify.verified) {
                     history[i].offline = false;
+                    history[i].syncNote = '';
                     syncedCount++;
                 }
             } catch (err) {
@@ -4442,18 +4452,19 @@ function isWhatsAppSlotEntry(entry) {
     return !!(entry && (entry.subject || entry.slot || entry.rollNumbers != null));
 }
 
-/** Short readable line: 9-9.55 *Computer Networks*: *12, 25* */
+/** Short line: `9-9.55` *Computer Networks*: *12, 25*
+ *  Slot in monospace (WhatsApp highlights it) so every period stands out the same. */
 function formatWhatsAppPeriodLine(entry, includeSecTag) {
     const slotNum = parseInt(entry.slot, 10) || 1;
-    const timeLabel = getSlotTimeShortLabel(slotNum);
+    const timeLabel = '`' + getSlotTimeShortLabel(slotNum) + '`';
     const subject = String(entry.subject || 'Subject').trim();
     let secTag = '';
     if (includeSecTag && entry.section) {
         const secU = String(entry.section).trim().toUpperCase();
         if (secU === 'ALL' || secU.indexOf('COMBIN') !== -1) {
-            secTag = ' [Combined]';
+            secTag = ' *[Combined]*';
         } else {
-            secTag = ' [Sec ' + entry.section + ']';
+            secTag = ' *[Sec ' + entry.section + ']*';
         }
     }
     return timeLabel + secTag + ' *' + subject + '*: ' + formatWhatsAppRolls(entry.rollNumbers);
