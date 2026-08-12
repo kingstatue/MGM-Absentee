@@ -1401,9 +1401,40 @@ const SLOT_TIME_LABELS = {
     8: '4-4.55'
 };
 
+/** Normalize to YYYY-MM-DD for Today list matching. */
+function normalizeHistoryDate(val) {
+    if (!val && val !== 0) return '';
+    if (val instanceof Date) {
+        if (isNaN(val.getTime())) return '';
+        const y = val.getFullYear();
+        const m = String(val.getMonth() + 1).padStart(2, '0');
+        const d = String(val.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + d;
+    }
+    const s = String(val).trim();
+    if (!s) return '';
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+    const datePart = s.split(/[\sT]/)[0];
+    const parts = datePart.split(/[\/\.-]/);
+    if (parts.length === 3) {
+        const p0 = parseInt(parts[0], 10);
+        const p1 = parseInt(parts[1], 10);
+        const p2 = parseInt(parts[2], 10);
+        if (p0 > 1000) {
+            return p0 + '-' + String(p1).padStart(2, '0') + '-' + String(p2).padStart(2, '0');
+        }
+        if (p2 > 1000) {
+            return p2 + '-' + String(p1).padStart(2, '0') + '-' + String(p0).padStart(2, '0');
+        }
+    }
+    const parsed = new Date(s);
+    if (!isNaN(parsed.getTime())) return normalizeHistoryDate(parsed);
+    return s;
+}
+
 function entryKey(item) {
     return [
-        item.date || '',
+        normalizeHistoryDate(item.date) || '',
         item.year || '',
         item.section || '',
         (item.subject || '').trim().toLowerCase(),
@@ -1428,16 +1459,17 @@ function compactAttendanceHistory(history) {
     const today = getTodayISOString();
     let offlineKept = 0;
     let syncedTodayKept = 0;
-    const MAX_OFFLINE = 50;
-    const MAX_SYNCED_TODAY = 60;
+    const MAX_OFFLINE = 80;
+    const MAX_SYNCED_TODAY = 120;
 
     return history.filter(item => {
+        const itemDate = normalizeHistoryDate(item.date);
         if (item.offline === true) {
             if (offlineKept >= MAX_OFFLINE) return false;
             offlineKept++;
             return true;
         }
-        if (item.date === today) {
+        if (itemDate === today) {
             if (syncedTodayKept >= MAX_SYNCED_TODAY) return false;
             syncedTodayKept++;
             return true;
@@ -1456,9 +1488,10 @@ function getTodayEntries() {
     const today = getTodayISOString();
     const deptItems = readAllHistory().filter(item => (item.stream || 'BCA') === currentDept);
     // Show today's rows + any still-pending offline rows from other dates
-    const pendingOtherDays = deptItems.filter(item => item.offline === true && item.date !== today);
-    const todayItems = deptItems.filter(item => item.date === today);
-    return [...pendingOtherDays, ...todayItems].slice(0, 30);
+    const pendingOtherDays = deptItems.filter(item => item.offline === true && normalizeHistoryDate(item.date) !== today);
+    const todayItems = deptItems.filter(item => normalizeHistoryDate(item.date) === today);
+    // Cap high enough for a full college day (was 30 — hid ~15 entries)
+    return [...pendingOtherDays, ...todayItems].slice(0, 120);
 }
 
 function updateTodayBadge() {
