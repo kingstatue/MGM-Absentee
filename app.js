@@ -1415,26 +1415,31 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         const targetUrl = getWebhookUrl(currentDept);
         await postWithRetry(targetUrl, withAuth(payload), 2);
 
-        // Give Apps Script a moment to finish writing before verify
-        await new Promise(r => setTimeout(r, 1400));
-        const verify = await verifyAttendanceOnSheet(payload);
-        if (verify.verified) {
-            // Saved once on sheet — do NOT mark offline (that caused a 2nd POST → UPDATED)
-            await finishLocalSave(false);
-            demoteReplacedLocalSubjects(payload);
-            suppressAutoSyncUntil = Date.now() + 45000;
-            showSuccessToast(payload);
-            setTimeout(fetchTodayServerHistory, 800);
-            return { status: 'ok' };
-        }
+        // Fast path: show success immediately (verify runs in background)
+        suppressAutoSyncUntil = Date.now() + 45000;
+        await finishLocalSave(false);
+        demoteReplacedLocalSubjects(payload);
+        showSuccessToast(payload);
 
-        await finishLocalSave(true);
-        showCustomToast(
-            verify.offline ? 'Saved — verifying sheet…' : 'Saved locally — will confirm sheet sync',
-            'Entry is in Today\'s list. Tap Sync if the sheet badge stays pending.'
-        );
-        setTimeout(fetchTodayServerHistory, 2000);
-        return { status: 'offline' };
+        setTimeout(async () => {
+            try {
+                const verify = await verifyAttendanceOnSheet(payload);
+                if (!verify.verified) {
+                    saveToLocalHistory({
+                        ...payload,
+                        offline: true,
+                        syncNote: 'missing_on_sheet',
+                        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    });
+                    showCustomToast(
+                        'Saved on phone — confirming sheet…',
+                        'If badge stays pending, tap Sync in Today\'s list.'
+                    );
+                }
+            } catch (e) {}
+            fetchTodayServerHistory();
+        }, 500);
+        return { status: 'ok' };
 
     } catch (error) {
         console.warn('Error submitting attendance:', error);
@@ -4189,13 +4194,13 @@ function getSlotTimeLabel(slotNum) {
     return SLOT_TIME_MAP[s] || `Slot ${s}`;
 }
 
-/** Compact clock for WhatsApp lines, e.g. 9-9.55 */
+/** Compact clock for WhatsApp — avoid dd.mm patterns (WhatsApp auto-links those as dates). */
 const SLOT_TIME_SHORT_MAP = {
     1: '9-9.55',
     2: '10-10.55',
-    3: '11.10-12.05',
-    4: '12.10-1.05',
-    5: '1.05-2.00',
+    3: '11:10-12:05',
+    4: '12:10-1:05',
+    5: '1:05-2:00',
     6: '2-2.55',
     7: '3-3.55',
     8: '4-4.55'
@@ -4456,19 +4461,18 @@ function isWhatsAppSlotEntry(entry) {
     return !!(entry && (entry.subject || entry.slot || entry.rollNumbers != null));
 }
 
-/** Short line: `9-9.55` *Computer Networks*: *12, 25*
- *  Slot in monospace (WhatsApp highlights it) so every period stands out the same. */
+/** Short line: 9-9.55 *Computer Networks*: *12, 25* — plain time (no shade / no autolink). */
 function formatWhatsAppPeriodLine(entry, includeSecTag) {
     const slotNum = parseInt(entry.slot, 10) || 1;
-    const timeLabel = '`' + getSlotTimeShortLabel(slotNum) + '`';
+    const timeLabel = getSlotTimeShortLabel(slotNum);
     const subject = String(entry.subject || 'Subject').trim();
     let secTag = '';
     if (includeSecTag && entry.section) {
         const secU = String(entry.section).trim().toUpperCase();
         if (secU === 'ALL' || secU.indexOf('COMBIN') !== -1) {
-            secTag = ' *[Combined]*';
+            secTag = ' [Combined]';
         } else {
-            secTag = ' *[Sec ' + entry.section + ']*';
+            secTag = ' [Sec ' + entry.section + ']';
         }
     }
     return timeLabel + secTag + ' *' + subject + '*: ' + formatWhatsAppRolls(entry.rollNumbers);
