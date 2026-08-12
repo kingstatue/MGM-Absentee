@@ -24,11 +24,11 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <link rel="stylesheet" href="styles.css?v=v28.21-wa-plain-rolls">
+  <link rel="stylesheet" href="styles.css?v=v28.22-wa-revert">
   <script>
     // Auto-update on first open after GitHub Pages deploy (runs before app.js)
     (function () {
-      var EXPECTED = 'v28.21-wa-plain-rolls';
+      var EXPECTED = 'v28.22-wa-revert';
       var KEY = 'mgm_shell_ver';
       var reloading = false;
 
@@ -86,7 +86,7 @@
       // 2) Register SW with versioned URL so GitHub Pages cannot keep old sw.js forever
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          var swUrl = './sw.js?v=v67-wa-plain-rolls';
+          var swUrl = './sw.js?v=v68-wa-revert';
           navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' })
             .then(function (reg) {
               reg.update();
@@ -751,7 +751,7 @@
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js?v=v28.21-wa-plain-rolls"></script>
-  <script src="app.js?v=v28.21-wa-plain-rolls"></script>
+  <script src="parser.js?v=v28.22-wa-revert"></script>
+  <script src="app.js?v=v28.22-wa-revert"></script>
 </body>
 </html>

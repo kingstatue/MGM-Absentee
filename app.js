@@ -3824,8 +3824,9 @@ function formatWhatsAppRolls(rollNumbers) {
     if (!raw || raw.toUpperCase() === 'NIL' || raw.toUpperCase() === 'NONE') {
         return '*NIL*';
     }
-    // Plain rolls (easier scan after bold slot/subject); keep commas readable
-    return raw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean).join(', ') || raw;
+    // Bold rolls — readable for mixed codes like 24678, C0987
+    const cleaned = raw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean).join(', ');
+    return '*' + (cleaned || raw) + '*';
 }
 
 /** Include every submitted slot (NIL shown as *NIL*). */
@@ -3833,16 +3834,13 @@ function isWhatsAppSlotEntry(entry) {
     return !!(entry && (entry.subject || entry.slot || entry.rollNumbers != null));
 }
 
-/** Slot + section + subject emphasized (WhatsApp has no blue/underline — bold is the clear highlight).
- *  Example: *9-9.55 [Sec A] Prog in C*: *12, 25*
- */
+/** Plain time/section + bold subject & rolls: 9-9.55 [Sec A] *Prog in C*: *12, 25* */
 function formatWhatsAppPeriodLine(entry, includeSecTag) {
     const slotNum = parseInt(entry.slot, 10) || 1;
     const timeLabel = getSlotTimeShortLabel(slotNum);
     const subject = String(entry.subject || 'Subject').trim();
     let secTag = '';
-    const showSec = includeSecTag !== false;
-    if (showSec && entry.section) {
+    if (includeSecTag && entry.section) {
         const secU = String(entry.section).trim().toUpperCase();
         if (secU === 'ALL' || secU.indexOf('COMBIN') !== -1) {
             secTag = ' [Combined]';
@@ -3850,8 +3848,7 @@ function formatWhatsAppPeriodLine(entry, includeSecTag) {
             secTag = ' [Sec ' + String(entry.section).trim() + ']';
         }
     }
-    // Bold the whole "time + section + subject" block so it stands out from roll numbers
-    return '*' + timeLabel + secTag + ' ' + subject + '*: ' + formatWhatsAppRolls(entry.rollNumbers);
+    return timeLabel + secTag + ' *' + subject + '*: ' + formatWhatsAppRolls(entry.rollNumbers);
 }
 
 function entriesSpanMultipleSections(entries) {
