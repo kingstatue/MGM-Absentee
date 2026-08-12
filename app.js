@@ -1415,29 +1415,25 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         const targetUrl = getWebhookUrl(currentDept);
         await postWithRetry(targetUrl, withAuth(payload), 2);
 
-        await finishLocalSave(true);
-
         // Give Apps Script a moment to finish writing before verify
-        await new Promise(r => setTimeout(r, 1200));
+        await new Promise(r => setTimeout(r, 1400));
         const verify = await verifyAttendanceOnSheet(payload);
         if (verify.verified) {
-            saveToLocalHistory({
-                ...payload,
-                offline: false,
-                syncNote: '',
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            });
+            // Saved once on sheet — do NOT mark offline (that caused a 2nd POST → UPDATED)
+            await finishLocalSave(false);
             demoteReplacedLocalSubjects(payload);
+            suppressAutoSyncUntil = Date.now() + 45000;
             showSuccessToast(payload);
-            setTimeout(fetchTodayServerHistory, 600);
+            setTimeout(fetchTodayServerHistory, 800);
             return { status: 'ok' };
         }
 
+        await finishLocalSave(true);
         showCustomToast(
             verify.offline ? 'Saved — verifying sheet…' : 'Saved locally — will confirm sheet sync',
             'Entry is in Today\'s list. Tap Sync if the sheet badge stays pending.'
         );
-        setTimeout(fetchTodayServerHistory, 1500);
+        setTimeout(fetchTodayServerHistory, 2000);
         return { status: 'offline' };
 
     } catch (error) {
@@ -1961,6 +1957,10 @@ function showCustomToast(title, subtitle) {
 }
 
 async function syncOfflineEntries() {
+    if (Date.now() < suppressAutoSyncUntil) {
+        updateSyncButtonState();
+        return 0;
+    }
     const history = readAllHistory();
     const offlineItems = history.filter(item => item.offline === true);
     if (offlineItems.length === 0) {
@@ -2056,6 +2056,8 @@ function updateSyncButtonState() {
 }
 
 let isFetchingServerHistory = false;
+/** After a successful submit, skip auto re-POST so Raw Data stays CREATED. */
+let suppressAutoSyncUntil = 0;
 
 function historyMatchKey(item) {
     return entryKey(item) + '|' + (item.stream || 'BCA');
@@ -2159,9 +2161,11 @@ function fetchTodayServerHistory() {
         const pending = merged.filter(i =>
             i.offline === true &&
             (i.stream || 'BCA') === stream &&
-            normalizeHistoryDate(i.date) === dateVal
+            normalizeHistoryDate(i.date) === dateVal &&
+            String(i.syncNote || '').indexOf('replaced_on_sheet_by:') !== 0
         );
-        if (pending.length > 0 && navigator.onLine) {
+        // Do not auto re-POST right after a successful submit (keeps CREATED status)
+        if (pending.length > 0 && navigator.onLine && Date.now() >= suppressAutoSyncUntil) {
             setTimeout(() => { syncOfflineEntries(); }, 400);
         }
     };
