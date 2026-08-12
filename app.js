@@ -24,12 +24,11 @@ const DEPT_CONFIG = {
 
 
 // Google Apps Script Webhook Endpoints
-// Paste your Web App URL in BOTH places below (keep the quotes).
 const STREAM_WEBHOOK_URLS = {
     BCA: 'https://script.google.com/macros/s/AKfycbzsk5c_tKkt5ysv7ZsNUBMAl4G13vxpeC_p-2fNcbH_Sj3eTm2YwxLFJ-mAh8VgD-i8oQ/exec'
 };
 
-const DEFAULT_GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzsk5c_tKkt5ysv7ZsNUBMAl4G13vxpeC_p-2fNcbH_Sj3eTm2YwxLFJ-mAh8VgD-i8oQ/exec';
+const DEFAULT_GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzg-HkInidAz7Yt9udCNvDAbfnM1OEtOU3LbJRcupLaU4Mvkf-ANM3G49Cw2Rvn7Qfsiw/exec';
 
 function getWebhookUrl(deptCode) {
     const dept = deptCode || currentDept;
@@ -203,16 +202,11 @@ function verifyAttendanceOnSheet(payload) {
     ).then((check) => {
         if (!check || check.offline) return { verified: false, offline: true };
         if (!check.exists) return { verified: false, offline: false };
-        // STRICT: subject must match. A/B/C sheet rows are 1-per-slot — check may
-        // return a different subject in the same slot; that is NOT this entry.
-        const sheetSubj = String(check.subject || '').trim().toLowerCase();
-        const localSubj = String(payload.subject || '').trim().toLowerCase();
-        if (!sheetSubj || sheetSubj !== localSubj) {
-            return { verified: false, offline: false, wrongSubject: check.subject || '' };
-        }
         const sheetRolls = normalizeRollNumbers(check.rollNumbers).map(String).sort().join(',');
         const localRolls = normalizeRollNumbers(payload.rollNumbers).map(String).sort().join(',');
-        return { verified: sheetRolls === localRolls, offline: false };
+        const subjectOk = !check.subject ||
+            String(check.subject).trim().toLowerCase() === String(payload.subject || '').trim().toLowerCase();
+        return { verified: subjectOk && sheetRolls === localRolls, offline: false };
     }).catch(() => ({ verified: false, offline: true }));
 }
 
@@ -305,8 +299,6 @@ let isHODAuthenticated = true;
 let currentHODData = null;
 let currentHODYearFilter = 'ALL';
 let pendingHODTabSwitch = false;
-/** When editing from Today's list — original row identity for replace / move. */
-let editingOriginalEntry = null;
 
 let isListening = false;
 let recognition = null;
@@ -423,78 +415,6 @@ function computeRollDiff(prevRollInput, newRollInput) {
     };
 }
 
-function isCombinedSectionValue(sec) {
-    const n = normalizeSectionCode(sec);
-    if (!n) return false;
-    const raw = String(sec || '').toUpperCase();
-    return n === 'ALL' || raw.includes('COMBIN');
-}
-
-/** Regular class sections A / B / C (incl. AIML) — not Combined. */
-function isSpecificClassSection(sec) {
-    const n = normalizeSectionCode(sec);
-    if (!n || n === 'ALL' || n === 'COMMON' || n === 'A_B') return false;
-    return n === 'A' || n === 'B' || n === 'C' || n === 'C_AIML' || n === 'C_TP' || n === 'C_AF';
-}
-
-function sectionDisplayLabel(sec) {
-    if (isCombinedSectionValue(sec)) return 'Combined (Sec A, B, C)';
-    const n = normalizeSectionCode(sec);
-    if (n === 'C_AIML') return 'Sec C (AIML)';
-    if (n === 'A_B') return 'Sec A & B';
-    if (n === 'COMMON') return 'Common (all classes)';
-    return 'Sec ' + (sec || n || '?');
-}
-
-/**
- * Combined (ALL) and Sec A/B/C must never share the same slot.
- * Subject does not matter for this rule.
- */
-function isCombinedVsSpecificSectionConflict(sec1, sec2) {
-    const aComb = isCombinedSectionValue(sec1);
-    const bComb = isCombinedSectionValue(sec2);
-    const aSpec = isSpecificClassSection(sec1);
-    const bSpec = isSpecificClassSection(sec2);
-    return (aComb && bSpec) || (bComb && aSpec);
-}
-
-function subjectsAreSame(subj1, subj2) {
-    const a = String(subj1 || '').trim().toLowerCase();
-    const b = String(subj2 || '').trim().toLowerCase();
-    if (!a || !b) return false;
-    return a === b;
-}
-
-/** Parallel Combined electives (Kannada / Hindi / Sanskrit) share a slot but must stay separate. */
-function isParallelCombinedSubjectEntry(sec1, subj1, sec2, subj2) {
-    if (!isCombinedSectionValue(sec1) || !isCombinedSectionValue(sec2)) return false;
-    const a = String(subj1 || '').trim();
-    const b = String(subj2 || '').trim();
-    if (!a || !b) return false;
-    return !subjectsAreSame(a, b);
-}
-
-function isSameAttendanceIdentity(a, b) {
-    if (!a || !b) return false;
-    return normalizeHistoryDate(a.date) === normalizeHistoryDate(b.date)
-        && String(a.year || '') === String(b.year || '')
-        && normalizeSectionCode(a.section) === normalizeSectionCode(b.section)
-        && subjectsAreSame(a.subject, b.subject)
-        && (parseInt(a.slot, 10) || 1) === (parseInt(b.slot, 10) || 1)
-        && (a.stream || 'BCA') === (b.stream || 'BCA');
-}
-
-function findCombinedVsSectionBlockEntry(history, cleanStream, cleanDate, cleanYear, cleanSlot, cleanSection, skipEntry) {
-    return (history || []).find(item => {
-        if ((item.stream || 'BCA') !== cleanStream) return false;
-        if (normalizeHistoryDate(item.date) !== normalizeHistoryDate(cleanDate)) return false;
-        if (item.year !== cleanYear) return false;
-        if ((parseInt(item.slot, 10) || 1) !== cleanSlot) return false;
-        if (skipEntry && isSameAttendanceIdentity(item, skipEntry)) return false;
-        return isCombinedVsSpecificSectionConflict(item.section || 'A', cleanSection);
-    }) || null;
-}
-
 function isSectionOverlap(sec1, sec2) {
     const n1 = normalizeSectionCode(sec1);
     const n2 = normalizeSectionCode(sec2);
@@ -514,85 +434,36 @@ function checkDoubleEntryLive(dateVal, yearVal, sectionVal, subjectVal, slotVal,
     const cleanSubject = (subjectVal || '').trim();
     const cleanYear = yearVal || 'First Year';
     const cleanStream = currentDept || 'BCA';
-    const effectiveSection = isElectiveOrLanguageSubject(cleanSubject) ? 'ALL' : (sectionVal || 'A');
 
     const localHistory = JSON.parse(localStorage.getItem('mgm_attendance_history') || '[]');
-    const skipSelf = editingOriginalEntry;
-
-    // Hard rule: Combined vs Sec A/B/C cannot share a slot
-    const sectionLock = findCombinedVsSectionBlockEntry(
-        localHistory, cleanStream, cleanDate, cleanYear, cleanSlot, effectiveSection, skipSelf
-    );
-    if (sectionLock) {
-        alertBoxElem.style.display = 'block';
-        alertBoxElem.className = 'alert-banner active';
-        const existingLabel = sectionDisplayLabel(sectionLock.section);
-        const newLabel = sectionDisplayLabel(effectiveSection);
-        alertBoxElem.innerHTML = `
-            <div style="font-size: 0.85rem; line-height: 1.45;">
-                <strong style="color: #f87171;">⛔ Cannot use ${escapeHTML(newLabel)} for this slot</strong><br>
-                Already entered: <strong>${escapeHTML(existingLabel)}</strong> · ${escapeHTML(sectionLock.subject || '')}
-                (Absentees: ${escapeHTML(sectionLock.rollNumbers || 'NIL')})<br>
-                <span style="opacity: 0.95;">Combined and Sec A/B/C cannot share the same slot. Change section or slot before submit.</span>
-            </div>`;
-        if (submitBtnTextElem) submitBtnTextElem.textContent = 'Blocked — Change Section';
-        return sectionLock;
-    }
-
-    // Find peer conflict (skip the row currently being edited)
+    
+    // Find any existing entry for same Date + Stream + Year + Slot with overlapping Section
     const existingEntry = localHistory.find(item => {
         if ((item.stream || 'BCA') !== cleanStream) return false;
-        if (normalizeHistoryDate(item.date) !== normalizeHistoryDate(cleanDate)) return false;
+        if (item.date !== cleanDate) return false;
         if (item.year !== cleanYear) return false;
         if (parseInt(item.slot, 10) !== cleanSlot) return false;
-        if (skipSelf && isSameAttendanceIdentity(item, skipSelf)) return false;
 
         const sec1 = item.section || 'A';
-        const sec2 = effectiveSection || 'A';
+        const sec2 = sectionVal || 'A';
         if (!isSectionOverlap(sec1, sec2)) return false;
 
-        if (isParallelCombinedSubjectEntry(sec1, item.subject, sec2, cleanSubject)) {
-            return false;
+        const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || sec1.toLowerCase().includes('combin');
+        const isComb2 = sec2 === 'ALL' || sec2.toUpperCase() === 'ALL' || sec2.toLowerCase().includes('combin');
+        const isElec1 = isElectiveOrLanguageSubject(item.subject);
+        const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
+
+        // If BOTH are Combined AND BOTH are Elective/Language subjects with different names, they are parallel electives!
+        if (isComb1 && isComb2 && isElec1 && isElec2 && cleanSubject.length > 0 && item.subject.trim().toLowerCase() !== cleanSubject.toLowerCase()) {
+            return false; // Not a conflict!
         }
 
-        return true;
+        return true; // Conflict or Match found!
     });
 
-    const formIdentity = {
-        date: cleanDate,
-        year: cleanYear,
-        section: effectiveSection,
-        subject: cleanSubject,
-        slot: cleanSlot,
-        stream: cleanStream
-    };
-    const editingSelf = !!(skipSelf && isSameAttendanceIdentity(skipSelf, formIdentity));
-    const editingMoved = !!(skipSelf && !editingSelf);
-
-    if (editingSelf || editingMoved) {
-        alertBoxElem.style.display = 'block';
-        alertBoxElem.className = 'alert-banner active';
-        if (editingMoved) {
-            alertBoxElem.innerHTML = `
-            <div style="font-size: 0.85rem; line-height: 1.4;">
-                <strong style="color: #fbbf24;">✏️ Editing — identity changed</strong><br>
-                Old: ${escapeHTML(sectionDisplayLabel(skipSelf.section))} · ${escapeHTML(skipSelf.subject || '')} · Slot ${escapeHTML(String(skipSelf.slot))}<br>
-                New: ${escapeHTML(sectionDisplayLabel(effectiveSection))} · ${escapeHTML(cleanSubject || '')} · Slot ${cleanSlot}<br>
-                <span style="opacity: 0.95;">On submit you will be asked to confirm. The old entry will be removed after save.</span>
-            </div>`;
-        } else {
-            alertBoxElem.innerHTML = `
-            <div style="font-size: 0.85rem; line-height: 1.4;">
-                <strong style="color: #93c5fd;">✏️ Editing this entry</strong><br>
-                Change rolls, slot, subject, or section as needed. Submit will ask before saving.
-            </div>`;
-        }
-        if (submitBtnTextElem) submitBtnTextElem.textContent = 'Save Edited Entry';
-        if (!existingEntry) return skipSelf;
-    }
-
     if (existingEntry) {
-        const sameSubject = subjectsAreSame(existingEntry.subject, cleanSubject);
+        const sameSubject = cleanSubject.length > 0 &&
+            existingEntry.subject.trim().toLowerCase() === cleanSubject.toLowerCase();
         const diff = computeRollDiff(existingEntry.rollNumbers, rollVal);
         const prevStr = diff.prevRolls.length > 0 ? diff.prevRolls.join(', ') : 'NIL';
 
@@ -600,66 +471,41 @@ function checkDoubleEntryLive(dateVal, yearVal, sectionVal, subjectVal, slotVal,
         alertBoxElem.className = 'alert-banner active';
 
         if (!sameSubject) {
-            const secLabel = sectionDisplayLabel(existingEntry.section);
+            const secLabel = existingEntry.section === 'ALL' ? 'Combined (Sec A,B,C)' : `Sec ${existingEntry.section}`;
             alertBoxElem.innerHTML = `
             <div style="display: flex; gap: 10px; align-items: flex-start;">
                 <div style="flex: 1; font-size: 0.85rem; line-height: 1.4;">
-                    <strong style="color: #fbbf24;">⚠️ Slot already occupied (${escapeHTML(secLabel)})</strong><br>
+                    <strong style="color: #fbbf24;">⚠️ Slot already occupied (${secLabel})</strong><br>
                     ${escapeHTML(cleanDate)} · ${escapeHTML(cleanYear)} · Slot ${cleanSlot}<br>
-                    Existing entry: <strong>${escapeHTML(existingEntry.subject)}</strong> — Absentees: <strong>${escapeHTML(prevStr)}</strong><br>
-                    <span style="opacity: 0.9;">Submitting will ask: Merge / Replace / Cancel.</span>
+                    Existing entry: <strong>${escapeHTML(existingEntry.subject)}</strong> (${secLabel}) — Absentees: <strong>${escapeHTML(prevStr)}</strong><br>
+                    <span style="opacity: 0.9;">Submitting will update/replace this slot.</span>
                 </div>
             </div>`;
-            if (submitBtnTextElem) submitBtnTextElem.textContent = 'Review Conflict on Submit';
+            if (submitBtnTextElem) submitBtnTextElem.textContent = 'Replace Existing Entry';
         } else {
             const addedStr = diff.addedRolls.length > 0 ? diff.addedRolls.join(', ') : 'None';
+            const deletedStr = diff.deletedRolls.length > 0 ? diff.deletedRolls.join(', ') : 'None';
             const retainedStr = diff.retainedRolls.length > 0 ? diff.retainedRolls.join(', ') : 'None';
             alertBoxElem.innerHTML = `
             <div style="display: flex; gap: 10px; align-items: flex-start;">
                 <div style="flex: 1; font-size: 0.85rem; line-height: 1.4;">
                     <strong style="color: #fbbf24;">ℹ️ Entry already exists for ${escapeHTML(existingEntry.subject)} (Slot ${cleanSlot})</strong><br>
-                    Previous: <strong>${escapeHTML(prevStr)}</strong><br>
-                    <span style="opacity: 0.9;">Submit will ask Merge or Replace.</span>
+                    Previous Teacher Entry: <strong>${escapeHTML(prevStr)}</strong><br>
+                    <span style="opacity: 0.9;">Submitting will merge absentees from both teachers so no data is lost.</span>
                     <div style="margin-top: 6px; padding: 6px 8px; background: rgba(0,0,0,0.25); border-radius: 6px; display: flex; flex-wrap: wrap; gap: 8px;">
                         <span style="color: #34d399;"><strong>+ Added:</strong> ${escapeHTML(addedStr)}</span>
                         <span style="color: #a7f3d0;"><strong>Unchanged:</strong> ${escapeHTML(retainedStr)}</span>
                     </div>
                 </div>
             </div>`;
-            if (submitBtnTextElem) submitBtnTextElem.textContent = 'Merge or Replace on Submit';
+            if (submitBtnTextElem) submitBtnTextElem.textContent = 'Merge & Save Attendance';
         }
         return existingEntry;
     }
 
-    if (editingSelf || editingMoved) {
-        return skipSelf;
-    }
-
-    // Soft note when another Combined language already exists in this slot
-    const parallelPeer = localHistory.find(item => {
-        if ((item.stream || 'BCA') !== cleanStream) return false;
-        if (normalizeHistoryDate(item.date) !== normalizeHistoryDate(cleanDate)) return false;
-        if (item.year !== cleanYear) return false;
-        if (parseInt(item.slot, 10) !== cleanSlot) return false;
-        if (skipSelf && isSameAttendanceIdentity(item, skipSelf)) return false;
-        return isParallelCombinedSubjectEntry(item.section, item.subject, effectiveSection, cleanSubject);
-    });
-    if (parallelPeer && isCombinedSectionValue(effectiveSection)) {
-        alertBoxElem.style.display = 'block';
-        alertBoxElem.className = 'alert-banner active';
-        alertBoxElem.innerHTML = `
-            <div style="font-size: 0.85rem; line-height: 1.4;">
-                <strong style="color: #34d399;">✅ Parallel Combined elective</strong><br>
-                <strong>${escapeHTML(parallelPeer.subject)}</strong> already has absentees for this slot.
-                Your <strong>${escapeHTML(cleanSubject || 'subject')}</strong> will be saved as a <strong>separate</strong> entry (no merge).
-            </div>`;
-        if (submitBtnTextElem) submitBtnTextElem.textContent = 'Submit Absentee (Separate Subject)';
-        return null;
-    }
-
     alertBoxElem.style.display = 'none';
     alertBoxElem.innerHTML = '';
-    if (submitBtnTextElem) submitBtnTextElem.textContent = editingOriginalEntry ? 'Save Edited Entry' : 'Submit Absentee';
+    if (submitBtnTextElem) submitBtnTextElem.textContent = 'Submit Absentee';
     return null;
 }
 
@@ -752,23 +598,6 @@ function getTodayISOString() {
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
-}
-
-/** Block future dates — classes not started yet, no absentee entry for tomorrow+. */
-function clampAttendanceDate(dateStr) {
-    const today = getTodayISOString();
-    const d = normalizeHistoryDate(dateStr) || today;
-    return d > today ? today : d;
-}
-
-function applyNoFutureDateLimits() {
-    const today = getTodayISOString();
-    const fields = [dateInput, directDateInput, document.getElementById('hodDatePicker')];
-    fields.forEach(el => {
-        if (!el) return;
-        el.setAttribute('max', today);
-        if (el.value && el.value > today) el.value = today;
-    });
 }
 
 
@@ -964,8 +793,7 @@ function autoProcessSpeech(text) {
     if (!parsedData.subject) parsedData.subject = deptConfig.defaultSubject;
     console.log('Parsed Attendance Data:', parsedData);
 
-    const todayStr = clampAttendanceDate(parsedData.date || getTodayISOString());
-    if (parsedData) parsedData.date = todayStr;
+    const todayStr = parsedData.date || getTodayISOString();
 
     const directDurationSelect = document.getElementById('directDurationSelect');
     const durationSelect = document.getElementById('durationSelect');
@@ -1008,7 +836,7 @@ function openConfirmationModal(data) {
 
     const deptConfig = DEPT_CONFIG[currentDept] || DEPT_CONFIG.BCA;
 
-    dateInput.value = clampAttendanceDate(data.date || getTodayISOString());
+    dateInput.value = data.date || getTodayISOString();
     rollNumbersInput.value = Array.isArray(data.rollNumbers) ? data.rollNumbers.join(', ') : data.rollNumbers;
     yearSelect.value = data.year || 'First Year';
     sectionSelect.value = data.section || 'A';
@@ -1061,9 +889,7 @@ function showSlotConflictDialog(params) {
                 </div>
 
                 <div style="font-size: 0.88rem; line-height: 1.5; margin-bottom: 14px; color: #cbd5e1;">
-                    ${params.editMode
-                        ? 'You are <strong>editing</strong> an entry. Choose how to save your changes for <strong>Slot ' + escapeHTML(String(params.slot)) + '</strong>.'
-                        : 'An entry already exists for <strong>Slot ' + escapeHTML(String(params.slot)) + '</strong> on <strong>' + escapeHTML(params.date) + '</strong> (' + escapeHTML(params.year) + ' ' + escapeHTML(sectionDisplayLabel(params.section)) + ').'}
+                    An entry already exists for <strong>Slot ${escapeHTML(String(params.slot))}</strong> on <strong>${escapeHTML(params.date)}</strong> (${escapeHTML(params.year)} Sec ${escapeHTML(params.section)}).
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px;">
@@ -1091,7 +917,7 @@ function showSlotConflictDialog(params) {
                         🔀 MERGE BOTH ENTRIES (${mergedRollsArr.length} Absentees)
                     </button>
                     <button type="button" id="conflictReplaceBtn" style="background: #991b1b; color: #ffffff; border: none; font-weight: 700; padding: 12px; font-size: 0.88rem; border-radius: 10px; cursor: pointer; width: 100%; min-height: 44px; touch-action: manipulation;">
-                        ${params.editMode ? '✏️ Save My Edited List (Replace)' : '✏️ Overwrite / Replace with My List Only'}
+                        ✏️ Overwrite / Replace with My List Only
                     </button>
                     <button type="button" id="conflictCancelBtn" style="background: #334155; color: #cbd5e1; border: none; font-weight: 600; padding: 10px; font-size: 0.84rem; border-radius: 10px; cursor: pointer; width: 100%; min-height: 40px; touch-action: manipulation;">
                         ❌ Cancel Submission
@@ -1125,65 +951,8 @@ function showSlotConflictDialog(params) {
     });
 }
 
-/** Hard block: Combined vs Sec A/B/C in same slot — Cancel only (no force submit). */
-function showCombinedSectionBlockDialog(params) {
-    return new Promise((resolve) => {
-        const oldModal = document.getElementById('slotConflictModalDialog');
-        if (oldModal && oldModal.parentNode) oldModal.parentNode.removeChild(oldModal);
-
-        document.body.style.overflow = 'hidden';
-        const dialog = document.createElement('div');
-        dialog.id = 'slotConflictModalDialog';
-        dialog.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; z-index: 9999999; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.88); padding: 16px; box-sizing: border-box; overflow-y: auto;';
-
-        const existingLabel = sectionDisplayLabel(params.existingSection);
-        const newLabel = sectionDisplayLabel(params.section);
-        const tryingCombined = isCombinedSectionValue(params.section);
-
-        dialog.innerHTML = `
-            <div class="modal-card" style="max-width: 480px; width: 100%; padding: 20px; border: 2px solid #ef4444; background: #0f172a; color: #ffffff; border-radius: 16px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9); box-sizing: border-box;">
-                <h3 style="margin: 0 0 12px 0; font-size: 1.1rem; color: #f87171; font-weight: 800;">⛔ Section conflict — cannot submit</h3>
-                <div style="font-size: 0.9rem; line-height: 1.5; color: #cbd5e1; margin-bottom: 14px;">
-                    Slot <strong>${escapeHTML(String(params.slot))}</strong> on <strong>${escapeHTML(params.date)}</strong>
-                    (${escapeHTML(params.year)}) already has a <strong>${escapeHTML(existingLabel)}</strong> entry.
-                </div>
-                <div style="background: #1e293b; padding: 12px; border-radius: 10px; border-left: 4px solid #ef4444; margin-bottom: 10px;">
-                    <div style="font-size: 0.82rem; color: #fca5a5; font-weight: 700;">Already entered</div>
-                    <div style="margin-top: 4px;"><strong>${escapeHTML(existingLabel)}</strong> · ${escapeHTML(params.existingSubj || 'Subject')}</div>
-                    <div style="color: #f87171; font-weight: 700; margin-top: 2px;">Absentees: ${escapeHTML(params.existingRolls || 'NIL')}</div>
-                </div>
-                <div style="background: #1e293b; padding: 12px; border-radius: 10px; border-left: 4px solid #3b82f6; margin-bottom: 14px;">
-                    <div style="font-size: 0.82rem; color: #93c5fd; font-weight: 700;">Your attempt</div>
-                    <div style="margin-top: 4px;"><strong>${escapeHTML(newLabel)}</strong> · ${escapeHTML(params.subject || 'Subject')}</div>
-                </div>
-                <div style="background: #450a0a; border: 1px solid #ef4444; padding: 12px; border-radius: 10px; margin-bottom: 16px; font-size: 0.86rem; line-height: 1.45; color: #fecaca;">
-                    ${tryingCombined
-                        ? 'This slot already has Sec A / B / C attendance. <strong>Combined (ALL)</strong> is not allowed for the same slot.'
-                        : 'This slot already has <strong>Combined (ALL)</strong> attendance. Sec A / B / C is not allowed for the same slot.'}
-                    <br><span style="opacity: 0.9;">Change the section (or pick another slot), then submit again.</span>
-                </div>
-                <button type="button" id="conflictCancelBtn" style="background: #334155; color: #ffffff; border: none; font-weight: 800; padding: 14px; font-size: 0.95rem; border-radius: 10px; cursor: pointer; width: 100%; min-height: 48px; touch-action: manipulation;">
-                    ❌ Cancel — Go Back &amp; Change Section
-                </button>
-            </div>
-        `;
-
-        document.body.appendChild(dialog);
-        const cleanup = () => {
-            document.body.style.overflow = '';
-            if (dialog && dialog.parentNode) dialog.parentNode.removeChild(dialog);
-            resolve({ action: 'cancel' });
-        };
-        const cBtn = dialog.querySelector('#conflictCancelBtn');
-        if (cBtn) cBtn.addEventListener('click', (e) => { e.preventDefault(); cleanup(); });
-        dialog.addEventListener('click', (e) => { if (e.target === dialog) cleanup(); });
-    });
-}
-
 async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectVal, slotVal, btnElem, textElem, spinnerElem) {
-    const cleanDate = clampAttendanceDate(dateVal || getTodayISOString());
-    if (dateInput && dateInput.value !== cleanDate) dateInput.value = cleanDate;
-    if (directDateInput && directDateInput.value !== cleanDate) directDateInput.value = cleanDate;
+    const cleanDate = dateVal || getTodayISOString();
     const cleanSlot = parseInt(slotVal, 10) || 1;
     let cleanSubject = (subjectVal || '').trim();
     let cleanSection = sectionVal || 'A';
@@ -1201,25 +970,32 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
     const rollNumbersArray = normalizeRollNumbers(rollNumbersRaw);
     let formattedRolls = rollNumbersArray.length > 0 ? rollNumbersArray.join(', ') : 'NIL';
 
+    // Local Storage conflict check (Instant 0ms)
     const history = JSON.parse(localStorage.getItem('mgm_attendance_history') || '[]');
     const cleanStream = currentDept || 'BCA';
-    const editOrig = editingOriginalEntry;
-    const newIdentity = {
-        date: cleanDate,
-        year: yearVal,
-        section: cleanSection,
-        subject: cleanSubject,
-        slot: cleanSlot,
-        stream: cleanStream
-    };
-    const editingSelf = !!(editOrig && isSameAttendanceIdentity(editOrig, newIdentity));
-    const editingMoved = !!(editOrig && !editingSelf);
+    const existingEntry = history.find(item => {
+        if ((item.stream || 'BCA') !== cleanStream) return false;
+        if (item.date !== cleanDate) return false;
+        if (item.year !== yearVal) return false;
+        if (parseInt(item.slot, 10) !== cleanSlot) return false;
 
-    // 1) Hard block: Combined vs Sec A/B/C (subject ignored)
-    const localSectionLock = findCombinedVsSectionBlockEntry(
-        history, cleanStream, cleanDate, yearVal, cleanSlot, cleanSection, editOrig
-    );
+        const sec1 = item.section || 'A';
+        const sec2 = cleanSection || 'A';
+        if (!isSectionOverlap(sec1, sec2)) return false;
 
+        const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || sec1.toLowerCase().includes('combin');
+        const isComb2 = cleanSection === 'ALL' || (cleanSection || '').toUpperCase() === 'ALL' || (cleanSection || '').toLowerCase().includes('combin');
+        const isElec1 = isElectiveOrLanguageSubject(item.subject);
+        const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
+
+        if (isComb1 && isComb2 && isElec1 && isElec2 && item.subject.trim().toLowerCase() !== cleanSubject.toLowerCase()) {
+            return false; // Parallel elective
+        }
+
+        return true;
+    });
+
+    // Always check Google Sheet too (other teachers / other devices)
     let sheetConflict = { exists: false };
     try {
         sheetConflict = await checkSheetSlotConflict(cleanDate, yearVal, cleanSection, cleanSlot, cleanSubject);
@@ -1227,139 +1003,38 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         sheetConflict = { exists: false, offline: true };
     }
 
-    if (sheetConflict.exists && !sheetConflict.offline) {
-        const sheetSec = sheetConflict.section || cleanSection;
-        // Ignore parallel Combined languages
-        if (isParallelCombinedSubjectEntry(sheetSec, sheetConflict.subject, cleanSection, cleanSubject)) {
-            sheetConflict = { exists: false, parallelElective: true };
-        } else if (editOrig && isSameAttendanceIdentity({
-            date: cleanDate,
-            year: sheetConflict.year || yearVal,
-            section: sheetSec,
-            subject: sheetConflict.subject,
-            slot: cleanSlot,
-            stream: cleanStream
-        }, editOrig)) {
-            // Sheet row is the one we are editing
-            sheetConflict = { ...sheetConflict, editingSelf: true };
-        }
-    }
+    const hasConflict = !!existingEntry || !!(sheetConflict.exists && !sheetConflict.offline);
+    let finalRolls = formattedRolls;
+    let finalRollsArr = rollNumbersArray;
+    let conflictChoice = 'create';
 
-    const sheetSectionLock = (sheetConflict.exists && !sheetConflict.offline && !sheetConflict.editingSelf
-        && isCombinedVsSpecificSectionConflict(sheetConflict.section || cleanSection, cleanSection))
-        ? sheetConflict
-        : null;
+    if (hasConflict) {
+        // Prefer sheet truth when both exist (cross-device)
+        const prevSubj = (sheetConflict.exists && sheetConflict.subject)
+            ? sheetConflict.subject
+            : (existingEntry ? existingEntry.subject : cleanSubject);
+        const prevRolls = (sheetConflict.exists && sheetConflict.rollNumbers != null)
+            ? sheetConflict.rollNumbers
+            : (existingEntry ? existingEntry.rollNumbers : 'NIL');
 
-    if (localSectionLock || sheetSectionLock) {
-        const blocker = localSectionLock || {
-            section: sheetSectionLock.section,
-            subject: sheetSectionLock.subject,
-            rollNumbers: sheetSectionLock.rollNumbers
-        };
-        await showCombinedSectionBlockDialog({
+        const userChoice = await showSlotConflictDialog({
             date: cleanDate,
             year: yearVal,
             section: cleanSection,
             slot: cleanSlot,
             subject: cleanSubject,
-            existingSection: blocker.section,
-            existingSubj: blocker.subject,
-            existingRolls: blocker.rollNumbers
+            existingSubj: prevSubj,
+            existingRolls: prevRolls,
+            newRolls: formattedRolls
         });
-        return { status: 'cancelled' };
-    }
 
-    // 2) Peer conflict on same slot (skip self when editing)
-    const existingEntry = history.find(item => {
-        if ((item.stream || 'BCA') !== cleanStream) return false;
-        if (normalizeHistoryDate(item.date) !== normalizeHistoryDate(cleanDate)) return false;
-        if (item.year !== yearVal) return false;
-        if (parseInt(item.slot, 10) !== cleanSlot) return false;
-        if (editOrig && isSameAttendanceIdentity(item, editOrig)) return false;
-
-        const sec1 = item.section || 'A';
-        const sec2 = cleanSection || 'A';
-        if (!isSectionOverlap(sec1, sec2)) return false;
-        if (isParallelCombinedSubjectEntry(sec1, item.subject, sec2, cleanSubject)) return false;
-        return true;
-    });
-
-    if (sheetConflict.exists && !sheetConflict.offline && sheetConflict.editingSelf) {
-        // treat as no foreign sheet conflict
-        sheetConflict = { exists: false, editingSelf: true };
-    }
-
-    let hasConflict = !!existingEntry || !!(sheetConflict.exists && !sheetConflict.offline);
-    let finalRolls = formattedRolls;
-    let finalRollsArr = rollNumbersArray;
-    let conflictChoice = 'create';
-
-    // Editing same identity → ask Replace / Merge / Cancel
-    if (editingSelf && !hasConflict) {
-        hasConflict = true;
-        sheetConflict = {
-            exists: true,
-            subject: editOrig.subject,
-            section: editOrig.section,
-            rollNumbers: editOrig.rollNumbers,
-            editingSelf: true
-        };
-    }
-
-    if (hasConflict) {
-        const prevSubj = (sheetConflict.exists && sheetConflict.subject)
-            ? sheetConflict.subject
-            : (existingEntry ? existingEntry.subject : (editOrig ? editOrig.subject : cleanSubject));
-        const prevRolls = (sheetConflict.exists && sheetConflict.rollNumbers != null)
-            ? sheetConflict.rollNumbers
-            : (existingEntry ? existingEntry.rollNumbers : (editOrig ? editOrig.rollNumbers : 'NIL'));
-        const prevSec = (sheetConflict.exists && sheetConflict.section)
-            ? sheetConflict.section
-            : (existingEntry ? existingEntry.section : (editOrig ? editOrig.section : cleanSection));
-
-        if (isParallelCombinedSubjectEntry(prevSec, prevSubj, cleanSection, cleanSubject)) {
-            hasConflict = false;
-            conflictChoice = 'create';
-        } else if (
-            !subjectsAreSame(prevSubj, cleanSubject)
-            && isCombinedSectionValue(cleanSection)
-            && isCombinedSectionValue(prevSec)
-        ) {
-            // Parallel Combined languages only when BOTH are Combined
-            hasConflict = false;
-            conflictChoice = 'create';
-        } else {
-            const userChoice = await showSlotConflictDialog({
-                date: cleanDate,
-                year: yearVal,
-                section: cleanSection,
-                slot: cleanSlot,
-                subject: cleanSubject,
-                existingSubj: prevSubj,
-                existingRolls: prevRolls,
-                newRolls: formattedRolls,
-                editMode: !!(editingSelf || editingMoved)
-            });
-
-            if (!userChoice || userChoice.action === 'cancel') {
-                return { status: 'cancelled' };
-            }
-
-            conflictChoice = userChoice.action;
-            finalRolls = userChoice.mergedRolls;
-            finalRollsArr = userChoice.mergedArr;
+        if (!userChoice || userChoice.action === 'cancel') {
+            return { status: 'cancelled' };
         }
-    }
 
-    // If identity moved while editing, confirm then delete old row after successful save
-    if (editingMoved) {
-        const okMove = confirm(
-            'You changed slot / section / subject / date.\n\n' +
-            'Old entry will be removed after the new one is saved:\n' +
-            sectionDisplayLabel(editOrig.section) + ' · ' + (editOrig.subject || '') + ' · Slot ' + editOrig.slot + '\n\n' +
-            'Continue?'
-        );
-        if (!okMove) return { status: 'cancelled' };
+        conflictChoice = userChoice.action;
+        finalRolls = userChoice.mergedRolls;
+        finalRollsArr = userChoice.mergedArr;
     }
 
     // Now disable button & show spinner during actual HTTP POST transmission
@@ -1397,28 +1072,18 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
     if (textElem) textElem.style.opacity = '0';
     if (spinnerElem) spinnerElem.style.display = 'block';
 
-    const finishLocalSave = async (offlineFlag) => {
-        saveToLocalHistory({
-            ...payload,
-            offline: !!offlineFlag,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        });
-        if (editingMoved && editOrig) {
-            await removeMovedEditOriginal(editOrig);
-        }
-        editingOriginalEntry = null;
-        closeConfirmationModal();
-        resetAllInputs();
-    };
-
     try {
         const targetUrl = getWebhookUrl(currentDept);
         await postWithRetry(targetUrl, withAuth(payload), 2);
 
-        // Fast path: show success immediately (verify runs in background)
-        suppressAutoSyncUntil = Date.now() + 45000;
-        await finishLocalSave(false);
-        demoteReplacedLocalSubjects(payload);
+        // Sheet write already sent — show success now; confirm badge in background
+        saveToLocalHistory({
+            ...payload,
+            offline: false,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+        closeConfirmationModal();
+        resetAllInputs();
         showSuccessToast(payload);
 
         setTimeout(async () => {
@@ -1428,22 +1093,23 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
                     saveToLocalHistory({
                         ...payload,
                         offline: true,
-                        syncNote: 'missing_on_sheet',
                         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                     });
-                    showCustomToast(
-                        'Saved on phone — confirming sheet…',
-                        'If badge stays pending, tap Sync in Today\'s list.'
-                    );
                 }
             } catch (e) {}
             fetchTodayServerHistory();
-        }, 500);
+        }, 400);
         return { status: 'ok' };
 
     } catch (error) {
         console.warn('Error submitting attendance:', error);
-        await finishLocalSave(true);
+        saveToLocalHistory({
+            ...payload,
+            offline: true,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+        closeConfirmationModal();
+        resetAllInputs();
         showCustomToast(
             '⚠️ Saved Locally (Network Offline)',
             'Saved on phone. Will auto-sync to Google Sheet when online or tap "Sync" in Today\'s History.'
@@ -1453,32 +1119,6 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         if (btnElem) btnElem.disabled = false;
         if (textElem) textElem.style.opacity = '1';
         if (spinnerElem) spinnerElem.style.display = 'none';
-    }
-}
-
-/** After edit moves identity (slot/section/subject), delete the previous Raw Data row. */
-async function removeMovedEditOriginal(orig) {
-    if (!orig) return;
-    try {
-        const hist = readAllHistory().filter(item => !isSameAttendanceIdentity(item, orig));
-        localStorage.setItem('mgm_attendance_history', JSON.stringify(compactAttendanceHistory(hist)));
-        renderHistoryList();
-    } catch (e) {}
-    try {
-        const targetUrl = getWebhookUrl(currentDept);
-        await postWithRetry(targetUrl, withAuth({
-            action: 'delete',
-            date: orig.date,
-            year: orig.year,
-            section: orig.section,
-            subject: orig.subject,
-            slot: orig.slot,
-            stream: orig.stream || currentDept || 'BCA',
-            rollNumbers: 'NIL',
-            changesSummary: 'Removed old entry after edit move'
-        }), 2);
-    } catch (e) {
-        console.warn('Could not delete old edit row from sheet:', e);
     }
 }
 
@@ -1636,14 +1276,12 @@ function showSuccessToast(payload) {
 }
 
 function resetAllInputs() {
-    editingOriginalEntry = null;
     clearTranscript();
     const todayStr = getTodayISOString();
     const deptConfig = DEPT_CONFIG[currentDept] || DEPT_CONFIG.BCA;
     manualTextInput.value = '';
     directDateInput.value = todayStr;
     dateInput.value = todayStr;
-    applyNoFutureDateLimits();
     directRollInput.value = '';
     setSubjectValue(directSubjectInput, deptConfig.defaultSubject);
     setSubjectValue(subjectInput, deptConfig.defaultSubject);
@@ -1763,87 +1401,14 @@ const SLOT_TIME_LABELS = {
     8: '4-4.55'
 };
 
-function normalizeHistoryDate(val) {
-    if (!val && val !== 0) return '';
-    if (val instanceof Date && !isNaN(val.getTime())) {
-        const y = val.getFullYear();
-        const m = String(val.getMonth() + 1).padStart(2, '0');
-        const d = String(val.getDate()).padStart(2, '0');
-        return y + '-' + m + '-' + d;
-    }
-    const s = String(val).trim();
-    if (!s) return '';
-    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
-    // DD/MM/YYYY or DD-MM-YYYY
-    const parts = s.split(/[\sT]+/)[0].split(/[\/\.-]/);
-    if (parts.length === 3) {
-        const p0 = parseInt(parts[0], 10);
-        const p1 = parseInt(parts[1], 10);
-        const p2 = parseInt(parts[2], 10);
-        if (p2 > 1000) {
-            const day = (p1 > 12 && p0 <= 12) ? p1 : p0;
-            const month = (p1 > 12 && p0 <= 12) ? p0 : p1;
-            return p2 + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
-        }
-        if (p0 > 1000) {
-            return p0 + '-' + String(p1).padStart(2, '0') + '-' + String(p2).padStart(2, '0');
-        }
-    }
-    const parsed = new Date(s);
-    if (!isNaN(parsed.getTime())) {
-        return normalizeHistoryDate(parsed);
-    }
-    return s;
-}
-
 function entryKey(item) {
     return [
-        normalizeHistoryDate(item.date) || '',
-        hodYearPrefix(item.year),
-        normalizeSectionCode(item.section || ''),
+        item.date || '',
+        item.year || '',
+        item.section || '',
         (item.subject || '').trim().toLowerCase(),
         String(parseInt(item.slot, 10) || 1)
     ].join('|');
-}
-
-/** Sheet identity without subject — A/B/C keep only ONE raw row per slot. */
-function slotSheetKey(item) {
-    return [
-        normalizeHistoryDate(item.date) || '',
-        hodYearPrefix(item.year),
-        normalizeSectionCode(item.section || ''),
-        String(parseInt(item.slot, 10) || 1),
-        (item.stream || 'BCA')
-    ].join('|');
-}
-
-/**
- * After a subject is confirmed on sheet for a slot, other local subjects for that
- * same slot are no longer on Raw Data (overwrite). Mark them pending/replaced.
- * Combined electives (Kannada/Hindi/Sanskrit) share a slot as parallel rows — never demote.
- */
-function demoteReplacedLocalSubjects(savedEntry) {
-    if (isCombinedSectionValue(savedEntry && savedEntry.section)) return;
-
-    const savedKey = slotSheetKey(savedEntry);
-    const savedSubj = String(savedEntry.subject || '').trim().toLowerCase();
-    const history = readAllHistory();
-    let changed = false;
-    const next = history.map(item => {
-        if ((item.stream || 'BCA') !== (savedEntry.stream || 'BCA')) return item;
-        if (isCombinedSectionValue(item.section)) return item;
-        if (slotSheetKey(item) !== savedKey) return item;
-        if (String(item.subject || '').trim().toLowerCase() === savedSubj) return item;
-        changed = true;
-        return {
-            ...item,
-            offline: true,
-            syncNote: 'replaced_on_sheet_by:' + (savedEntry.subject || '')
-        };
-    });
-    if (changed) {
-        localStorage.setItem('mgm_attendance_history', JSON.stringify(compactAttendanceHistory(next)));
-    }
 }
 
 function readAllHistory() {
@@ -1867,13 +1432,12 @@ function compactAttendanceHistory(history) {
     const MAX_SYNCED_TODAY = 60;
 
     return history.filter(item => {
-        const itemDate = normalizeHistoryDate(item.date);
         if (item.offline === true) {
             if (offlineKept >= MAX_OFFLINE) return false;
             offlineKept++;
             return true;
         }
-        if (itemDate === today) {
+        if (item.date === today) {
             if (syncedTodayKept >= MAX_SYNCED_TODAY) return false;
             syncedTodayKept++;
             return true;
@@ -1892,9 +1456,9 @@ function getTodayEntries() {
     const today = getTodayISOString();
     const deptItems = readAllHistory().filter(item => (item.stream || 'BCA') === currentDept);
     // Show today's rows + any still-pending offline rows from other dates
-    const pendingOtherDays = deptItems.filter(item => item.offline === true && normalizeHistoryDate(item.date) !== today);
-    const todayItems = deptItems.filter(item => normalizeHistoryDate(item.date) === today);
-    return [...pendingOtherDays, ...todayItems].slice(0, 60);
+    const pendingOtherDays = deptItems.filter(item => item.offline === true && item.date !== today);
+    const todayItems = deptItems.filter(item => item.date === today);
+    return [...pendingOtherDays, ...todayItems].slice(0, 30);
 }
 
 function updateTodayBadge() {
@@ -1928,7 +1492,7 @@ function updateTodayBadge() {
 // Local log + durable offline queue (offline rows survive past midnight)
 function saveToLocalHistory(entry) {
     const today = getTodayISOString();
-    const entryDate = normalizeHistoryDate(entry.date) || today;
+    const entryDate = entry.date || today;
     let history = readAllHistory();
 
     const normalized = {
@@ -1966,10 +1530,6 @@ function showCustomToast(title, subtitle) {
 }
 
 async function syncOfflineEntries() {
-    if (Date.now() < suppressAutoSyncUntil) {
-        updateSyncButtonState();
-        return 0;
-    }
     const history = readAllHistory();
     const offlineItems = history.filter(item => item.offline === true);
     if (offlineItems.length === 0) {
@@ -1992,7 +1552,7 @@ async function syncOfflineEntries() {
                 action: item.action || 'create',
                 isUpdate: !!(item.isUpdate || item.action === 'update'),
                 stream: item.stream || currentDept || 'BCA',
-                date: normalizeHistoryDate(item.date) || item.date,
+                date: item.date,
                 rollNumbers: Array.isArray(item.rollNumbers)
                     ? item.rollNumbers.join(', ')
                     : (item.rollNumbers == null || String(item.rollNumbers).trim() === '' ? 'NIL' : String(item.rollNumbers)),
@@ -2000,29 +1560,21 @@ async function syncOfflineEntries() {
                 section: item.section,
                 subject: item.subject,
                 slot: String(parseInt(item.slot, 10) || 1),
-                previousRollNumbers: item.previousRollNumbers || 'NIL',
-                addedRollNumbers: item.addedRollNumbers || 'NIL',
-                deletedRollNumbers: item.deletedRollNumbers || 'NIL',
-                retainedRollNumbers: item.retainedRollNumbers || 'NIL',
                 changesSummary: item.changesSummary || 'Synced from phone (was pending)'
             });
 
             try {
-                // Already on sheet? Mark synced — do NOT POST again (that flipped CREATED → UPDATED).
+                // Raw Data may already have it — check first, don't re-upload
                 const already = await verifyAttendanceOnSheet(payload);
                 if (already.verified) {
                     history[i].offline = false;
-                    history[i].syncNote = '';
                     syncedCount++;
                     continue;
                 }
-
-                await postWithRetry(targetUrl, payload, 2);
-                await new Promise(r => setTimeout(r, 900));
+                await postWithRetry(targetUrl, payload, 1);
                 const verify = await verifyAttendanceOnSheet(payload);
                 if (verify.verified) {
                     history[i].offline = false;
-                    history[i].syncNote = '';
                     syncedCount++;
                 }
             } catch (err) {
@@ -2031,18 +1583,12 @@ async function syncOfflineEntries() {
         }
     }
 
-    localStorage.setItem('mgm_attendance_history', JSON.stringify(compactAttendanceHistory(history)));
+    localStorage.setItem('mgm_attendance_history', JSON.stringify(history));
     renderHistoryList();
     updateSyncButtonState();
 
     if (syncedCount > 0) {
-        showCustomToast('⚡ Synced ' + syncedCount + ' entry(s)!', 'Uploaded pending records to Google Sheet.');
-        setTimeout(fetchTodayServerHistory, 800);
-    } else if (offlineItems.length > 0) {
-        showCustomToast(
-            'Still pending: ' + offlineItems.length,
-            'Could not confirm sheet write. Check internet and tap Sync again.'
-        );
+        showCustomToast('⚡ Synced ' + syncedCount + ' entry(s)!', 'Confirmed on Google Sheet.');
     }
     return syncedCount;
 }
@@ -2065,8 +1611,6 @@ function updateSyncButtonState() {
 }
 
 let isFetchingServerHistory = false;
-/** After a successful submit, skip auto re-POST so Raw Data stays CREATED. */
-let suppressAutoSyncUntil = 0;
 
 function historyMatchKey(item) {
     return entryKey(item) + '|' + (item.stream || 'BCA');
@@ -2084,113 +1628,54 @@ function fetchTodayServerHistory() {
     const timeout = setTimeout(() => {
         isFetchingServerHistory = false;
         try { delete window[cbName]; } catch (e) {}
-    }, 8000);
+    }, 6000);
 
     window[cbName] = function (data) {
         clearTimeout(timeout);
         isFetchingServerHistory = false;
         try { delete window[cbName]; } catch (e) {}
 
-        if (!(data && data.result === 'success' && Array.isArray(data.entries))) {
-            // Keep whatever is already in Today's list if sheet sync fails
-            renderHistoryList();
-            return;
-        }
+        if (data && data.result === 'success' && Array.isArray(data.entries)) {
+            const serverEntries = data.entries.map(e => ({
+                stream: stream,
+                date: dateVal,
+                year: e.year || 'First Year',
+                section: e.section || 'A',
+                subject: e.subject || 'Subject',
+                slot: parseInt(e.slot, 10) || 1,
+                rollNumbers: e.rollNumbers || 'NIL',
+                offline: false,
+                timestamp: 'From Sheet'
+            }));
 
-        const serverEntries = data.entries.map(e => ({
-            stream: stream,
-            date: normalizeHistoryDate(e.date) || dateVal,
-            year: e.year || 'First Year',
-            section: e.section || 'A',
-            subject: e.subject || 'Subject',
-            slot: parseInt(e.slot, 10) || 1,
-            rollNumbers: e.rollNumbers || 'NIL',
-            offline: false,
-            timestamp: 'From Sheet'
-        })).filter(e => normalizeHistoryDate(e.date) === dateVal || !e.date);
+            const history = readAllHistory();
+            const byKey = new Map();
 
-        const history = readAllHistory();
-        const byKey = new Map();
-
-        // Always keep offline queue + other streams / other dates + local today rows
-        history.forEach(item => {
-            const k = historyMatchKey(item);
-            byKey.set(k, item);
-        });
-
-        // If sheet returned nothing, do NOT wipe local Today's entries
-        if (serverEntries.length === 0) {
-            const mergedEmpty = compactAttendanceHistory(Array.from(byKey.values()));
-            localStorage.setItem('mgm_attendance_history', JSON.stringify(mergedEmpty));
-            renderHistoryList();
-            return;
-        }
-
-        // Merge sheet rows into local (sheet wins for same key unless local offline pending)
-        const serverKeys = new Set();
-        const sheetBySlot = new Map();
-        serverEntries.forEach(sEntry => {
-            const k = historyMatchKey(sEntry);
-            serverKeys.add(k);
-            sheetBySlot.set(slotSheetKey(sEntry), sEntry);
-            const existing = byKey.get(k);
-            if (existing && existing.offline === true) return;
-            byKey.set(k, sEntry);
-        });
-
-        // Reconcile badges:
-        // - Combined: many subjects per slot (Kannada/Hindi/Sanskrit) — never "replaced by"
-        // - Sec A/B/C: one subject per slot — different subject on sheet = replaced
-        byKey.forEach((item, k) => {
-            if ((item.stream || 'BCA') !== stream) return;
-            if (normalizeHistoryDate(item.date) !== dateVal) return;
-
-            const onSheetExact = serverKeys.has(k);
-            if (onSheetExact) {
-                byKey.set(k, { ...item, offline: false, syncNote: '' });
-                return;
-            }
-
-            if (isCombinedSectionValue(item.section)) {
-                const peerOnSheet = serverEntries.some(s =>
-                    isCombinedSectionValue(s.section) &&
-                    slotSheetKey(s) === slotSheetKey(item) &&
-                    subjectsAreSame(s.subject, item.subject)
-                );
-                if (peerOnSheet) {
-                    byKey.set(k, { ...item, offline: false, syncNote: '' });
-                } else {
-                    byKey.set(k, { ...item, offline: true, syncNote: item.syncNote || 'missing_on_sheet' });
+            // Keep offline queue (any date) + other streams / other dates
+            history.forEach(item => {
+                const k = historyMatchKey(item);
+                if (item.offline === true) {
+                    byKey.set(k, item);
+                    return;
                 }
-                return;
-            }
+                const itemStream = item.stream || 'BCA';
+                if (itemStream !== stream || item.date !== dateVal) {
+                    byKey.set(k, item);
+                }
+                // today's synced rows for this stream come from server below
+            });
 
-            const sheetSlot = sheetBySlot.get(slotSheetKey(item));
-            if (sheetSlot) {
-                const sheetSubj = String(sheetSlot.subject || '').trim();
-                byKey.set(k, {
-                    ...item,
-                    offline: true,
-                    syncNote: 'replaced_on_sheet_by:' + sheetSubj
-                });
-            } else {
-                byKey.set(k, { ...item, offline: true, syncNote: item.syncNote || 'missing_on_sheet' });
-            }
-        });
+            // Sheet is source of truth for today's list (cross-device)
+            serverEntries.forEach(sEntry => {
+                const k = historyMatchKey(sEntry);
+                // Sheet already has this row → clear pending badge (do not keep "waiting to sync")
+                byKey.set(k, sEntry);
+            });
 
-        const merged = compactAttendanceHistory(Array.from(byKey.values()));
-        localStorage.setItem('mgm_attendance_history', JSON.stringify(merged));
-        renderHistoryList();
-
-        const pending = merged.filter(i =>
-            i.offline === true &&
-            (i.stream || 'BCA') === stream &&
-            normalizeHistoryDate(i.date) === dateVal &&
-            String(i.syncNote || '').indexOf('replaced_on_sheet_by:') !== 0
-        );
-        // Do not auto re-POST right after a successful submit (keeps CREATED status)
-        if (pending.length > 0 && navigator.onLine && Date.now() >= suppressAutoSyncUntil) {
-            setTimeout(() => { syncOfflineEntries(); }, 400);
+            const merged = compactAttendanceHistory(Array.from(byKey.values()));
+            localStorage.setItem('mgm_attendance_history', JSON.stringify(merged));
+            renderHistoryList();
+            updateSyncButtonState();
         }
     };
 
@@ -2208,7 +1693,6 @@ function fetchTodayServerHistory() {
         clearTimeout(timeout);
         isFetchingServerHistory = false;
         try { delete window[cbName]; } catch (e) {}
-        renderHistoryList();
     };
     document.body.appendChild(scriptEl);
 }
@@ -2238,11 +1722,8 @@ function renderHistoryList() {
             ? ' · ' + escapeHTML(item.date)
             : '';
 
-        const statusBadge = item.offline
-            ? (String(item.syncNote || '').indexOf('replaced_on_sheet_by:') === 0
-                ? '<span class="badge badge-warning" style="background: rgba(245,158,11,0.2); color: #fbbf24; border: 1px solid rgba(245,158,11,0.35);">Not on sheet — replaced by ' +
-                  escapeHTML(String(item.syncNote).replace('replaced_on_sheet_by:', '')) + '</span>'
-                : '<span class="badge badge-warning" style="background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3);">Not on sheet (Pending Sync)</span>')
+        const statusBadge = item.offline 
+            ? '<span class="badge badge-warning" style="background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3);">Offline (Pending Sync)</span>'
             : '<span class="badge badge-success">Synced to Sheet</span>';
 
         return (
@@ -2287,39 +1768,16 @@ function editHistoryEntry(index) {
     const item = today[index];
     if (!item) return;
 
-    editingOriginalEntry = {
-        date: item.date,
-        year: item.year,
-        section: item.section,
-        subject: item.subject,
-        slot: item.slot,
-        stream: item.stream || currentDept || 'BCA',
-        rollNumbers: item.rollNumbers
-    };
-
-    const deptConfig = DEPT_CONFIG[currentDept] || DEPT_CONFIG.BCA;
     dateInput.value = item.date || getTodayISOString();
     rollNumbersInput.value = item.rollNumbers === 'NIL' ? '' : (Array.isArray(item.rollNumbers) ? item.rollNumbers.join(', ') : item.rollNumbers);
     yearSelect.value = item.year || 'First Year';
-
-    // Ensure Combined / AIML options exist before setting value
-    updateSectionSelects(true, currentDept, yearSelect.value);
     sectionSelect.value = item.section || 'A';
-    if (sectionSelect.value !== (item.section || 'A') && item.section) {
-        const opt = document.createElement('option');
-        opt.value = item.section;
-        opt.textContent = sectionDisplayLabel(item.section);
-        sectionSelect.appendChild(opt);
-        sectionSelect.value = item.section;
-    }
-
     setSubjectValue(subjectInput, item.subject || deptConfig.defaultSubject);
     slotSelect.value = item.slot ? item.slot.toString() : '1';
 
     directDateInput.value = dateInput.value;
     directRollInput.value = rollNumbersInput.value;
     directYearSelect.value = yearSelect.value;
-    updateSectionSelects(true, currentDept, directYearSelect.value);
     directSectionSelect.value = sectionSelect.value;
     setSubjectValue(directSubjectInput, subjectInput.value);
     directSlotSelect.value = slotSelect.value;
@@ -2331,7 +1789,6 @@ function editHistoryEntry(index) {
         };
     }
 
-    if (submitBtnText) submitBtnText.textContent = 'Save Edited Entry';
     updateModalDoubleEntryCheck();
     historyDrawer.classList.remove('active');
     confirmationModal.classList.add('active');
@@ -2394,7 +1851,6 @@ let currentDateTrack = getTodayISOString();
 
 function checkAndRefreshDate() {
     const freshDate = getTodayISOString();
-    applyNoFutureDateLimits();
     if (freshDate !== currentDateTrack) {
         currentDateTrack = freshDate;
         if (dateInput) dateInput.value = freshDate;
@@ -3386,18 +2842,6 @@ document.addEventListener('DOMContentLoaded', () => {
     currentDateTrack = todayStr;
     if (dateInput) dateInput.value = todayStr;
     if (directDateInput) directDateInput.value = todayStr;
-    applyNoFutureDateLimits();
-    [dateInput, directDateInput, document.getElementById('hodDatePicker')].forEach(el => {
-        if (!el) return;
-        el.addEventListener('change', () => {
-            const clamped = clampAttendanceDate(el.value);
-            if (el.value !== clamped) {
-                el.value = clamped;
-                showCustomToast('Future date not allowed', 'Attendance can only be for today or earlier.');
-            }
-            applyNoFutureDateLimits();
-        });
-    });
     if (todayBadge) {
         const options = { month: 'short', day: 'numeric', year: 'numeric' };
         todayBadge.textContent = 'Today - ' + new Date().toLocaleDateString(undefined, options);
@@ -3846,7 +3290,7 @@ function initSubjectManager() {
 
 // Version upgrade check to purge stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
-    const APP_VER = 'v28.7_sync_truth';
+    const APP_VER = 'v27.16_wa_all_nil';
     if (localStorage.getItem('mgm_app_ver') !== APP_VER) {
         localStorage.removeItem('mgm_cloud_subjects');
         localStorage.setItem('mgm_app_ver', APP_VER);
@@ -4021,60 +3465,6 @@ function initHODPortal() {
     }
 }
 
-/** Add phone-only / pending rows into HOD data so WhatsApp is not missing them. */
-function mergeLocalPendingIntoHODData(sheetData, stream, dateVal) {
-    const targetDate = normalizeHistoryDate(dateVal);
-    const sheetEntries = Array.isArray(sheetData && sheetData.entries) ? sheetData.entries.slice() : [];
-    const byKey = new Map();
-
-    sheetEntries.forEach(e => {
-        const mapped = {
-            date: normalizeHistoryDate(e.date) || targetDate,
-            year: e.year || '',
-            section: e.section || '',
-            subject: e.subject || '',
-            slot: parseInt(e.slot, 10) || 1,
-            rollNumbers: e.rollNumbers == null || String(e.rollNumbers).trim() === ''
-                ? 'NIL'
-                : (Array.isArray(e.rollNumbers) ? e.rollNumbers.join(', ') : String(e.rollNumbers)),
-            stream: stream
-        };
-        byKey.set(historyMatchKey(mapped), mapped);
-    });
-
-    let pendingLocalCount = 0;
-    readAllHistory().forEach(item => {
-        if ((item.stream || 'BCA') !== stream) return;
-        if (normalizeHistoryDate(item.date) !== targetDate) return;
-        const mapped = {
-            date: targetDate,
-            year: item.year || '',
-            section: item.section || '',
-            subject: item.subject || '',
-            slot: parseInt(item.slot, 10) || 1,
-            rollNumbers: Array.isArray(item.rollNumbers)
-                ? item.rollNumbers.join(', ')
-                : (item.rollNumbers == null || String(item.rollNumbers).trim() === '' ? 'NIL' : String(item.rollNumbers)),
-            stream: stream
-        };
-        const k = historyMatchKey(mapped);
-        if (!byKey.has(k)) {
-            byKey.set(k, mapped);
-            pendingLocalCount++;
-        } else if (item.offline === true) {
-            // Prefer latest phone rolls while sync is still pending
-            byKey.set(k, mapped);
-        }
-    });
-
-    return {
-        ...sheetData,
-        entries: Array.from(byKey.values()),
-        pendingLocalCount: pendingLocalCount,
-        count: byKey.size
-    };
-}
-
 function fetchHODAbsentees() {
     const hodStreamSelect = document.getElementById('hodStreamSelect');
     const hodDatePicker = document.getElementById('hodDatePicker');
@@ -4102,19 +3492,8 @@ function fetchHODAbsentees() {
         if (hodFetchSpinner) hodFetchSpinner.style.display = 'none';
 
         if (data && data.result === 'success') {
-            const merged = mergeLocalPendingIntoHODData(data, stream, dateVal);
-            currentHODData = merged;
-            renderHODSectionCards(merged);
-            if (merged.pendingLocalCount > 0) {
-                if (hodStatusMessage) {
-                    hodStatusMessage.style.display = 'flex';
-                    hodStatusMessage.innerHTML =
-                        '<span>⚠️ Sheet has ' + (data.entries || []).length +
-                        ' row(s); phone has ' + merged.pendingLocalCount +
-                        ' extra pending. Tap <strong>Sync</strong> in Today\'s list, then Fetch again.</span>';
-                }
-                if (navigator.onLine) setTimeout(() => { syncOfflineEntries(); }, 300);
-            }
+            currentHODData = data;
+            renderHODSectionCards(data);
         } else {
             if (hodStatusMessage) {
                 hodStatusMessage.style.display = 'flex';
@@ -4140,10 +3519,7 @@ function fetchHODAbsentees() {
         if (hodFetchSpinner) hodFetchSpinner.style.display = 'none';
 
         const localHistory = JSON.parse(localStorage.getItem('mgm_attendance_history') || '[]');
-        const filtered = localHistory.filter(item =>
-            normalizeHistoryDate(item.date) === normalizeHistoryDate(dateVal) &&
-            (item.stream || 'BCA') === stream
-        );
+        const filtered = localHistory.filter(item => item.date === dateVal && (item.stream || 'BCA') === stream);
         
         const fallbackData = {
             result: 'success',
@@ -4213,45 +3589,6 @@ function getSlotTimeLabel(slotNum) {
     return SLOT_TIME_MAP[s] || `Slot ${s}`;
 }
 
-/** Compact clock for WhatsApp — avoid dd.mm patterns (WhatsApp auto-links those as dates). */
-const SLOT_TIME_SHORT_MAP = {
-    1: '9-9.55',
-    2: '10-10.55',
-    3: '11:10-12:05',
-    4: '12:10-1:05',
-    5: '1:05-2:00',
-    6: '2-2.55',
-    7: '3-3.55',
-    8: '4-4.55'
-};
-
-function getSlotTimeShortLabel(slotNum) {
-    const s = parseInt(slotNum, 10) || 1;
-    return SLOT_TIME_SHORT_MAP[s] || ('Slot ' + s);
-}
-
-/** Normalize year label → I / II / III (handles First/Second, 1st/2nd, I/II/III). */
-function hodYearPrefix(yearVal) {
-    const y = String(yearVal || '').trim().toUpperCase();
-    if (!y) return 'I';
-    if (/\bTHIRD\b|\b3RD\b|\bIII\b|(^|[^I])\b3\b/.test(y) || y === '3' || y.startsWith('III')) return 'III';
-    if (/\bSECOND\b|\b2ND\b|\bII\b|(^|[^I])\b2\b/.test(y) || y === '2' || (y.startsWith('II') && !y.startsWith('III'))) return 'II';
-    if (/\bFIRST\b|\b1ST\b|(^|[^I])\b1\b/.test(y) || y === '1' || y === 'I') return 'I';
-    // Roman-only fallbacks (order matters: III before II)
-    if (y.indexOf('III') !== -1) return 'III';
-    if (y.indexOf('II') !== -1) return 'II';
-    if (y === 'I' || y.indexOf('I ') === 0) return 'I';
-    return 'I';
-}
-
-function hodYearCardPrefix(secTitle) {
-    const t = String(secTitle || '');
-    if (t.startsWith('III ') || t.startsWith('III-')) return 'III';
-    if (t.startsWith('II ') || t.startsWith('II-')) return 'II';
-    if (t.startsWith('I ') || t.startsWith('I-')) return 'I';
-    return hodYearPrefix(t);
-}
-
 function renderHODSectionCards(data) {
     const container = document.getElementById('hodSectionCardsContainer');
     const globalShareContainer = document.getElementById('hodGlobalShareContainer');
@@ -4280,17 +3617,14 @@ function renderHODSectionCards(data) {
     const hasSections = DEPT_CONFIG[stream] ? DEPT_CONFIG[stream].hasSections : true;
 
     entries.forEach(entry => {
-        const yrPrefix = hodYearPrefix(entry.year);
+        const yrPrefix = entry.year.includes('First') || entry.year === '1' ? 'I' :
+                         entry.year.includes('Second') || entry.year === '2' ? 'II' : 'III';
+        
         const yearFullLabel = yrPrefix === 'I' ? '1st Year' : (yrPrefix === 'II' ? '2nd Year' : '3rd Year');
 
         let sectionTitle = `${yrPrefix} ${stream}`;
         if (hasSections && entry.section) {
-            const secU = String(entry.section).trim().toUpperCase();
-            if (secU === 'ALL' || secU.indexOf('COMBIN') !== -1) {
-                sectionTitle += ` - Combined`;
-            } else {
-                sectionTitle += ` - Section ${entry.section}`;
-            }
+            sectionTitle += ` - Section ${entry.section}`;
         }
 
         if (!groupedBySec[sectionTitle]) groupedBySec[sectionTitle] = [];
@@ -4312,26 +3646,17 @@ function renderHODSectionCards(data) {
     });
 
     let html = '';
-    const sectionKeys = Object.keys(groupedBySec).sort((a, b) => {
-        const ya = hodYearCardPrefix(a);
-        const yb = hodYearCardPrefix(b);
-        const order = { I: 1, II: 2, III: 3 };
-        if (order[ya] !== order[yb]) return order[ya] - order[yb];
-        return a.localeCompare(b);
-    });
+    const sectionKeys = Object.keys(groupedBySec);
 
     // Render Year Filter Tabs if there are multiple sections
-    const yearsPresent = [...new Set(Object.keys(groupedByYear))].sort((a, b) => {
-        const order = { '1st Year': 1, '2nd Year': 2, '3rd Year': 3 };
-        return (order[a] || 9) - (order[b] || 9);
-    });
+    const yearsPresent = [...new Set(Object.keys(groupedByYear))].sort();
     if (yearsPresent.length > 0) {
         html += '<div class="year-filter-tabs">';
         html += `<button type="button" class="year-filter-tab ${currentHODYearFilter === 'ALL' ? 'active' : ''}" data-year-filter="ALL" onclick="filterHODSectionCards('ALL')">All Sections (${sectionKeys.length})</button>`;
         
         yearsPresent.forEach(yrLabel => {
             const yrCode = yrLabel.includes('1st') ? 'I' : (yrLabel.includes('2nd') ? 'II' : 'III');
-            const count = Object.keys(groupedBySec).filter(k => hodYearCardPrefix(k) === yrCode).length;
+            const count = Object.keys(groupedBySec).filter(k => k.startsWith(yrCode)).length;
             if (count > 0) {
                 html += `<button type="button" class="year-filter-tab ${currentHODYearFilter === yrCode ? 'active' : ''}" data-year-filter="${yrCode}" onclick="filterHODSectionCards('${yrCode}')">${yrLabel} (${count})</button>`;
             }
@@ -4341,7 +3666,7 @@ function renderHODSectionCards(data) {
 
     sectionKeys.forEach((secTitle, index) => {
         const secEntries = groupedBySec[secTitle];
-        const yrPrefix = hodYearCardPrefix(secTitle);
+        const yrPrefix = secTitle.startsWith('I ') ? 'I' : (secTitle.startsWith('II ') ? 'II' : 'III');
         const isDisplay = (currentHODYearFilter === 'ALL' || currentHODYearFilter === yrPrefix) ? 'block' : 'none';
         const encodedMsg = encodeURIComponent(buildSectionWhatsAppMessage(secTitle, dateVal, secEntries));
 
@@ -4396,7 +3721,13 @@ function buildGroupedWhatsAppButtons(stream, dateVal, entries) {
     const yrPrefixes = ['I', 'II', 'III'];
 
     yrPrefixes.forEach(yrCode => {
-        const yrEntries = entries.filter(e => hodYearPrefix(e.year) === yrCode);
+        const yrEntries = entries.filter(e => {
+            const yr = String(e.year || '').toUpperCase();
+            if (yrCode === 'I') return yr.includes('FIRST') || yr.includes('1');
+            if (yrCode === 'II') return yr.includes('SECOND') || yr.includes('2');
+            if (yrCode === 'III') return yr.includes('THIRD') || yr.includes('3');
+            return false;
+        });
 
         if (yrEntries.length === 0) return;
 
@@ -4406,12 +3737,12 @@ function buildGroupedWhatsAppButtons(stream, dateVal, entries) {
             // 1st Year BCA: Sec A & B combined together, Sec C (AIML) separate
             const abEntries = yrEntries.filter(e => {
                 const sec = String(e.section || '').toUpperCase();
-                return sec === 'A' || sec === 'B' || sec === 'ALL' || sec === 'COMBINED' || sec.indexOf('COMBIN') !== -1;
+                return sec === 'A' || sec === 'B' || sec === 'ALL' || sec === 'COMBINED';
             });
             // C (AIML) also gets Combined (ALL) language/elective rows — same as A&B
             const cEntries = yrEntries.filter(e => {
                 const sec = String(e.section || '').toUpperCase();
-                return sec === 'C' || sec.includes('AIML') || sec === 'ALL' || sec === 'COMBINED' || sec.indexOf('COMBIN') !== -1;
+                return sec === 'C' || sec.includes('AIML') || sec === 'ALL' || sec === 'COMBINED';
             });
 
             if (abEntries.length > 0) {
@@ -4475,16 +3806,22 @@ function formatWhatsAppRolls(rollNumbers) {
     return '*' + (cleaned || raw) + '*';
 }
 
-/** Include every submitted slot (NIL shown as *NIL*) so nothing is dropped from WA. */
-function isWhatsAppSlotEntry(entry) {
-    return !!(entry && (entry.subject || entry.slot || entry.rollNumbers != null));
+/** True only when there is at least one real absentee (NIL slots are hidden in WA). */
+function hasWhatsAppAbsentees(entry) {
+    const raw = entry && entry.rollNumbers != null ? String(entry.rollNumbers).trim() : '';
+    if (!raw) return false;
+    const u = raw.toUpperCase();
+    if (u === 'NIL' || u === 'NONE' || u === 'NIL (ALL PRESENT)' || u.indexOf('ALL PRESENT') !== -1) {
+        return false;
+    }
+    return raw.split(/[,;\s]+/).some(s => s.trim().length > 0);
 }
 
-/** Short line: 9-9.55 *Computer Networks*: *12, 25* — plain time (no shade / no autolink). */
+/** One period line: plain full clock time + plain subject, bold rolls only. */
 function formatWhatsAppPeriodLine(entry, includeSecTag) {
     const slotNum = parseInt(entry.slot, 10) || 1;
-    const timeLabel = getSlotTimeShortLabel(slotNum);
-    const subject = String(entry.subject || 'Subject').trim();
+    const timeLabel = getSlotTimeLabel(slotNum);
+    const subject = entry.subject || 'Subject';
     let secTag = '';
     if (includeSecTag && entry.section) {
         const secU = String(entry.section).trim().toUpperCase();
@@ -4494,7 +3831,7 @@ function formatWhatsAppPeriodLine(entry, includeSecTag) {
             secTag = ' [Sec ' + entry.section + ']';
         }
     }
-    return timeLabel + secTag + ' *' + subject + '*: ' + formatWhatsAppRolls(entry.rollNumbers);
+    return '• ' + timeLabel + secTag + ' [' + subject + ']: ' + formatWhatsAppRolls(entry.rollNumbers);
 }
 
 function entriesSpanMultipleSections(entries) {
@@ -4508,18 +3845,15 @@ function entriesSpanMultipleSections(entries) {
 
 function buildCombinedGroupWhatsAppMessage(groupTitle, dateStr, entries) {
     const formattedDate = formatWhatsAppDateDDMMYYYY(dateStr);
-    let msg = '*MGM COLLEGE — ABSENTEE NOTICE*\n';
-    msg += groupTitle + '\n';
-    msg += formattedDate + '\n\n';
+    let msg = '📌 *MGM COLLEGE — ABSENTEE NOTICE*\n';
+    msg += groupTitle + ' · ' + formattedDate + '\n\n';
 
-    const list = (entries || []).filter(isWhatsAppSlotEntry);
+    const list = (entries || []).filter(hasWhatsAppAbsentees);
     list.sort((a, b) => {
-        const slotDiff = (parseInt(a.slot, 10) || 1) - (parseInt(b.slot, 10) || 1);
-        if (slotDiff !== 0) return slotDiff;
         const secA = String(a.section || '').toUpperCase();
         const secB = String(b.section || '').toUpperCase();
         if (secA !== secB) return secA.localeCompare(secB);
-        return String(a.subject || '').localeCompare(String(b.subject || ''));
+        return (parseInt(a.slot, 10) || 1) - (parseInt(b.slot, 10) || 1);
     });
 
     if (list.length === 0) {
@@ -4528,8 +3862,7 @@ function buildCombinedGroupWhatsAppMessage(groupTitle, dateStr, entries) {
     }
 
     const showSec = entriesSpanMultipleSections(list);
-    list.forEach((e, idx) => {
-        if (idx > 0) msg += '\n';
+    list.forEach(e => {
         msg += formatWhatsAppPeriodLine(e, showSec) + '\n';
     });
 
@@ -4538,24 +3871,18 @@ function buildCombinedGroupWhatsAppMessage(groupTitle, dateStr, entries) {
 
 function buildSectionWhatsAppMessage(sectionTitle, dateStr, entries) {
     const formattedDate = formatWhatsAppDateDDMMYYYY(dateStr);
-    let msg = '*MGM COLLEGE — ABSENTEE NOTICE*\n';
-    msg += sectionTitle + '\n';
-    msg += formattedDate + '\n\n';
+    let msg = '📌 *MGM COLLEGE — ABSENTEE NOTICE*\n';
+    msg += sectionTitle + ' · ' + formattedDate + '\n\n';
 
-    const list = (entries || []).filter(isWhatsAppSlotEntry);
-    list.sort((a, b) => {
-        const slotDiff = (parseInt(a.slot, 10) || 1) - (parseInt(b.slot, 10) || 1);
-        if (slotDiff !== 0) return slotDiff;
-        return String(a.subject || '').localeCompare(String(b.subject || ''));
-    });
+    const list = (entries || []).filter(hasWhatsAppAbsentees);
+    list.sort((a, b) => (parseInt(a.slot, 10) || 1) - (parseInt(b.slot, 10) || 1));
 
     if (list.length === 0) {
         msg += 'No absentees recorded.\n';
         return msg.trim();
     }
 
-    list.forEach((e, idx) => {
-        if (idx > 0) msg += '\n';
+    list.forEach(e => {
         msg += formatWhatsAppPeriodLine(e, false) + '\n';
     });
 
@@ -4564,19 +3891,17 @@ function buildSectionWhatsAppMessage(sectionTitle, dateStr, entries) {
 
 function buildYearWhatsAppMessage(yearLabel, stream, dateStr, entries) {
     const formattedDate = formatWhatsAppDateDDMMYYYY(dateStr);
-    const yrPrefix = hodYearPrefix(yearLabel);
+    const yrPrefix = yearLabel.includes('1st') || yearLabel === 'I' ? 'I' :
+                     yearLabel.includes('2nd') || yearLabel === 'II' ? 'II' : 'III';
 
-    let msg = '*MGM COLLEGE — ABSENTEE NOTICE*\n';
-    msg += yrPrefix + ' ' + stream + '\n';
-    msg += formattedDate + '\n\n';
+    let msg = '📌 *MGM COLLEGE — ABSENTEE NOTICE*\n';
+    msg += yrPrefix + ' ' + stream + ' · ' + formattedDate + '\n\n';
 
     const groupedBySec = {};
-    (entries || []).filter(isWhatsAppSlotEntry).forEach(e => {
-        const sec = e.section || 'A';
-        const secU = String(sec).toUpperCase();
-        const key = (secU === 'ALL' || secU.indexOf('COMBIN') !== -1) ? 'Combined' : ('Sec ' + sec);
-        if (!groupedBySec[key]) groupedBySec[key] = [];
-        groupedBySec[key].push(e);
+    (entries || []).filter(hasWhatsAppAbsentees).forEach(e => {
+        const secLabel = e.section ? ('Sec ' + e.section) : 'General';
+        if (!groupedBySec[secLabel]) groupedBySec[secLabel] = [];
+        groupedBySec[secLabel].push(e);
     });
 
     const secKeys = Object.keys(groupedBySec).sort();
@@ -4586,11 +3911,10 @@ function buildYearWhatsAppMessage(yearLabel, stream, dateStr, entries) {
     }
 
     secKeys.forEach(secKey => {
-        msg += '*' + yrPrefix + ' ' + stream + ' — ' + secKey + '*\n';
+        msg += yrPrefix + ' ' + stream + ' - ' + secKey + '\n';
         const secEntries = groupedBySec[secKey];
         secEntries.sort((a, b) => (parseInt(a.slot, 10) || 1) - (parseInt(b.slot, 10) || 1));
-        secEntries.forEach((e, idx) => {
-            if (idx > 0) msg += '\n';
+        secEntries.forEach(e => {
             msg += formatWhatsAppPeriodLine(e, false) + '\n';
         });
         msg += '\n';
