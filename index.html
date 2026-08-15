@@ -24,11 +24,11 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <link rel="stylesheet" href="styles.css?v=v28.46-bca">
+  <link rel="stylesheet" href="styles.css?v=v28.47-bca">
   <script>
     // Auto-update on first open after GitHub Pages deploy (runs before app.js)
     (function () {
-      var EXPECTED = 'v28.46-bca';
+      var EXPECTED = 'v28.47-bca';
       var KEY = 'mgm_bca_shell_ver';
       var reloading = false;
 
@@ -63,12 +63,11 @@
       function applyNewVersion(ver) {
         var prev = '';
         try { prev = localStorage.getItem(KEY) || ''; } catch (e) {}
-        if (prev && prev !== ver) {
+        if (prev !== ver) {
           try { localStorage.setItem(KEY, ver); } catch (e2) {}
           hardReload();
           return true;
         }
-        try { localStorage.setItem(KEY, ver); } catch (e3) {}
         return false;
       }
 
@@ -86,7 +85,7 @@
       // 2) Register SW with versioned URL so GitHub Pages cannot keep old sw.js forever
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          var swUrl = './sw.js?v=v92-bca';
+          var swUrl = './sw.js?v=v93-bca';
           navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' })
             .then(function (reg) {
               reg.update();
@@ -759,7 +758,7 @@
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js?v=v28.46-bca"></script>
-  <script src="app.js?v=v28.46-bca"></script>
+  <script src="parser.js?v=v28.47-bca"></script>
+  <script src="app.js?v=v28.47-bca"></script>
 </body>
 </html>
