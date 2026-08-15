@@ -997,7 +997,15 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
 
         console.log('Submitting Attendance Payload:', payload);
 
-        // 1. Instant local record, clear text box, and display Attendance Recorded toast
+        // 1. Transmit to Google Sheet via HTML Hidden Form + fetch (waits 1.2s to guarantee network transmission)
+        try {
+            const targetUrl = getWebhookUrl(currentDept);
+            await postWithRetry(targetUrl, withAuth(payload));
+        } catch (e) {
+            console.warn('Post transmission note:', e);
+        }
+
+        // 2. Local record, clear text box, and display Attendance Recorded toast
         saveToLocalHistory({
             ...payload,
             offline: false,
@@ -1006,14 +1014,6 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         closeConfirmationModal();
         resetAllInputs();
         showSuccessToast(payload);
-
-        // 2. Background webhook transmission to Google Sheet via HTML Hidden Form
-        try {
-            const targetUrl = getWebhookUrl(currentDept);
-            postWithRetry(targetUrl, withAuth(payload));
-        } catch (e) {
-            console.warn('Post transmission note:', e);
-        }
 
         return { status: 'ok' };
     } catch (err) {
