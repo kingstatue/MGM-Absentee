@@ -1061,37 +1061,49 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
 
     console.log('Submitting Attendance Payload:', payload);
 
-    // 1. INSTANT LOCAL FEEDBACK (0ms): Save history, clear text box, show success toast immediately
-    saveToLocalHistory({
-        ...payload,
-        offline: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    });
-    closeConfirmationModal();
-    resetAllInputs();
-    showSuccessToast(payload);
+    if (btnElem) btnElem.disabled = true;
+    if (textElem) textElem.style.opacity = '0.5';
+    if (spinnerElem) spinnerElem.style.display = 'inline-block';
 
-    // 2. BACKGROUND SYNC TO GOOGLE SHEETS
-    (async () => {
-        try {
-            const targetUrl = getWebhookUrl(currentDept);
-            await postWithRetry(targetUrl, withAuth(payload), 2);
-            fetchTodayServerHistory();
-        } catch (error) {
-            console.warn('Error submitting to Google Sheet, marking offline:', error);
-            saveToLocalHistory({
-                ...payload,
-                offline: true,
-                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            });
-        } finally {
-            if (btnElem) btnElem.disabled = false;
-            if (textElem) textElem.style.opacity = '1';
-            if (spinnerElem) spinnerElem.style.display = 'none';
-        }
-    })();
+    try {
+        const targetUrl = getWebhookUrl(currentDept);
+        // Timeout postWithRetry after 4s so UI NEVER hangs spinning indefinitely
+        await Promise.race([
+            postWithRetry(targetUrl, withAuth(payload), 1),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Network timeout')), 4000))
+        ]);
 
-    return { status: 'ok' };
+        // Sheet write CONFIRMED by Google Sheet
+        saveToLocalHistory({
+            ...payload,
+            offline: false,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+        closeConfirmationModal();
+        resetAllInputs();
+        showSuccessToast(payload);
+        fetchTodayServerHistory();
+        return { status: 'ok' };
+
+    } catch (error) {
+        console.warn('Error submitting to Google Sheet, saving offline:', error);
+        saveToLocalHistory({
+            ...payload,
+            offline: true,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+        closeConfirmationModal();
+        resetAllInputs();
+        showCustomToast(
+            '⚠️ Saved Locally (Offline)',
+            'Network slow or offline. Saved on phone — will auto-sync to Google Sheet.'
+        );
+        return { status: 'offline' };
+    } finally {
+        if (btnElem) btnElem.disabled = false;
+        if (textElem) textElem.style.opacity = '1';
+        if (spinnerElem) spinnerElem.style.display = 'none';
+    }
 }
 
 function renderMultiSlotBreakdown(containerEl, startSlot, duration, masterRollVal) {
