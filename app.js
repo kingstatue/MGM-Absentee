@@ -2861,10 +2861,50 @@ function renderStreamPresets(config) {
     });
 }
 
+function checkAndRefreshDate() {
+    const todayStr = getTodayISOString();
+    if (typeof currentDateTrack !== 'undefined' && currentDateTrack !== todayStr) {
+        currentDateTrack = todayStr;
+        const dateInput = document.getElementById('dateInput');
+        const directDateInput = document.getElementById('directDateInput');
+        const hodDatePicker = document.getElementById('hodDatePicker');
+        const todayBadge = document.getElementById('todayBadge');
+
+        if (dateInput) dateInput.value = todayStr;
+        if (directDateInput) directDateInput.value = todayStr;
+        if (hodDatePicker) hodDatePicker.value = todayStr;
+        if (todayBadge) {
+            const options = { month: 'short', day: 'numeric', year: 'numeric' };
+            todayBadge.textContent = 'Today - ' + new Date().toLocaleDateString(undefined, options);
+        }
+        applyMaxDateRestrictions();
+    }
+}
+
+function applyMaxDateRestrictions() {
+    const todayStr = getTodayISOString();
+    const dateInputIds = ['directDateInput', 'dateInput', 'hodDatePicker', 'shortageFromDate', 'shortageToDate'];
+    
+    dateInputIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.max = todayStr;
+            el.addEventListener('change', () => {
+                if (el.value && el.value > todayStr) {
+                    alert('⚠️ Future date disabled. Classes for tomorrow or future dates have not been conducted yet.');
+                    el.value = todayStr;
+                }
+            });
+        }
+    });
+}
+
 // Event Initialization
 document.addEventListener('DOMContentLoaded', () => {
     const todayStr = getTodayISOString();
     currentDateTrack = todayStr;
+    applyMaxDateRestrictions();
+
     if (dateInput) dateInput.value = todayStr;
     if (directDateInput) directDateInput.value = todayStr;
     if (todayBadge) {
