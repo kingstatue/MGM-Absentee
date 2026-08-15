@@ -1251,35 +1251,44 @@ function submitDirectForm() {
 
 // 5. Success Toast & Reset State
 function showSuccessToast(payload) {
+    const successToast = document.getElementById('successToast');
+    const toastSubtext = document.getElementById('toastSubtext');
+    const toastTitleElem = document.querySelector('#successToast .toast-text');
+
+    if (!successToast) return;
+
     const isUpdate = payload.isUpdate || payload.action === 'update';
     const rollCount = payload.rollNumbers === 'NIL' ? 0 : (normalizeRollNumbers(payload.rollNumbers).length);
     const actionLabel = isUpdate ? 'Attendance Updated!' : 'Attendance Recorded!';
     
-    const toastTitleElem = document.querySelector('#successToast .toast-text');
     if (toastTitleElem) toastTitleElem.textContent = actionLabel;
-    
-    toastSubtext.textContent = `${rollCount} absentee(s) logged for ${payload.date} - ${payload.year} Sec ${payload.section} (${payload.subject})`;
+    if (toastSubtext) {
+        toastSubtext.textContent = `${rollCount} absentee(s) logged for ${payload.date} - ${payload.year} Sec ${payload.section} (${payload.subject})`;
+    }
     
     successToast.classList.add('active');
 
     setTimeout(() => {
         successToast.classList.remove('active');
-    }, 2800);
+    }, 3200);
 }
 
 function resetAllInputs() {
     clearTranscript();
     const todayStr = getTodayISOString();
     const deptConfig = DEPT_CONFIG[currentDept] || DEPT_CONFIG.BCA;
-    manualTextInput.value = '';
-    directDateInput.value = todayStr;
-    dateInput.value = todayStr;
-    directRollInput.value = '';
-    setSubjectValue(directSubjectInput, deptConfig.defaultSubject);
-    setSubjectValue(subjectInput, deptConfig.defaultSubject);
-    directYearSelect.value = 'First Year';
-    directSectionSelect.value = 'A';
-    directSlotSelect.value = '1';
+    
+    if (manualTextInput) manualTextInput.value = '';
+    if (directDateInput) directDateInput.value = todayStr;
+    if (dateInput) dateInput.value = todayStr;
+    if (directRollInput) directRollInput.value = '';
+    if (rollNumbersInput) rollNumbersInput.value = '';
+
+    if (directSubjectInput) setSubjectValue(directSubjectInput, deptConfig.defaultSubject);
+    if (subjectInput) setSubjectValue(subjectInput, deptConfig.defaultSubject);
+    if (directYearSelect) directYearSelect.value = 'First Year';
+    if (directSectionSelect) directSectionSelect.value = 'A';
+    if (directSlotSelect) directSlotSelect.value = '1';
 
     const directDurationSelect = document.getElementById('directDurationSelect');
     const durationSelect = document.getElementById('durationSelect');
