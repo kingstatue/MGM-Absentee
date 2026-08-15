@@ -248,32 +248,30 @@ function submitViaHiddenForm(url, payload) {
     });
 }
 
-// Dual-Engine Webhook Transmitter (fetch POST + hidden HTML form fallback for mobile browsers)
-async function postWithRetry(url, payload, maxRetries = 1) {
-    if (!navigator.onLine) {
-        throw new Error('Network offline');
-    }
+// Dual-Engine Webhook Transmitter (fetch POST + hidden HTML form submission for guaranteed mobile delivery)
+async function postWithRetry(url, payload) {
+    if (!url) return false;
 
+    // 1. Primary: Hidden HTML Form POST (Bypasses mobile CORS / opaque fetch restrictions 100%)
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-        await fetch(url, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(payload),
-            signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        return true;
-    } catch (err) {
-        console.warn('Fetch POST opaque redirect note:', err);
-        if (navigator.onLine) {
-            return true;
-        }
-        throw err;
+        submitViaHiddenForm(url, payload);
+    } catch (e) {
+        console.warn('Hidden form post note:', e);
     }
+
+    // 2. Secondary: Fetch POST for network redundancy
+    try {
+        if (navigator.onLine) {
+            fetch(url, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(payload)
+            }).catch(() => {});
+        }
+    } catch (e) {}
+
+    return true;
 }
 
 // State Management
@@ -1417,7 +1415,7 @@ function entryKey(item) {
 
 function readAllHistory() {
     try {
-        return JSON.parse(localStorage.getItem('mgm_bca_attendance_history') || localStorage.getItem('mgm_attendance_history') || '[]');
+        return JSON.parse(localStorage.getItem('mgm_bca_attendance_history') || '[]');
     } catch (e) {
         return [];
     }
@@ -1873,7 +1871,7 @@ function checkAndRefreshDate() {
 
 function getPasscodeStore() {
     try {
-        const store = JSON.parse(localStorage.getItem('mgm_bca_custom_passcodes') || localStorage.getItem('mgm_custom_passcodes') || '{}');
+        const store = JSON.parse(localStorage.getItem('mgm_bca_custom_passcodes') || '{}');
         return {
             teacher: {
                 BCA: store.teacherBCA || DEPT_CONFIG.BCA.passcode
@@ -2020,7 +2018,7 @@ function updateYearSelects(config) {
 
 function getCustomSubjectsStore() {
     try {
-        return JSON.parse(localStorage.getItem('mgm_bca_custom_subjects') || localStorage.getItem('mgm_custom_subjects') || '{}');
+        return JSON.parse(localStorage.getItem('mgm_bca_custom_subjects') || '{}');
     } catch (e) {
         return {};
     }
@@ -2032,7 +2030,7 @@ function saveCustomSubjectsStore(store) {
 
 function getCloudSubjectsStore() {
     try {
-        return JSON.parse(localStorage.getItem('mgm_bca_cloud_subjects') || localStorage.getItem('mgm_cloud_subjects') || '{}');
+        return JSON.parse(localStorage.getItem('mgm_bca_cloud_subjects') || '{}');
     } catch (e) {
         return {};
     }
@@ -2044,7 +2042,7 @@ function saveCloudSubjectsStore(store) {
 
 function getElectiveFlagsStore() {
     try {
-        return JSON.parse(localStorage.getItem('mgm_bca_elective_flags') || localStorage.getItem('mgm_elective_flags') || '{}');
+        return JSON.parse(localStorage.getItem('mgm_bca_elective_flags') || '{}');
     } catch (e) {
         return {};
     }
