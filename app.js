@@ -995,24 +995,22 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
             changesSummary: isUpdate ? '✏️ Replaced previous entry' : 'Initial Submission'
         };
 
-        console.log('Submitting Attendance Payload:', payload);
+        // 1. Local record, clear text box, and display Attendance Recorded toast INSTANTLY (0ms)
+        saveToLocalHistory({
+            ...payload,
+            offline: false,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+        showSuccessToast(payload);
+        resetAllInputs();
 
-        // 1. Transmit to Google Sheet via HTML Hidden Form + fetch (waits 1.2s to guarantee network transmission)
+        // 2. Transmit to Google Sheet via HTML Hidden Form + fetch (waits 1.2s to guarantee network transmission)
         try {
             const targetUrl = getWebhookUrl(currentDept);
             await postWithRetry(targetUrl, withAuth(payload));
         } catch (e) {
             console.warn('Post transmission note:', e);
         }
-
-        // 2. Local record, clear text box, and display Attendance Recorded toast
-        saveToLocalHistory({
-            ...payload,
-            offline: false,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        });
-        resetAllInputs();
-        showSuccessToast(payload);
 
         return { status: 'ok' };
     } catch (err) {
@@ -1168,20 +1166,34 @@ function showSuccessToast(payload) {
 
     if (!successToast) return;
 
-    const isUpdate = payload.isUpdate || payload.action === 'update';
-    const rollCount = payload.rollNumbers === 'NIL' ? 0 : (normalizeRollNumbers(payload.rollNumbers).length);
+    const isUpdate = payload && (payload.isUpdate || payload.action === 'update');
+    const rollCount = (payload && payload.rollNumbers && payload.rollNumbers !== 'NIL')
+        ? normalizeRollNumbers(payload.rollNumbers).length
+        : 0;
     const actionLabel = isUpdate ? 'Attendance Updated!' : 'Attendance Recorded!';
     
     if (toastTitleElem) toastTitleElem.textContent = actionLabel;
-    if (toastSubtext) {
-        toastSubtext.textContent = `${rollCount} absentee(s) logged for ${payload.date} - ${payload.year} Sec ${payload.section} (${payload.subject})`;
+    if (toastSubtext && payload) {
+        toastSubtext.textContent = `${rollCount} absentee(s) logged for ${payload.date || ''} - ${payload.year || ''} Sec ${payload.section || ''} (${payload.subject || ''})`;
     }
     
+    // Explicit inline overrides to guarantee 100% visibility on mobile WebKit/Blink
+    successToast.style.display = 'flex';
+    successToast.style.opacity = '1';
+    successToast.style.pointerEvents = 'auto';
+    successToast.style.visibility = 'visible';
+    successToast.style.zIndex = '999999';
     successToast.classList.add('active');
 
     setTimeout(() => {
-        successToast.classList.remove('active');
-    }, 3200);
+        successToast.style.opacity = '0';
+        successToast.style.pointerEvents = 'none';
+        setTimeout(() => {
+            successToast.style.display = 'none';
+            successToast.style.visibility = 'hidden';
+            successToast.classList.remove('active');
+        }, 300);
+    }, 3500);
 }
 
 function resetAllInputs() {

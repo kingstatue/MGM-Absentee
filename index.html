@@ -24,11 +24,11 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <link rel="stylesheet" href="styles.css?v=v28.53-bca">
+  <link rel="stylesheet" href="styles.css?v=v28.55-bca">
   <script>
     // Auto-update on first open after GitHub Pages deploy (runs before app.js)
     (function () {
-      var EXPECTED = 'v28.53-bca';
+      var EXPECTED = 'v28.55-bca';
       var KEY = 'mgm_bca_shell_ver';
       var reloading = false;
 
@@ -85,7 +85,7 @@
       // 2) Register SW with versioned URL so GitHub Pages cannot keep old sw.js forever
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          var swUrl = './sw.js?v=v99-bca';
+          var swUrl = './sw.js?v=v101-bca';
           navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' })
             .then(function (reg) {
               reg.update();
@@ -638,9 +638,9 @@
           <h2>Today’s entries</h2>
           <p class="drawer-subtitle" id="todayDrawerSubtitle">Correct any class you marked today</p>
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
+        <div class="drawer-header-actions">
           <button type="button" class="btn-primary" id="syncOfflineBtn" style="display: none; padding: 6px 12px; font-size: 0.78rem;">⚡ Sync Pending (<span id="pendingSyncCount">0</span>)</button>
-          <button class="icon-btn" id="closeHistoryBtn" aria-label="Close">&times;</button>
+          <button type="button" id="closeHistoryBtn" aria-label="Close Today's entries">&times;</button>
         </div>
       </div>
       <div class="drawer-body" id="historyList">
@@ -758,7 +758,7 @@
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js?v=v28.53-bca"></script>
-  <script src="app.js?v=v28.53-bca"></script>
+  <script src="parser.js?v=v28.55-bca"></script>
+  <script src="app.js?v=v28.55-bca"></script>
 </body>
 </html>
