@@ -1011,7 +1011,6 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
             offline: false,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
-        closeConfirmationModal();
         resetAllInputs();
         showSuccessToast(payload);
 
@@ -3005,6 +3004,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const openHistory = () => {
         renderHistoryList();
         historyDrawer.classList.add('active');
+        try { document.body.style.overflow = 'hidden'; } catch (e) {}
         fetchTodayServerHistory();
         syncOfflineEntries();
     };
@@ -3014,7 +3014,10 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', openHistory);
     });
 
-    if (closeHistoryBtn) closeHistoryBtn.addEventListener('click', () => historyDrawer.classList.remove('active'));
+    if (closeHistoryBtn) closeHistoryBtn.addEventListener('click', () => {
+        historyDrawer.classList.remove('active');
+        try { document.body.style.overflow = ''; } catch (e) {}
+    });
 
     const syncOfflineBtn = document.getElementById('syncOfflineBtn');
     if (syncOfflineBtn) {
