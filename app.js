@@ -1067,13 +1067,9 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
 
     try {
         const targetUrl = getWebhookUrl(currentDept);
-        // Timeout postWithRetry after 4s so UI NEVER hangs spinning indefinitely
-        await Promise.race([
-            postWithRetry(targetUrl, withAuth(payload), 1),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Network timeout')), 4000))
-        ]);
+        await postWithRetry(targetUrl, withAuth(payload), 1);
 
-        // Sheet write CONFIRMED by Google Sheet
+        // Sheet write SENT & CONFIRMED via webhook
         saveToLocalHistory({
             ...payload,
             offline: false,
@@ -1082,7 +1078,6 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         closeConfirmationModal();
         resetAllInputs();
         showSuccessToast(payload);
-        fetchTodayServerHistory();
         return { status: 'ok' };
 
     } catch (error) {
@@ -1096,7 +1091,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         resetAllInputs();
         showCustomToast(
             '⚠️ Saved Locally (Offline)',
-            'Network slow or offline. Saved on phone — will auto-sync to Google Sheet.'
+            'Network offline. Saved on phone — will auto-sync to Google Sheet.'
         );
         return { status: 'offline' };
     } finally {
@@ -1307,7 +1302,7 @@ async function deleteData(dateVal, yearVal, sectionVal, subjectVal, slotVal) {
     const cleanDate = dateVal || getTodayISOString();
     const cleanSlot = parseInt(slotVal, 10) || 1;
 
-    const history = JSON.parse(localStorage.getItem('mgm_attendance_history') || '[]');
+    const history = readAllHistory();
     const targetItem = history.find(item => 
         item.date === cleanDate &&
         item.year === yearVal &&
@@ -1340,7 +1335,7 @@ async function deleteData(dateVal, yearVal, sectionVal, subjectVal, slotVal) {
           item.subject.trim().toLowerCase() === subjectVal.trim().toLowerCase() &&
           parseInt(item.slot, 10) === cleanSlot)
     );
-    localStorage.setItem('mgm_attendance_history', JSON.stringify(updatedHistory));
+    localStorage.setItem('mgm_bca_attendance_history', JSON.stringify(updatedHistory));
     renderHistoryList();
 
     const payload = {
