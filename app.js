@@ -1253,8 +1253,17 @@ function resetAllInputs() {
     if (manualTextInput) manualTextInput.value = '';
     if (directDateInput) directDateInput.value = todayStr;
     if (dateInput) dateInput.value = todayStr;
-    if (directRollInput) directRollInput.value = '';
-    if (rollNumbersInput) rollNumbersInput.value = '';
+    
+    const dRoll = document.getElementById('directRollInput') || directRollInput;
+    if (dRoll) {
+        dRoll.value = '';
+        dRoll.defaultValue = '';
+    }
+    const rRoll = document.getElementById('rollNumbersInput') || rollNumbersInput;
+    if (rRoll) {
+        rRoll.value = '';
+        rRoll.defaultValue = '';
+    }
 
     if (directSubjectInput) setSubjectValue(directSubjectInput, deptConfig.defaultSubject);
     if (subjectInput) setSubjectValue(subjectInput, deptConfig.defaultSubject);
@@ -1589,7 +1598,7 @@ async function syncOfflineEntries() {
         }
     }
 
-    localStorage.setItem('mgm_attendance_history', JSON.stringify(history));
+    localStorage.setItem('mgm_bca_attendance_history', JSON.stringify(history));
     renderHistoryList();
     updateSyncButtonState();
 
@@ -1679,7 +1688,7 @@ function fetchTodayServerHistory() {
             });
 
             const merged = compactAttendanceHistory(Array.from(byKey.values()));
-            localStorage.setItem('mgm_attendance_history', JSON.stringify(merged));
+            localStorage.setItem('mgm_bca_attendance_history', JSON.stringify(merged));
             renderHistoryList();
             updateSyncButtonState();
         }
