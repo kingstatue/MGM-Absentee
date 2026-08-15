@@ -926,153 +926,104 @@ function showSlotConflictDialog(params) {
 }
 
 async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectVal, slotVal, btnElem, textElem, spinnerElem) {
-    const cleanDate = dateVal || getTodayISOString();
-    const cleanSlot = parseInt(slotVal, 10) || 1;
-    let cleanSubject = (subjectVal || '').trim();
-    let cleanSection = sectionVal || 'A';
-
-    if (!cleanSubject) {
-        alert('Please enter / select a subject name before submitting.');
-        return { status: 'cancelled' };
-    }
-
-    // Language / elective subjects are combined across sections
-    if (isElectiveOrLanguageSubject(cleanSubject)) {
-        cleanSection = 'ALL';
-    }
-
-    const rollNumbersArray = normalizeRollNumbers(rollNumbersRaw);
-    let formattedRolls = rollNumbersArray.length > 0 ? rollNumbersArray.join(', ') : 'NIL';
-
-    // Local Storage conflict check (Instant 0ms)
-    const history = JSON.parse(localStorage.getItem('mgm_attendance_history') || '[]');
-    const cleanStream = currentDept || 'BCA';
-    const existingEntry = history.find(item => {
-        if ((item.stream || 'BCA') !== cleanStream) return false;
-        if (item.date !== cleanDate) return false;
-        if (item.year !== yearVal) return false;
-        if (parseInt(item.slot, 10) !== cleanSlot) return false;
-
-        const sec1 = item.section || 'A';
-        const sec2 = cleanSection || 'A';
-        if (!isSectionOverlap(sec1, sec2)) return false;
-
-        const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || sec1.toLowerCase().includes('combin');
-        const isComb2 = cleanSection === 'ALL' || (cleanSection || '').toUpperCase() === 'ALL' || (cleanSection || '').toLowerCase().includes('combin');
-        const isElec1 = isElectiveOrLanguageSubject(item.subject);
-        const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
-
-        if (isComb1 && isComb2 && isElec1 && isElec2 && item.subject.trim().toLowerCase() !== cleanSubject.toLowerCase()) {
-            return false; // Parallel elective
-        }
-
-        return true;
-    });
-
     if (btnElem) btnElem.disabled = true;
     if (textElem) textElem.style.opacity = '0.5';
     if (spinnerElem) spinnerElem.style.display = 'inline-block';
 
-    // Always check Google Sheet too (other teachers / other devices) — cap at 1000ms so it NEVER blocks UI
-    let sheetConflict = { exists: false };
     try {
-        sheetConflict = await Promise.race([
-            checkSheetSlotConflict(cleanDate, yearVal, cleanSection, cleanSlot, cleanSubject),
-            new Promise(r => setTimeout(() => r({ exists: false }), 1000))
-        ]);
-    } catch (e) {
-        sheetConflict = { exists: false };
-    }
+        const cleanDate = dateVal || getTodayISOString();
+        const cleanSlot = parseInt(slotVal, 10) || 1;
+        let cleanSubject = (subjectVal || '').trim();
+        let cleanSection = sectionVal || 'A';
 
-    const hasConflict = !!existingEntry || !!(sheetConflict.exists && !sheetConflict.offline);
-    let finalRolls = formattedRolls;
-    let finalRollsArr = rollNumbersArray;
-    let conflictChoice = 'create';
-
-    if (hasConflict) {
-        // Prefer sheet truth when both exist (cross-device)
-        const prevSubj = (sheetConflict.exists && sheetConflict.subject)
-            ? sheetConflict.subject
-            : (existingEntry ? existingEntry.subject : cleanSubject);
-        const prevRolls = (sheetConflict.exists && sheetConflict.rollNumbers != null)
-            ? sheetConflict.rollNumbers
-            : (existingEntry ? existingEntry.rollNumbers : 'NIL');
-
-        const userChoice = await showSlotConflictDialog({
-            date: cleanDate,
-            year: yearVal,
-            section: cleanSection,
-            slot: cleanSlot,
-            subject: cleanSubject,
-            existingSubj: prevSubj,
-            existingRolls: prevRolls,
-            newRolls: formattedRolls
-        });
-
-        if (!userChoice || userChoice.action === 'cancel') {
-            if (btnElem) btnElem.disabled = false;
-            if (textElem) textElem.style.opacity = '1';
-            if (spinnerElem) spinnerElem.style.display = 'none';
+        if (!cleanSubject) {
+            alert('Please enter / select a subject name before submitting.');
             return { status: 'cancelled' };
         }
 
-        conflictChoice = userChoice.action;
-        finalRolls = userChoice.mergedRolls;
-        finalRollsArr = userChoice.mergedArr;
-    }
+        // Language / elective subjects are combined across sections
+        if (isElectiveOrLanguageSubject(cleanSubject)) {
+            cleanSection = 'ALL';
+        }
 
-    const isUpdate = hasConflict;
-    const prevRollsArr = (sheetConflict.exists && !sheetConflict.offline)
-        ? normalizeRollNumbers(sheetConflict.rollNumbers)
-        : (existingEntry ? normalizeRollNumbers(existingEntry.rollNumbers) : []);
-    const diff = computeRollDiff(prevRollsArr.join(', '), finalRolls);
+        const rollNumbersArray = normalizeRollNumbers(rollNumbersRaw);
+        let formattedRolls = rollNumbersArray.length > 0 ? rollNumbersArray.join(', ') : 'NIL';
 
-    const payload = {
-        action: isUpdate ? 'update' : 'create',
-        isUpdate: isUpdate,
-        stream: currentDept,
-        date: cleanDate,
-        rollNumbers: finalRolls,
-        year: yearVal,
-        section: cleanSection,
-        subject: cleanSubject,
-        slot: cleanSlot,
-        previousRollNumbers: diff.prevRolls.length > 0 ? diff.prevRolls.join(', ') : 'NIL',
-        addedRollNumbers: diff.addedRolls.length > 0 ? diff.addedRolls.join(', ') : 'NIL',
-        deletedRollNumbers: diff.deletedRolls.length > 0 ? diff.deletedRolls.join(', ') : 'NIL',
-        retainedRollNumbers: diff.retainedRolls.length > 0 ? diff.retainedRolls.join(', ') : 'NIL',
-        changesSummary: isUpdate 
-            ? (conflictChoice === 'merge' ? '🔀 Merged absentees from both entries' : '✏️ Replaced previous entry')
-            : 'Initial Submission'
-    };
+        // Local Storage conflict check (Instant 0ms via BCA storage)
+        const history = readAllHistory();
+        const cleanStream = currentDept || 'BCA';
+        const existingEntry = history.find(item => {
+            if ((item.stream || 'BCA') !== cleanStream) return false;
+            if (item.date !== cleanDate) return false;
+            if (item.year !== yearVal) return false;
+            if (parseInt(item.slot, 10) !== cleanSlot) return false;
 
-    console.log('Submitting Attendance Payload:', payload);
+            const sec1 = item.section || 'A';
+            const sec2 = cleanSection || 'A';
+            if (!isSectionOverlap(sec1, sec2)) return false;
 
-    // 1. Instant local record, clear text box, and display Attendance Recorded toast
-    saveToLocalHistory({
-        ...payload,
-        offline: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    });
-    closeConfirmationModal();
-    resetAllInputs();
-    showSuccessToast(payload);
+            const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || sec1.toLowerCase().includes('combin');
+            const isComb2 = cleanSection === 'ALL' || (cleanSection || '').toUpperCase() === 'ALL' || (cleanSection || '').toLowerCase().includes('combin');
+            const isElec1 = isElectiveOrLanguageSubject(item.subject);
+            const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
 
-    // 2. Background webhook transmission to Google Sheet
-    try {
-        const targetUrl = getWebhookUrl(currentDept);
-        postWithRetry(targetUrl, withAuth(payload), 1).catch(err => {
-            console.warn('Background webhook post error:', err);
+            if (isComb1 && isComb2 && isElec1 && isElec2 && item.subject.trim().toLowerCase() !== cleanSubject.toLowerCase()) {
+                return false; // Parallel elective
+            }
+
+            return true;
         });
-    } catch (e) {
-        console.warn('Post error:', e);
+
+        const isUpdate = !!existingEntry;
+        const prevRollsArr = existingEntry ? normalizeRollNumbers(existingEntry.rollNumbers) : [];
+        const diff = computeRollDiff(prevRollsArr.join(', '), formattedRolls);
+
+        const payload = {
+            action: isUpdate ? 'update' : 'create',
+            isUpdate: isUpdate,
+            stream: currentDept,
+            date: cleanDate,
+            rollNumbers: formattedRolls,
+            year: yearVal,
+            section: cleanSection,
+            subject: cleanSubject,
+            slot: cleanSlot,
+            previousRollNumbers: diff.prevRolls.length > 0 ? diff.prevRolls.join(', ') : 'NIL',
+            addedRollNumbers: diff.addedRolls.length > 0 ? diff.addedRolls.join(', ') : 'NIL',
+            deletedRollNumbers: diff.deletedRolls.length > 0 ? diff.deletedRolls.join(', ') : 'NIL',
+            retainedRollNumbers: diff.retainedRolls.length > 0 ? diff.retainedRolls.join(', ') : 'NIL',
+            changesSummary: isUpdate ? '✏️ Replaced previous entry' : 'Initial Submission'
+        };
+
+        console.log('Submitting Attendance Payload:', payload);
+
+        // 1. Instant local record, clear text box, and display Attendance Recorded toast
+        saveToLocalHistory({
+            ...payload,
+            offline: false,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+        closeConfirmationModal();
+        resetAllInputs();
+        showSuccessToast(payload);
+
+        // 2. Background webhook transmission to Google Sheet via HTML Hidden Form
+        try {
+            const targetUrl = getWebhookUrl(currentDept);
+            postWithRetry(targetUrl, withAuth(payload));
+        } catch (e) {
+            console.warn('Post transmission note:', e);
+        }
+
+        return { status: 'ok' };
+    } catch (err) {
+        console.warn('Error during submitData execution:', err);
+        return { status: 'error' };
+    } finally {
+        if (btnElem) btnElem.disabled = false;
+        if (textElem) textElem.style.opacity = '1';
+        if (spinnerElem) spinnerElem.style.display = 'none';
     }
-
-    if (btnElem) btnElem.disabled = false;
-    if (textElem) textElem.style.opacity = '1';
-    if (spinnerElem) spinnerElem.style.display = 'none';
-
-    return { status: 'ok' };
 }
 
 function renderMultiSlotBreakdown(containerEl, startSlot, duration, masterRollVal) {
