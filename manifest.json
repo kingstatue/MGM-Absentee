@@ -1,6 +1,6 @@
 {
-  "name": "MGM College Absentee Informer",
-  "short_name": "Absentee Informer",
+  "name": "MGM BCA Absentee Informer",
+  "short_name": "BCA Informer",
   "description": "Absentee logging portal for MGM College BCA faculty",
   "start_url": "./index.html",
   "display": "standalone",

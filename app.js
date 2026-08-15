@@ -1061,57 +1061,37 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
 
     console.log('Submitting Attendance Payload:', payload);
 
-    if (textElem) textElem.style.opacity = '0';
-    if (spinnerElem) spinnerElem.style.display = 'block';
+    // 1. INSTANT LOCAL FEEDBACK (0ms): Save history, clear text box, show success toast immediately
+    saveToLocalHistory({
+        ...payload,
+        offline: false,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    });
+    closeConfirmationModal();
+    resetAllInputs();
+    showSuccessToast(payload);
 
-    try {
-        const targetUrl = getWebhookUrl(currentDept);
-        await postWithRetry(targetUrl, withAuth(payload), 2);
-
-        // Sheet write already sent — show success now; confirm badge in background
-        saveToLocalHistory({
-            ...payload,
-            offline: false,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        });
-        closeConfirmationModal();
-        resetAllInputs();
-        showSuccessToast(payload);
-
-        setTimeout(async () => {
-            try {
-                const verify = await verifyAttendanceOnSheet(payload);
-                if (!verify.verified) {
-                    saveToLocalHistory({
-                        ...payload,
-                        offline: true,
-                        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                    });
-                }
-            } catch (e) {}
+    // 2. BACKGROUND SYNC TO GOOGLE SHEETS
+    (async () => {
+        try {
+            const targetUrl = getWebhookUrl(currentDept);
+            await postWithRetry(targetUrl, withAuth(payload), 2);
             fetchTodayServerHistory();
-        }, 400);
-        return { status: 'ok' };
+        } catch (error) {
+            console.warn('Error submitting to Google Sheet, marking offline:', error);
+            saveToLocalHistory({
+                ...payload,
+                offline: true,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+        } finally {
+            if (btnElem) btnElem.disabled = false;
+            if (textElem) textElem.style.opacity = '1';
+            if (spinnerElem) spinnerElem.style.display = 'none';
+        }
+    })();
 
-    } catch (error) {
-        console.warn('Error submitting attendance:', error);
-        saveToLocalHistory({
-            ...payload,
-            offline: true,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        });
-        closeConfirmationModal();
-        resetAllInputs();
-        showCustomToast(
-            '⚠️ Saved Locally (Network Offline)',
-            'Saved on phone. Will auto-sync to Google Sheet when online or tap "Sync" in Today\'s History.'
-        );
-        return { status: 'offline' };
-    } finally {
-        if (btnElem) btnElem.disabled = false;
-        if (textElem) textElem.style.opacity = '1';
-        if (spinnerElem) spinnerElem.style.display = 'none';
-    }
+    return { status: 'ok' };
 }
 
 function renderMultiSlotBreakdown(containerEl, startSlot, duration, masterRollVal) {
@@ -1445,7 +1425,7 @@ function entryKey(item) {
 
 function readAllHistory() {
     try {
-        return JSON.parse(localStorage.getItem('mgm_attendance_history') || '[]');
+        return JSON.parse(localStorage.getItem('mgm_bca_attendance_history') || localStorage.getItem('mgm_attendance_history') || '[]');
     } catch (e) {
         return [];
     }
@@ -1481,7 +1461,7 @@ function compactAttendanceHistory(history) {
 
 function pruneOldHistory() {
     const kept = compactAttendanceHistory(readAllHistory());
-    localStorage.setItem('mgm_attendance_history', JSON.stringify(kept));
+    localStorage.setItem('mgm_bca_attendance_history', JSON.stringify(kept));
     return kept;
 }
 
@@ -1550,7 +1530,7 @@ function saveToLocalHistory(entry) {
     }
 
     history = compactAttendanceHistory(history);
-    localStorage.setItem('mgm_attendance_history', JSON.stringify(history));
+    localStorage.setItem('mgm_bca_attendance_history', JSON.stringify(history));
     renderHistoryList();
 }
 
@@ -1901,7 +1881,7 @@ function checkAndRefreshDate() {
 
 function getPasscodeStore() {
     try {
-        const store = JSON.parse(localStorage.getItem('mgm_custom_passcodes') || '{}');
+        const store = JSON.parse(localStorage.getItem('mgm_bca_custom_passcodes') || localStorage.getItem('mgm_custom_passcodes') || '{}');
         return {
             teacher: {
                 BCA: store.teacherBCA || DEPT_CONFIG.BCA.passcode
@@ -1925,7 +1905,7 @@ function getPasscodeStore() {
 }
 
 function savePasscodeStore(store) {
-    localStorage.setItem('mgm_custom_passcodes', JSON.stringify(store));
+    localStorage.setItem('mgm_bca_custom_passcodes', JSON.stringify(store));
 }
 
 // Open BCA immediately — no login / passcode gate
@@ -1933,11 +1913,11 @@ function initDepartmentManager() {
     currentRole = 'ADMIN';
     isHODAuthenticated = true;
     pendingHODTabSwitch = false;
-    localStorage.setItem('mgm_dept', 'BCA');
-    localStorage.setItem('mgm_role', 'ADMIN');
-    localStorage.setItem('mgm_auth_stream', 'BCA');
-    try { sessionStorage.setItem('mgm_auth_pass', 'open'); } catch (e) {}
-    try { localStorage.setItem('mgm_session_pass', 'open'); } catch (e) {}
+    localStorage.setItem('mgm_bca_dept', 'BCA');
+    localStorage.setItem('mgm_bca_role', 'ADMIN');
+    localStorage.setItem('mgm_bca_auth_stream', 'BCA');
+    try { sessionStorage.setItem('mgm_bca_auth_pass', 'open'); } catch (e) {}
+    try { localStorage.setItem('mgm_bca_session_pass', 'open'); } catch (e) {}
 
     if (deptLoginModal) deptLoginModal.classList.remove('active');
 
@@ -2048,38 +2028,38 @@ function updateYearSelects(config) {
 
 function getCustomSubjectsStore() {
     try {
-        return JSON.parse(localStorage.getItem('mgm_custom_subjects') || '{}');
+        return JSON.parse(localStorage.getItem('mgm_bca_custom_subjects') || localStorage.getItem('mgm_custom_subjects') || '{}');
     } catch (e) {
         return {};
     }
 }
 
 function saveCustomSubjectsStore(store) {
-    localStorage.setItem('mgm_custom_subjects', JSON.stringify(store));
+    localStorage.setItem('mgm_bca_custom_subjects', JSON.stringify(store));
 }
 
 function getCloudSubjectsStore() {
     try {
-        return JSON.parse(localStorage.getItem('mgm_cloud_subjects') || '{}');
+        return JSON.parse(localStorage.getItem('mgm_bca_cloud_subjects') || localStorage.getItem('mgm_cloud_subjects') || '{}');
     } catch (e) {
         return {};
     }
 }
 
 function saveCloudSubjectsStore(store) {
-    localStorage.setItem('mgm_cloud_subjects', JSON.stringify(store));
+    localStorage.setItem('mgm_bca_cloud_subjects', JSON.stringify(store));
 }
 
 function getElectiveFlagsStore() {
     try {
-        return JSON.parse(localStorage.getItem('mgm_elective_flags') || '{}');
+        return JSON.parse(localStorage.getItem('mgm_bca_elective_flags') || localStorage.getItem('mgm_elective_flags') || '{}');
     } catch (e) {
         return {};
     }
 }
 
 function saveElectiveFlagsStore(store) {
-    localStorage.setItem('mgm_elective_flags', JSON.stringify(store));
+    localStorage.setItem('mgm_bca_elective_flags', JSON.stringify(store));
 }
 
 function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sectionStr, oldSubjectName, oldSectionStr) {
@@ -2150,7 +2130,7 @@ function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sec
         };
         document.body.appendChild(scriptEl);
     }).finally(() => {
-        try { localStorage.setItem('mgm_subject_sync_trigger', String(Date.now())); } catch (e) {}
+        try { localStorage.setItem('mgm_bca_subject_sync_trigger', String(Date.now())); } catch (e) {}
     });
 }
 
@@ -2165,7 +2145,7 @@ if (typeof window !== 'undefined') {
 
 if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('storage', (e) => {
-        if (e.key === 'mgm_subject_sync_trigger') {
+        if (e.key === 'mgm_bca_subject_sync_trigger') {
             fetchCloudSubjects();
         }
     });
@@ -2315,7 +2295,7 @@ function fetchCloudSubjects() {
 
 function getClearedDeptsStore() {
     try {
-        return JSON.parse(localStorage.getItem('mgm_cleared_depts') || '{}');
+        return JSON.parse(localStorage.getItem('mgm_bca_cleared_depts') || localStorage.getItem('mgm_cleared_depts') || '{}');
     } catch (e) {
         return {};
     }
@@ -2323,20 +2303,20 @@ function getClearedDeptsStore() {
 
 function saveClearedDeptsStore(store) {
     try {
-        localStorage.setItem('mgm_cleared_depts', JSON.stringify(store || {}));
+        localStorage.setItem('mgm_bca_cleared_depts', JSON.stringify(store || {}));
     } catch (e) {}
 }
 
 function getDeletedSubjectsStore() {
     try {
-        return JSON.parse(localStorage.getItem('mgm_deleted_subjects') || '{}');
+        return JSON.parse(localStorage.getItem('mgm_bca_deleted_subjects') || localStorage.getItem('mgm_deleted_subjects') || '{}');
     } catch (e) {
         return {};
     }
 }
 
 function saveDeletedSubjectsStore(store) {
-    localStorage.setItem('mgm_deleted_subjects', JSON.stringify(store));
+    localStorage.setItem('mgm_bca_deleted_subjects', JSON.stringify(store));
 }
 
 function beginSubjectEdit(subjName, sectionHint) {
@@ -2928,10 +2908,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Auto-refresh date after midnight 12 AM when page is visible/focused
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') checkAndRefreshDate();
+        if (document.visibilityState === 'visible') {
+            checkAndRefreshDate();
+            syncOfflineEntries();
+        }
     });
     window.addEventListener('focus', checkAndRefreshDate);
+    window.addEventListener('online', syncOfflineEntries);
     setInterval(checkAndRefreshDate, 60000);
+
+    if (navigator.onLine) {
+        setTimeout(syncOfflineEntries, 1500);
+    }
 
     initSpeechRecognition();
 
