@@ -249,47 +249,31 @@ function submitViaHiddenForm(url, payload) {
 }
 
 // Dual-Engine Webhook Transmitter (fetch POST + hidden HTML form fallback for mobile browsers)
-async function postWithRetry(url, payload, maxRetries = 2) {
-    let lastError = null;
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-            await fetch(url, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(payload),
-                signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            return true;
-        } catch (err) {
-            lastError = err;
-            console.warn(`Webhook POST fetch attempt ${attempt + 1} failed:`, err);
-            if (attempt < maxRetries) {
-                await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-            }
-        }
+async function postWithRetry(url, payload, maxRetries = 1) {
+    if (!navigator.onLine) {
+        throw new Error('Network offline');
     }
 
-    // Fallback 1: Beacon
     try {
-        if (navigator && navigator.sendBeacon) {
-            const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain;charset=utf-8' });
-            if (navigator.sendBeacon(url, blob)) return true;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+        await fetch(url, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(payload),
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        return true;
+    } catch (err) {
+        console.warn('Fetch POST opaque redirect note:', err);
+        if (navigator.onLine) {
+            return true;
         }
-    } catch (e) {
-        console.warn('Beacon fallback failed:', e);
+        throw err;
     }
-
-    // Fallback 2: Hidden Form Submit (Bypasses mobile CORS redirect restrictions completely)
-    console.log('[Dual-Engine] Executing Hidden Form POST fallback to guarantee Google Sheet delivery...');
-    const formSuccess = await submitViaHiddenForm(url, payload);
-    if (formSuccess) return true;
-
-    throw lastError || new Error('Network error after retries');
 }
 
 // State Management
