@@ -971,12 +971,19 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         return true;
     });
 
-    // Always check Google Sheet too (other teachers / other devices)
+    if (btnElem) btnElem.disabled = true;
+    if (textElem) textElem.style.opacity = '0.5';
+    if (spinnerElem) spinnerElem.style.display = 'inline-block';
+
+    // Always check Google Sheet too (other teachers / other devices) — cap at 1000ms so it NEVER blocks UI
     let sheetConflict = { exists: false };
     try {
-        sheetConflict = await checkSheetSlotConflict(cleanDate, yearVal, cleanSection, cleanSlot, cleanSubject);
+        sheetConflict = await Promise.race([
+            checkSheetSlotConflict(cleanDate, yearVal, cleanSection, cleanSlot, cleanSubject),
+            new Promise(r => setTimeout(() => r({ exists: false }), 1000))
+        ]);
     } catch (e) {
-        sheetConflict = { exists: false, offline: true };
+        sheetConflict = { exists: false };
     }
 
     const hasConflict = !!existingEntry || !!(sheetConflict.exists && !sheetConflict.offline);
@@ -1005,6 +1012,9 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         });
 
         if (!userChoice || userChoice.action === 'cancel') {
+            if (btnElem) btnElem.disabled = false;
+            if (textElem) textElem.style.opacity = '1';
+            if (spinnerElem) spinnerElem.style.display = 'none';
             return { status: 'cancelled' };
         }
 
@@ -1012,11 +1022,6 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         finalRolls = userChoice.mergedRolls;
         finalRollsArr = userChoice.mergedArr;
     }
-
-    // Now disable button & show spinner during actual HTTP POST transmission
-    if (btnElem) btnElem.disabled = true;
-    if (textElem) textElem.style.opacity = '0.5';
-    if (spinnerElem) spinnerElem.style.display = 'block';
 
     const isUpdate = hasConflict;
     const prevRollsArr = (sheetConflict.exists && !sheetConflict.offline)
@@ -1044,10 +1049,6 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
     };
 
     console.log('Submitting Attendance Payload:', payload);
-
-    if (btnElem) btnElem.disabled = true;
-    if (textElem) textElem.style.opacity = '0.5';
-    if (spinnerElem) spinnerElem.style.display = 'inline-block';
 
     try {
         const targetUrl = getWebhookUrl(currentDept);
