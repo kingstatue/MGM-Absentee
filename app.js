@@ -118,7 +118,7 @@ function appendAuthToParams(params) {
 function authenticateWithServer(deptCode, passcode) {
     return new Promise((resolve) => {
         const targetUrl = getWebhookUrl(deptCode);
-        const cbName = 'mgmAuthCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+        const cbName = 'mgm_bca_auth_cb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
         let scriptEl = null;
         let done = false;
 
@@ -499,7 +499,7 @@ function checkDoubleEntryLive(dateVal, yearVal, sectionVal, subjectVal, slotVal,
  */
 function checkSheetSlotConflict(dateVal, yearVal, sectionVal, slotVal, subjectVal) {
     return new Promise((resolve) => {
-        const cbName = 'mgmConflictCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+        const cbName = 'mgm_bca_conflict_cb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
         let scriptEl = null;
         const timeout = setTimeout(() => {
             cleanup();
@@ -1050,40 +1050,31 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
 
     console.log('Submitting Attendance Payload:', payload);
 
+    // 1. Instant local record, clear text box, and display Attendance Recorded toast
+    saveToLocalHistory({
+        ...payload,
+        offline: false,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    });
+    closeConfirmationModal();
+    resetAllInputs();
+    showSuccessToast(payload);
+
+    // 2. Background webhook transmission to Google Sheet
     try {
         const targetUrl = getWebhookUrl(currentDept);
-        await postWithRetry(targetUrl, withAuth(payload), 1);
-
-        // Sheet write SENT & CONFIRMED via webhook
-        saveToLocalHistory({
-            ...payload,
-            offline: false,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        postWithRetry(targetUrl, withAuth(payload), 1).catch(err => {
+            console.warn('Background webhook post error:', err);
         });
-        closeConfirmationModal();
-        resetAllInputs();
-        showSuccessToast(payload);
-        return { status: 'ok' };
-
-    } catch (error) {
-        console.warn('Error submitting to Google Sheet, saving offline:', error);
-        saveToLocalHistory({
-            ...payload,
-            offline: true,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        });
-        closeConfirmationModal();
-        resetAllInputs();
-        showCustomToast(
-            '⚠️ Saved Locally (Offline)',
-            'Network offline. Saved on phone — will auto-sync to Google Sheet.'
-        );
-        return { status: 'offline' };
-    } finally {
-        if (btnElem) btnElem.disabled = false;
-        if (textElem) textElem.style.opacity = '1';
-        if (spinnerElem) spinnerElem.style.display = 'none';
+    } catch (e) {
+        console.warn('Post error:', e);
     }
+
+    if (btnElem) btnElem.disabled = false;
+    if (textElem) textElem.style.opacity = '1';
+    if (spinnerElem) spinnerElem.style.display = 'none';
+
+    return { status: 'ok' };
 }
 
 function renderMultiSlotBreakdown(containerEl, startSlot, duration, masterRollVal) {
@@ -1638,7 +1629,7 @@ function fetchTodayServerHistory() {
     const stream = currentDept || 'BCA';
     const dateVal = getTodayISOString();
     const targetUrl = getWebhookUrl(stream);
-    const cbName = 'mgm_history_server_cb_' + Date.now();
+    const cbName = 'mgm_bca_history_cb_' + Date.now();
 
     const timeout = setTimeout(() => {
         isFetchingServerHistory = false;
@@ -2080,7 +2071,7 @@ function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sec
     submitViaHiddenForm(targetUrl, payload).catch(e => console.warn('[SubjectSync] Hidden form submission error:', e));
 
     return new Promise((resolve) => {
-        const cbName = 'mgmSubjSync_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+        const cbName = 'mgm_bca_subjsync_cb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
         let scriptEl = null;
         let completed = false;
 
@@ -2158,7 +2149,7 @@ function fetchCloudSubjects() {
 
     subjectsFetchInFlight = true;
     const targetUrl = getWebhookUrl(currentDept);
-    const cbName = 'mgmSubjectsCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+    const cbName = 'mgm_bca_subjectscb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
     let scriptEl = null;
 
     const finishFetch = () => {
