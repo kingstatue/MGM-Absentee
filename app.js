@@ -636,17 +636,9 @@ function cancelHODLoginAndReturnToLogger() {
 
 // 1. Mode Switcher Handler
 function switchMode(mode) {
+    if (mode === 'voice') mode = 'typing';
     const cancelBtn = document.getElementById('cancelHODLoginBtn');
-    if (mode === 'voice') {
-        if (cancelBtn) cancelBtn.style.display = 'none';
-        if (voiceModeTab) voiceModeTab.classList.add('active');
-        if (typingModeTab) typingModeTab.classList.remove('active');
-        if (hodModeTab) hodModeTab.classList.remove('active');
-        if (voiceSection) voiceSection.style.display = 'flex';
-        if (typingSection) typingSection.style.display = 'none';
-        if (hodSection) hodSection.style.display = 'none';
-        wipeHODPortalState();
-    } else if (mode === 'typing') {
+    if (mode === 'typing') {
         if (cancelBtn) cancelBtn.style.display = 'none';
         if (typingModeTab) typingModeTab.classList.add('active');
         if (voiceModeTab) voiceModeTab.classList.remove('active');
@@ -654,7 +646,7 @@ function switchMode(mode) {
         if (typingSection) typingSection.style.display = 'flex';
         if (voiceSection) voiceSection.style.display = 'none';
         if (hodSection) hodSection.style.display = 'none';
-        if (isListening) stopListening();
+        if (typeof isListening !== 'undefined' && isListening) stopListening();
         wipeHODPortalState();
     } else if (mode === 'hod') {
         if (cancelBtn) cancelBtn.style.display = 'none';
@@ -666,7 +658,7 @@ function switchMode(mode) {
         if (hodSection) hodSection.style.display = 'block';
         if (voiceSection) voiceSection.style.display = 'none';
         if (typingSection) typingSection.style.display = 'none';
-        if (isListening) stopListening();
+        if (typeof isListening !== 'undefined' && isListening) stopListening();
 
         const hodDatePicker = document.getElementById('hodDatePicker');
         if (hodDatePicker && !hodDatePicker.value) hodDatePicker.value = getTodayISOString();
@@ -2900,6 +2892,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hodModeTab) hodModeTab.addEventListener('click', () => switchMode('hod'));
 
     initHODPortal();
+    initShortageCalculator();
 
     // Voice Actions
     if (micBtn) micBtn.addEventListener('click', toggleListening);
@@ -3149,6 +3142,7 @@ function populateModalSectionOptions() {
 function initSubjectManager() {
     const manageBtnVoice = document.getElementById('manageSubjectBtnVoice');
     const manageBtnDirect = document.getElementById('manageSubjectBtnDirect');
+    const manageBtnHeader = document.getElementById('manageSubjectBtnHeader');
     const manageBtnModal = document.getElementById('manageSubjectBtnModal');
     const subjectManageModal = document.getElementById('subjectManageModal');
     const closeSubjectModalBtn = document.getElementById('closeSubjectModalBtn');
@@ -3177,6 +3171,7 @@ function initSubjectManager() {
 
     if (manageBtnVoice) manageBtnVoice.addEventListener('click', openModal);
     if (manageBtnDirect) manageBtnDirect.addEventListener('click', openModal);
+    if (manageBtnHeader) manageBtnHeader.addEventListener('click', openModal);
     if (manageBtnModal) manageBtnModal.addEventListener('click', openModal);
     if (closeSubjectModalBtn) closeSubjectModalBtn.addEventListener('click', () => subjectManageModal.classList.remove('active'));
     if (doneSubjectModalBtn) doneSubjectModalBtn.addEventListener('click', () => subjectManageModal.classList.remove('active'));
@@ -4111,6 +4106,321 @@ function updateThemeIcon(theme) {
           </svg>`;
         themeToggleBtn.title = 'Switch to Light Mode';
     }
+}
+
+// Attendance Shortage Calculator (Method 1: Roll Range)
+function initShortageCalculator() {
+    const subTabDaily = document.getElementById('subTabDailyInformer');
+    const subTabShortage = document.getElementById('subTabShortageCalculator');
+    const dailyContainer = document.getElementById('hodDailyInformerContainer');
+    const shortageContainer = document.getElementById('hodShortageContainer');
+
+    const startRollInput = document.getElementById('shortageStartRoll');
+    const endRollInput = document.getElementById('shortageEndRoll');
+    const yearSelect = document.getElementById('shortageYearSelect');
+    const sectionSelect = document.getElementById('shortageSectionSelect');
+    const cutoffSelect = document.getElementById('shortageCutoffSelect');
+    const periodSelect = document.getElementById('shortagePeriodSelect');
+    const customDateRow = document.getElementById('shortageCustomDateRow');
+    const fromDateInput = document.getElementById('shortageFromDate');
+    const toDateInput = document.getElementById('shortageToDate');
+    const calcBtn = document.getElementById('shortageCalculateBtn');
+    const calcBtnText = document.getElementById('shortageCalculateBtnText');
+    const spinner = document.getElementById('shortageSpinner');
+    const container = document.getElementById('shortageResultsContainer');
+
+    if (subTabDaily && subTabShortage && dailyContainer && shortageContainer) {
+        subTabDaily.addEventListener('click', () => {
+            subTabDaily.classList.add('active');
+            subTabShortage.classList.remove('active');
+            dailyContainer.style.display = 'block';
+            shortageContainer.style.display = 'none';
+        });
+
+        subTabShortage.addEventListener('click', () => {
+            subTabShortage.classList.add('active');
+            subTabDaily.classList.remove('active');
+            shortageContainer.style.display = 'block';
+            dailyContainer.style.display = 'none';
+        });
+    }
+
+    if (!calcBtn) return;
+
+    if (periodSelect && customDateRow) {
+        periodSelect.addEventListener('change', () => {
+            if (periodSelect.value === 'CUSTOM') {
+                customDateRow.style.display = 'flex';
+                if (fromDateInput && !fromDateInput.value) fromDateInput.value = getTodayISOString();
+                if (toDateInput && !toDateInput.value) toDateInput.value = getTodayISOString();
+            } else {
+                customDateRow.style.display = 'none';
+            }
+        });
+    }
+
+    const updateDefaultRollRange = () => {
+        if (!startRollInput || !endRollInput) return;
+        const sec = sectionSelect ? sectionSelect.value : 'A';
+
+        if (sec === 'A') {
+            if (!startRollInput.value) startRollInput.value = '26701';
+            if (!endRollInput.value) endRollInput.value = '26760';
+        } else if (sec === 'B') {
+            if (!startRollInput.value) startRollInput.value = '26761';
+            if (!endRollInput.value) endRollInput.value = '26820';
+        } else if (sec === 'C' || sec === 'C (AIML)') {
+            if (!startRollInput.value) startRollInput.value = '26821';
+            if (!endRollInput.value) endRollInput.value = '26880';
+        }
+    };
+
+    if (sectionSelect) sectionSelect.addEventListener('change', updateDefaultRollRange);
+    if (yearSelect) yearSelect.addEventListener('change', updateDefaultRollRange);
+    updateDefaultRollRange();
+
+    calcBtn.addEventListener('click', () => {
+        const yrVal = yearSelect ? yearSelect.value : 'First Year';
+        const secVal = sectionSelect ? sectionSelect.value : 'A';
+        const sRollStr = startRollInput ? startRollInput.value.trim() : '';
+        const eRollStr = endRollInput ? endRollInput.value.trim() : '';
+        const cutoff = cutoffSelect ? parseFloat(cutoffSelect.value) || 75 : 75;
+        const period = periodSelect ? periodSelect.value : 'ALL';
+
+        if (!sRollStr || !eRollStr) {
+            alert('Please enter both Start Roll No. (e.g. 26701) and End Roll No. (e.g. 26760).');
+            if (!sRollStr && startRollInput) startRollInput.focus();
+            else if (endRollInput) endRollInput.focus();
+            return;
+        }
+
+        const sRoll = parseInt(sRollStr.replace(/\D/g, ''), 10);
+        const eRoll = parseInt(eRollStr.replace(/\D/g, ''), 10);
+
+        if (isNaN(sRoll) || isNaN(eRoll) || sRoll > eRoll) {
+            alert('Invalid roll number range. Start roll number must be less than or equal to end roll number.');
+            return;
+        }
+
+        if (spinner) spinner.style.display = 'inline-block';
+        if (calcBtnText) calcBtnText.textContent = 'Calculating Shortage...';
+        calcBtn.disabled = true;
+
+        setTimeout(() => {
+            const history = readAllHistory();
+            const now = new Date();
+            const currentMonthStr = getTodayISOString().substring(0, 7); // YYYY-MM
+
+            let periodLabel = 'All Time (Cumulative)';
+            if (period === 'MONTH') periodLabel = 'This Month (' + currentMonthStr + ')';
+            else if (period === 'WEEK') periodLabel = 'This Week (Last 7 Days)';
+            else if (period === 'CUSTOM') {
+                const fVal = fromDateInput ? fromDateInput.value : '';
+                const tVal = toDateInput ? toDateInput.value : '';
+                periodLabel = 'Custom (' + (fVal || 'Start') + ' to ' + (tVal || 'End') + ')';
+            }
+
+            const matchingSessions = history.filter(item => {
+                const yrMatch = !item.year || item.year.toLowerCase() === yrVal.toLowerCase();
+                const secMatch = !item.section || sectionsEqualForSubject(item.section, secVal);
+                const streamMatch = !item.stream || item.stream.toUpperCase() === 'BCA';
+                if (!yrMatch || !secMatch || !streamMatch) return false;
+
+                const itemDateStr = normalizeHistoryDate(item.date) || getTodayISOString();
+                if (period === 'MONTH') {
+                    return itemDateStr.substring(0, 7) === currentMonthStr;
+                } else if (period === 'WEEK') {
+                    const itemTime = new Date(itemDateStr).getTime();
+                    const weekAgo = now.getTime() - (7 * 24 * 60 * 60 * 1000);
+                    return !isNaN(itemTime) && itemTime >= weekAgo;
+                } else if (period === 'CUSTOM') {
+                    const fVal = fromDateInput ? fromDateInput.value : '';
+                    const tVal = toDateInput ? toDateInput.value : '';
+                    if (fVal && itemDateStr < fVal) return false;
+                    if (tVal && itemDateStr > tVal) return false;
+                }
+                return true;
+            });
+
+            const prefixMatch = sRollStr.match(/^([A-Za-z]+)?(\d+)$/);
+            const prefix = prefixMatch && prefixMatch[1] ? prefixMatch[1].toUpperCase() : '';
+            const padLen = prefixMatch && prefixMatch[2] ? prefixMatch[2].length : 0;
+
+            const sNum = parseInt(sRollStr.replace(/\D/g, ''), 10);
+            const eNum = parseInt(eRollStr.replace(/\D/g, ''), 10);
+
+            const rollObjects = [];
+            for (let num = sNum; num <= eNum; num++) {
+                let code = String(num);
+                if (prefix) {
+                    code = prefix + (padLen > 0 ? String(num).padStart(padLen, '0') : String(num));
+                }
+                rollObjects.push({ code: code, num: num });
+            }
+
+            const totalConducted = matchingSessions.length;
+            const absenceCountMap = {};
+
+            rollObjects.forEach(rObj => {
+                absenceCountMap[rObj.code] = 0;
+            });
+
+            matchingSessions.forEach(item => {
+                const rolls = normalizeRollNumbers(item.rollNumbers);
+                rolls.forEach(rStr => {
+                    const cleanR = String(rStr).trim().toUpperCase();
+                    const rNum = parseInt(cleanR.replace(/\D/g, ''), 10);
+
+                    rollObjects.forEach(rObj => {
+                        const codeMatch = cleanR === rObj.code;
+                        const numMatch = !isNaN(rNum) && rNum === rObj.num;
+                        
+                        // Smart suffix matching: "234" matches "25234" (and vice versa)
+                        let suffixMatch = false;
+                        if (!isNaN(rNum) && rNum > 0) {
+                            const str1 = String(rNum);
+                            const str2 = String(rObj.num);
+                            if (str1.length >= 2 && str2.length >= 2) {
+                                suffixMatch = str1.endsWith(str2) || str2.endsWith(str1);
+                            }
+                        }
+
+                        if (codeMatch || numMatch || suffixMatch) {
+                            absenceCountMap[rObj.code] = (absenceCountMap[rObj.code] || 0) + 1;
+                        }
+                    });
+                });
+            });
+
+            const shortageList = [];
+            rollObjects.forEach(rObj => {
+                const missed = absenceCountMap[rObj.code] || 0;
+                const attended = Math.max(0, totalConducted - missed);
+                const pct = totalConducted > 0 ? (attended / totalConducted) * 100 : 100;
+                const roundedPct = Math.round(pct * 10) / 10;
+
+                if (roundedPct < cutoff || cutoff === 100) {
+                    shortageList.push({
+                        roll: rObj.code,
+                        total: totalConducted,
+                        missed: missed,
+                        attended: attended,
+                        percent: roundedPct
+                    });
+                }
+            });
+
+            shortageList.sort((a, b) => a.percent - b.percent);
+
+            if (spinner) spinner.style.display = 'none';
+            if (calcBtnText) calcBtnText.textContent = '📊 Calculate Shortage Report';
+            calcBtn.disabled = false;
+
+            renderShortageResults(container, yrVal, secVal, sRollStr, eRollStr, totalConducted, cutoff, shortageList, periodLabel);
+        }, 150);
+    });
+}
+
+function renderShortageResults(container, yearStr, sectionStr, startRoll, endRoll, totalClasses, cutoff, shortageList, periodLabel) {
+    if (!container) return;
+    container.style.display = 'block';
+
+    const pLabel = periodLabel || 'All Time (Cumulative)';
+    const count = shortageList.length;
+    let html = `
+    <div style="background: var(--card-bg, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 14px; margin-top: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+            <div>
+                <h4 style="margin: 0; font-size: 0.98rem; font-weight: 800; color: var(--text-main);">
+                    📋 Shortage Results: ${escapeHTML(yearStr)} - Sec ${escapeHTML(sectionStr)}
+                </h4>
+                <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
+                    Period: <strong>${escapeHTML(pLabel)}</strong> | Roll Range: ${escapeHTML(startRoll)} – ${escapeHTML(endRoll)} | Classes Logged: <strong>${totalClasses}</strong>
+                </div>
+            </div>
+            <span class="badge ${count > 0 ? 'badge-danger' : 'badge-success'}" style="font-weight: 800; font-size: 0.78rem;">
+                ${count} Student(s) < ${cutoff}%
+            </span>
+        </div>`;
+
+    if (count === 0) {
+        html += `
+        <div style="text-align: center; padding: 16px; color: #34d399; background: rgba(52, 211, 153, 0.1); border-radius: 8px;">
+            🎉 <strong>No Students Below ${cutoff}% Attendance!</strong><br>
+            All students in roll range ${escapeHTML(startRoll)}–${escapeHTML(endRoll)} have clean attendance records for ${escapeHTML(pLabel)}.
+        </div>`;
+    } else {
+        html += `
+        <button type="button" class="btn-whatsapp-global" id="shortageShareWaBtn" style="margin-bottom: 12px; width: 100%; font-weight: 700;">
+            📱 Share Shortage List (${count} Students) to WhatsApp
+        </button>
+        <div style="display: flex; flex-direction: column; gap: 8px; max-height: 350px; overflow-y: auto;">`;
+
+        shortageList.forEach(item => {
+            let badgeColor = '#ef4444';
+            let badgeBg = 'rgba(239, 68, 68, 0.15)';
+            let statusLabel = 'Critical Shortage';
+
+            if (item.percent >= 75) {
+                badgeColor = '#10b981';
+                badgeBg = 'rgba(16, 185, 129, 0.15)';
+                statusLabel = 'Sufficient';
+            } else if (item.percent >= 60) {
+                badgeColor = '#f59e0b';
+                badgeBg = 'rgba(245, 158, 11, 0.15)';
+                statusLabel = 'Warning Shortage';
+            }
+
+            html += `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: rgba(0,0,0,0.25); border-left: 4px solid ${badgeColor}; border-radius: 6px;">
+                <div>
+                    <strong style="font-size: 0.92rem; color: var(--text-main);">Roll ${item.roll}</strong>
+                    <div style="font-size: 0.76rem; color: var(--text-muted);">
+                        Attended: ${item.attended} / ${item.total} classes (${item.missed} missed)
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 1.05rem; font-weight: 800; color: ${badgeColor};">${item.percent}%</div>
+                    <span style="font-size: 0.68rem; padding: 2px 6px; border-radius: 4px; background: ${badgeBg}; color: ${badgeColor}; font-weight: 700;">${statusLabel}</span>
+                </div>
+            </div>`;
+        });
+
+        html += `</div>`;
+    }
+
+    html += `</div>`;
+    container.innerHTML = html;
+
+    const waBtn = document.getElementById('shortageShareWaBtn');
+    if (waBtn) {
+        waBtn.addEventListener('click', () => {
+            const waText = buildShortageWhatsAppText(yearStr, sectionStr, startRoll, endRoll, totalClasses, cutoff, shortageList, pLabel);
+            const waUrl = 'https://api.whatsapp.com/send?text=' + encodeURIComponent(waText);
+            window.open(waUrl, '_blank');
+        });
+    }
+}
+
+function buildShortageWhatsAppText(yearStr, sectionStr, startRoll, endRoll, totalClasses, cutoff, shortageList, periodLabel) {
+    const pLabel = periodLabel || 'All Time (Cumulative)';
+    let msg = `⚠️ *ATTENDANCE SHORTAGE REPORT (< ${cutoff}%)*\n`;
+    msg += `📍 *MGM College — BCA ${yearStr} Sec ${sectionStr}*\n`;
+    msg += `📅 *Period: ${pLabel}*\n`;
+    msg += `📊 *Total Classes Logged: ${totalClasses}*\n`;
+    msg += `🔢 *Roll Range: ${startRoll} – ${endRoll}*\n`;
+    msg += `------------------------------------\n\n`;
+
+    if (shortageList.length === 0) {
+        msg += `✅ *All students have attendance above ${cutoff}%. No shortage detected.*\n`;
+    } else {
+        shortageList.forEach((item, idx) => {
+            msg += `${idx + 1}. *Roll ${item.roll}* — *${item.percent}%* (${item.attended}/${item.total} classes attended)\n`;
+        });
+        msg += `\n------------------------------------\n`;
+        msg += `_Please contact the department coordinator regarding attendance shortage rectification._`;
+    }
+    return msg;
 }
 
 
