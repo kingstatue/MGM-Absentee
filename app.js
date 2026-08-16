@@ -1059,26 +1059,10 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         showSuccessToast(payload);
         resetAllInputs();
 
-        // 2. Transmit to Google Sheet via multi-engine webhooks concurrently on Submit click
-        let transmitted = false;
-        try {
-            const targetUrl = getWebhookUrl(currentDept);
-            transmitted = await postWithRetry(targetUrl, withAuth(payload));
-        } catch (e) {
-            console.warn('Post transmission note:', e);
-        }
-
-        // 3. Perform live persistence check to ensure raw data row is created
-        try {
-            const verify = await verifyAttendanceOnSheet(payload);
-            if (verify && verify.verified) {
-                saveToLocalHistory({
-                    ...payload,
-                    offline: false,
-                    timestamp: timestamp
-                });
-            }
-        } catch (eV) {}
+        // 2. Immediately trigger sync to Google Sheet on Submit click (no need to open Today tab)
+        setTimeout(() => {
+            syncOfflineEntries();
+        }, 100);
 
         return { status: 'ok' };
     } catch (err) {
