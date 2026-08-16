@@ -1291,7 +1291,9 @@ function updateAvailableSlots(dept, dateVal, yearVal, sectionVal, slotSelectEl) 
 
         history.forEach(item => {
             if ((item.stream || 'BCA') !== cleanStream) return;
-            if (item.date !== cleanDate) return;
+            const itemDate = normalizeHistoryDate(item.date);
+            const targetDate = normalizeHistoryDate(cleanDate);
+            if (itemDate !== targetDate) return;
             if (!isYearMatching(item.year, yearVal)) return;
             
             const itemSec = item.section || 'A';
