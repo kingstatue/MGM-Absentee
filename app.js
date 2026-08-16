@@ -1069,25 +1069,30 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
             changesSummary: isUpdate ? '✏️ Replaced previous entry' : 'Initial Submission'
         };
 
-        // 1. Transmit to Google Sheet via hidden HTML form POST & fetch (fire immediately)
-        try {
-            const targetUrl = getWebhookUrl(currentDept);
-            postWithRetry(targetUrl, withAuth(payload));
-        } catch (e) {
-            console.warn('Post transmission note:', e);
+        const isOffline = typeof navigator !== 'undefined' && navigator && !navigator.onLine;
+
+        // 1. Transmit to Google Sheet via hidden HTML form POST & fetch (fire immediately if online)
+        if (!isOffline) {
+            try {
+                const targetUrl = getWebhookUrl(currentDept);
+                postWithRetry(targetUrl, withAuth(payload));
+            } catch (e) {
+                console.warn('Post transmission note:', e);
+            }
         }
 
         // 2. Save local record with accurate sync status
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        saveToLocalHistory({
+        const recordPayload = {
             ...payload,
-            offline: false,
+            offline: isOffline,
             timestamp: timestamp
-        });
+        };
+        saveToLocalHistory(recordPayload);
 
         // 3. Clear text box instantly (0ms) & reset inputs
         clearAllRollTextBoxes();
-        showSuccessToast(payload);
+        showSuccessToast(recordPayload);
         resetAllInputs();
 
         return { status: 'ok' };
@@ -1245,14 +1250,18 @@ function showSuccessToast(payload) {
     if (!successToast) return;
 
     const isUpdate = payload && (payload.isUpdate || payload.action === 'update');
+    const isOffline = payload && payload.offline;
     const rollCount = (payload && payload.rollNumbers && payload.rollNumbers !== 'NIL')
         ? normalizeRollNumbers(payload.rollNumbers).length
         : 0;
-    const actionLabel = isUpdate ? 'Attendance Updated!' : 'Attendance Recorded!';
+    const actionLabel = isUpdate
+        ? (isOffline ? 'Attendance Updated (Offline)' : 'Attendance Updated!')
+        : (isOffline ? 'Attendance Recorded (Offline)' : 'Attendance Recorded!');
     
     if (toastTitleElem) toastTitleElem.textContent = actionLabel;
     if (toastSubtext && payload) {
-        toastSubtext.textContent = `${rollCount} absentee(s) logged for ${payload.date || ''} - ${payload.year || ''} Sec ${payload.section || ''} (${payload.subject || ''})`;
+        const statusNote = isOffline ? 'saved offline (Pending Sync)' : 'logged';
+        toastSubtext.textContent = `${rollCount} absentee(s) ${statusNote} for ${payload.date || ''} - ${payload.year || ''} Sec ${payload.section || ''} (${payload.subject || ''})`;
     }
     
     // Explicit inline overrides to guarantee 100% visibility on mobile WebKit/Blink
@@ -1759,9 +1768,9 @@ async function syncOfflineEntries() {
                     syncedCount++;
                     continue;
                 }
-                await postWithRetry(targetUrl, payload, 1);
+                const posted = await postWithRetry(targetUrl, payload);
                 const verify = await verifyAttendanceOnSheet(payload);
-                if (verify.verified) {
+                if (verify.verified || (posted && navigator.onLine)) {
                     history[i].offline = false;
                     syncedCount++;
                 }
