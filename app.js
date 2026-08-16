@@ -973,6 +973,25 @@ function showSlotConflictDialog(params) {
     });
 }
 
+async function isNetworkOffline() {
+    if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) {
+        return true;
+    }
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1200);
+        const res = await fetch('./version.json?r=' + Date.now(), {
+            method: 'GET',
+            cache: 'no-store',
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        return !res.ok;
+    } catch (e) {
+        return true;
+    }
+}
+
 async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectVal, slotVal, btnElem, textElem, spinnerElem) {
     if (btnElem) btnElem.disabled = true;
     if (textElem) textElem.style.opacity = '0.5';
@@ -1069,7 +1088,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
             changesSummary: isUpdate ? '✏️ Replaced previous entry' : 'Initial Submission'
         };
 
-        const isOffline = typeof navigator !== 'undefined' && navigator && !navigator.onLine;
+        const isOffline = await isNetworkOffline();
 
         // 1. Transmit to Google Sheet via hidden HTML form POST & fetch (fire immediately if online)
         if (!isOffline) {
@@ -1095,7 +1114,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         showSuccessToast(recordPayload);
         resetAllInputs();
 
-        return { status: 'ok' };
+        return { status: isOffline ? 'offline' : 'ok' };
     } catch (err) {
         console.warn('Error during submitData execution:', err);
         return { status: 'error' };
