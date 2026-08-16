@@ -1055,7 +1055,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         saveToLocalHistory({
             ...payload,
-            offline: false,
+            offline: true,
             timestamp: timestamp
         });
         showSuccessToast(payload);
