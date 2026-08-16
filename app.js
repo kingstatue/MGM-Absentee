@@ -1010,26 +1010,54 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
             const sec2 = cleanSection || 'A';
             if (!isSectionOverlap(sec1, sec2)) return false;
 
-            // Subject check: Different subjects in the same slot are distinct entries (do NOT overwrite)
-            const subj1 = (item.subject || '').trim().toLowerCase();
-            const subj2 = (cleanSubject || '').trim().toLowerCase();
-            if (subj1 && subj2 && subj1 !== subj2) {
-                return false;
+            // Combined/ALL Parallel Electives (e.g. Kannada vs Sanskrit) are allowed concurrently in the same slot
+            const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || sec1.toLowerCase().includes('combin');
+            const isComb2 = cleanSection === 'ALL' || (cleanSection || '').toUpperCase() === 'ALL' || (cleanSection || '').toLowerCase().includes('combin');
+            const isElec1 = isElectiveOrLanguageSubject(item.subject);
+            const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
+
+            if (isComb1 && isComb2 && isElec1 && isElec2 && (item.subject || '').trim().toLowerCase() !== cleanSubject.toLowerCase()) {
+                return false; // Parallel elective -> allowed concurrently, no conflict modal needed!
             }
 
-            return true;
+            return true; // Conflict or match!
         });
 
-        const isUpdate = !!existingEntry;
+        let isUpdate = !!existingEntry;
+        let finalRolls = formattedRolls;
+
+        // If a conflict/match exists for this slot, ask user via Conflict Dialog Modal!
+        if (existingEntry) {
+            const userChoice = await showSlotConflictDialog({
+                date: cleanDate,
+                year: yearVal,
+                section: cleanSection,
+                slot: cleanSlot,
+                subject: cleanSubject,
+                existingSubj: existingEntry.subject,
+                existingRolls: existingEntry.rollNumbers,
+                newRolls: formattedRolls
+            });
+
+            if (!userChoice || userChoice.action === 'cancel') {
+                return { status: 'cancelled' };
+            }
+
+            if (userChoice.action === 'merge') {
+                finalRolls = userChoice.mergedRolls;
+            }
+            // If 'replace', finalRolls stays formattedRolls
+        }
+
         const prevRollsArr = existingEntry ? normalizeRollNumbers(existingEntry.rollNumbers) : [];
-        const diff = computeRollDiff(prevRollsArr.join(', '), formattedRolls);
+        const diff = computeRollDiff(prevRollsArr.join(', '), finalRolls);
 
         const payload = {
             action: isUpdate ? 'update' : 'create',
             isUpdate: isUpdate,
             stream: currentDept,
             date: cleanDate,
-            rollNumbers: formattedRolls,
+            rollNumbers: finalRolls,
             year: yearVal,
             section: cleanSection,
             subject: cleanSubject,
