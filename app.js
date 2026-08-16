@@ -293,29 +293,21 @@ function submitViaJSONP(url, payload) {
     });
 }
 
-// Multi-Engine Webhook Transmitter (Hidden Form POST + JSONP GET + fetch for guaranteed mobile delivery)
+// Dual-Engine Webhook Transmitter (fetch POST + hidden HTML form submission for guaranteed mobile delivery)
 async function postWithRetry(url, payload) {
     if (!url) return false;
 
     let success = false;
 
-    // 1. Primary: Hidden HTML Form POST (Guaranteed POST delivery)
+    // 1. Primary: Hidden HTML Form POST (Bypasses mobile CORS / opaque fetch restrictions 100%)
     try {
-        submitViaHiddenForm(url, payload);
+        await submitViaHiddenForm(url, payload);
         success = true;
     } catch (e) {
         console.warn('Hidden form post note:', e);
     }
 
-    // 2. Secondary: JSONP GET (Bypasses mobile CORS & iframe restrictions 100%)
-    try {
-        const jsonpOk = await submitViaJSONP(url, payload);
-        if (jsonpOk) success = true;
-    } catch (e) {
-        console.warn('JSONP post note:', e);
-    }
-
-    // 3. Redundancy: Fetch POST
+    // 2. Secondary: Fetch POST for network redundancy
     try {
         if (navigator.onLine) {
             fetch(url, {
@@ -1049,20 +1041,31 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
             changesSummary: isUpdate ? '✏️ Replaced previous entry' : 'Initial Submission'
         };
 
-        // 1. Local record, clear text box, and display Attendance Recorded toast INSTANTLY (0ms)
+        // 1. Transmit to Google Sheet via hidden HTML form POST & fetch (wait for transmission)
+        let transmitted = false;
+        try {
+            const targetUrl = getWebhookUrl(currentDept);
+            transmitted = await postWithRetry(targetUrl, withAuth(payload));
+        } catch (e) {
+            console.warn('Post transmission note:', e);
+        }
+
+        // 2. Save local record with accurate sync status
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         saveToLocalHistory({
             ...payload,
-            offline: true,
+            offline: !transmitted,
             timestamp: timestamp
         });
+
+        // 3. Display Toast and Clear Text Box AFTER transmission completes
         showSuccessToast(payload);
         resetAllInputs();
 
-        // 2. Immediately trigger sync to Google Sheet on Submit click (no need to open Today tab)
-        setTimeout(() => {
-            syncOfflineEntries();
-        }, 100);
+        // 4. Fallback background sync if transmission was offline
+        if (!transmitted) {
+            setTimeout(syncOfflineEntries, 500);
+        }
 
         return { status: 'ok' };
     } catch (err) {
