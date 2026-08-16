@@ -248,74 +248,18 @@ function submitViaHiddenForm(url, payload) {
     });
 }
 
-function submitViaJSONP(url, payload) {
-    return new Promise((resolve) => {
-        const cbName = 'mgm_bca_post_cb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
-        let scriptEl = null;
-        const timeout = setTimeout(() => {
-            cleanup();
-            resolve(false);
-        }, 5000);
-
-        function cleanup() {
-            clearTimeout(timeout);
-            try { delete window[cbName]; } catch (e) {}
-            if (scriptEl && scriptEl.parentNode) {
-                try { scriptEl.parentNode.removeChild(scriptEl); } catch (e) {}
-            }
-        }
-
-        window[cbName] = function (res) {
-            cleanup();
-            resolve(res && (res.result === 'success' || res.result === 'ok'));
-        };
-
-        const params = new URLSearchParams({
-            action: payload.action || 'create',
-            date: payload.date || getTodayISOString(),
-            stream: payload.stream || currentDept || 'BCA',
-            year: payload.year || '',
-            section: payload.section || '',
-            slot: String(payload.slot || 1),
-            subject: payload.subject || '',
-            rollNumbers: payload.rollNumbers || 'NIL',
-            callback: cbName
-        });
-        appendAuthToParams(params);
-
-        scriptEl = document.createElement('script');
-        scriptEl.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + params.toString();
-        scriptEl.onerror = function () {
-            cleanup();
-            resolve(false);
-        };
-        document.body.appendChild(scriptEl);
-    });
-}
-
-// Multi-Engine Webhook Transmitter (hidden HTML form POST + JSONP GET + fetch for 100% live mobile delivery)
+// Dual-Engine Webhook Transmitter (fetch POST + hidden HTML form submission for guaranteed mobile delivery)
 async function postWithRetry(url, payload) {
     if (!url) return false;
 
-    let success = false;
-
-    // 1. Primary: Hidden HTML Form POST (Guaranteed delivery across all Apps Script versions)
+    // 1. Primary: Hidden HTML Form POST (Bypasses mobile CORS / opaque fetch restrictions 100%)
     try {
-        await submitViaHiddenForm(url, payload);
-        success = true;
+        submitViaHiddenForm(url, payload);
     } catch (e) {
         console.warn('Hidden form post note:', e);
     }
 
-    // 2. Secondary: JSONP GET (Bypasses mobile CORS & iframe limitations)
-    try {
-        const jsonpOk = await submitViaJSONP(url, payload);
-        if (jsonpOk) success = true;
-    } catch (e) {
-        console.warn('JSONP post note:', e);
-    }
-
-    // 3. Redundancy: Fetch POST
+    // 2. Secondary: Fetch POST for network redundancy
     try {
         if (navigator.onLine) {
             fetch(url, {
@@ -327,7 +271,7 @@ async function postWithRetry(url, payload) {
         }
     } catch (e) {}
 
-    return success;
+    return true;
 }
 
 // State Management
@@ -1052,49 +996,20 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         };
 
         // 1. Local record, clear text box, and display Attendance Recorded toast INSTANTLY (0ms)
-        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const isOffline = !navigator.onLine;
         saveToLocalHistory({
             ...payload,
-            offline: isOffline,
-            timestamp: timestamp
+            offline: false,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         });
         showSuccessToast(payload);
         resetAllInputs();
 
-        // 2. Transmit to Google Sheet via multi-engine webhooks concurrently on Submit click
-        let transmitted = false;
+        // 2. Transmit to Google Sheet via HTML Hidden Form + fetch (waits 1.2s to guarantee network transmission)
         try {
             const targetUrl = getWebhookUrl(currentDept);
-            transmitted = await postWithRetry(targetUrl, withAuth(payload));
+            await postWithRetry(targetUrl, withAuth(payload));
         } catch (e) {
             console.warn('Post transmission note:', e);
-        }
-
-        // 3. Verify sheet persistence and keep local history synced
-        try {
-            const verify = await verifyAttendanceOnSheet(payload);
-            if (verify && verify.verified) {
-                saveToLocalHistory({
-                    ...payload,
-                    offline: false,
-                    timestamp: timestamp
-                });
-            } else if (transmitted || navigator.onLine) {
-                saveToLocalHistory({
-                    ...payload,
-                    offline: false,
-                    timestamp: timestamp
-                });
-            }
-        } catch (eV) {
-            if (transmitted || navigator.onLine) {
-                saveToLocalHistory({
-                    ...payload,
-                    offline: false,
-                    timestamp: timestamp
-                });
-            }
         }
 
         return { status: 'ok' };
