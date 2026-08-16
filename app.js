@@ -28,14 +28,14 @@ const STREAM_WEBHOOK_URLS = {
     BCA: 'https://script.google.com/macros/s/AKfycbzsk5c_tKkt5ysv7ZsNUBMAl4G13vxpeC_p-2fNcbH_Sj3eTm2YwxLFJ-mAh8VgD-i8oQ/exec'
 };
 
-const DEFAULT_GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzg-HkInidAz7Yt9udCNvDAbfnM1OEtOU3LbJRcupLaU4Mvkf-ANM3G49Cw2Rvn7Qfsiw/exec';
+const DEFAULT_GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzsk5c_tKkt5ysv7ZsNUBMAl4G13vxpeC_p-2fNcbH_Sj3eTm2YwxLFJ-mAh8VgD-i8oQ/exec';
 
 function getWebhookUrl(deptCode) {
-    const dept = deptCode || currentDept;
+    const dept = (deptCode || currentDept || 'BCA').toString().trim().toUpperCase();
     if (STREAM_WEBHOOK_URLS && STREAM_WEBHOOK_URLS[dept] && !STREAM_WEBHOOK_URLS[dept].includes('YOUR_')) {
         return STREAM_WEBHOOK_URLS[dept];
     }
-    return DEFAULT_GOOGLE_SCRIPT_URL;
+    return STREAM_WEBHOOK_URLS.BCA || DEFAULT_GOOGLE_SCRIPT_URL;
 }
 
 /** Session auth sent with every sheet request (open access — login not required). */
@@ -118,7 +118,7 @@ function appendAuthToParams(params) {
 function authenticateWithServer(deptCode, passcode) {
     return new Promise((resolve) => {
         const targetUrl = getWebhookUrl(deptCode);
-        const cbName = 'mgmAuthCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+        const cbName = 'mgm_bca_auth_cb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
         let scriptEl = null;
         let done = false;
 
@@ -248,48 +248,36 @@ function submitViaHiddenForm(url, payload) {
     });
 }
 
-// Dual-Engine Webhook Transmitter (fetch POST + hidden HTML form fallback for mobile browsers)
-async function postWithRetry(url, payload, maxRetries = 2) {
-    let lastError = null;
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
+// Dual-Engine Webhook Transmitter (fetch POST + hidden HTML form submission for guaranteed mobile delivery)
+async function postWithRetry(url, payload) {
+    if (!url) return false;
 
+    let success = false;
+
+    // 1. Primary: Fetch POST for immediate background network transmission
+    try {
+        if (navigator.onLine) {
             await fetch(url, {
                 method: 'POST',
                 mode: 'no-cors',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(payload),
-                signal: controller.signal
+                body: JSON.stringify(payload)
             });
-            clearTimeout(timeoutId);
-            return true;
-        } catch (err) {
-            lastError = err;
-            console.warn(`Webhook POST fetch attempt ${attempt + 1} failed:`, err);
-            if (attempt < maxRetries) {
-                await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
-            }
-        }
-    }
-
-    // Fallback 1: Beacon
-    try {
-        if (navigator && navigator.sendBeacon) {
-            const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain;charset=utf-8' });
-            if (navigator.sendBeacon(url, blob)) return true;
+            success = true;
         }
     } catch (e) {
-        console.warn('Beacon fallback failed:', e);
+        console.warn('Fetch POST note:', e);
     }
 
-    // Fallback 2: Hidden Form Submit (Bypasses mobile CORS redirect restrictions completely)
-    console.log('[Dual-Engine] Executing Hidden Form POST fallback to guarantee Google Sheet delivery...');
-    const formSuccess = await submitViaHiddenForm(url, payload);
-    if (formSuccess) return true;
+    // 2. Secondary: Hidden HTML Form POST (Guaranteed delivery for webviews & mobile PWA)
+    try {
+        await submitViaHiddenForm(url, payload);
+        success = true;
+    } catch (e) {
+        console.warn('Hidden form post note:', e);
+    }
 
-    throw lastError || new Error('Network error after retries');
+    return success;
 }
 
 // State Management
@@ -515,7 +503,7 @@ function checkDoubleEntryLive(dateVal, yearVal, sectionVal, subjectVal, slotVal,
  */
 function checkSheetSlotConflict(dateVal, yearVal, sectionVal, slotVal, subjectVal) {
     return new Promise((resolve) => {
-        const cbName = 'mgmConflictCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+        const cbName = 'mgm_bca_conflict_cb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
         let scriptEl = null;
         const timeout = setTimeout(() => {
             cleanup();
@@ -636,17 +624,9 @@ function cancelHODLoginAndReturnToLogger() {
 
 // 1. Mode Switcher Handler
 function switchMode(mode) {
+    if (mode === 'voice') mode = 'typing';
     const cancelBtn = document.getElementById('cancelHODLoginBtn');
-    if (mode === 'voice') {
-        if (cancelBtn) cancelBtn.style.display = 'none';
-        if (voiceModeTab) voiceModeTab.classList.add('active');
-        if (typingModeTab) typingModeTab.classList.remove('active');
-        if (hodModeTab) hodModeTab.classList.remove('active');
-        if (voiceSection) voiceSection.style.display = 'flex';
-        if (typingSection) typingSection.style.display = 'none';
-        if (hodSection) hodSection.style.display = 'none';
-        wipeHODPortalState();
-    } else if (mode === 'typing') {
+    if (mode === 'typing') {
         if (cancelBtn) cancelBtn.style.display = 'none';
         if (typingModeTab) typingModeTab.classList.add('active');
         if (voiceModeTab) voiceModeTab.classList.remove('active');
@@ -654,7 +634,7 @@ function switchMode(mode) {
         if (typingSection) typingSection.style.display = 'flex';
         if (voiceSection) voiceSection.style.display = 'none';
         if (hodSection) hodSection.style.display = 'none';
-        if (isListening) stopListening();
+        if (typeof isListening !== 'undefined' && isListening) stopListening();
         wipeHODPortalState();
     } else if (mode === 'hod') {
         if (cancelBtn) cancelBtn.style.display = 'none';
@@ -666,7 +646,7 @@ function switchMode(mode) {
         if (hodSection) hodSection.style.display = 'block';
         if (voiceSection) voiceSection.style.display = 'none';
         if (typingSection) typingSection.style.display = 'none';
-        if (isListening) stopListening();
+        if (typeof isListening !== 'undefined' && isListening) stopListening();
 
         const hodDatePicker = document.getElementById('hodDatePicker');
         if (hodDatePicker && !hodDatePicker.value) hodDatePicker.value = getTodayISOString();
@@ -952,169 +932,107 @@ function showSlotConflictDialog(params) {
 }
 
 async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectVal, slotVal, btnElem, textElem, spinnerElem) {
-    const cleanDate = dateVal || getTodayISOString();
-    const cleanSlot = parseInt(slotVal, 10) || 1;
-    let cleanSubject = (subjectVal || '').trim();
-    let cleanSection = sectionVal || 'A';
+    if (btnElem) btnElem.disabled = true;
+    if (textElem) textElem.style.opacity = '0.5';
+    if (spinnerElem) spinnerElem.style.display = 'inline-block';
 
-    if (!cleanSubject) {
-        alert('Please enter / select a subject name before submitting.');
-        return { status: 'cancelled' };
-    }
-
-    // Language / elective subjects are combined across sections
-    if (isElectiveOrLanguageSubject(cleanSubject)) {
-        cleanSection = 'ALL';
-    }
-
-    const rollNumbersArray = normalizeRollNumbers(rollNumbersRaw);
-    let formattedRolls = rollNumbersArray.length > 0 ? rollNumbersArray.join(', ') : 'NIL';
-
-    // Local Storage conflict check (Instant 0ms)
-    const history = JSON.parse(localStorage.getItem('mgm_attendance_history') || '[]');
-    const cleanStream = currentDept || 'BCA';
-    const existingEntry = history.find(item => {
-        if ((item.stream || 'BCA') !== cleanStream) return false;
-        if (item.date !== cleanDate) return false;
-        if (item.year !== yearVal) return false;
-        if (parseInt(item.slot, 10) !== cleanSlot) return false;
-
-        const sec1 = item.section || 'A';
-        const sec2 = cleanSection || 'A';
-        if (!isSectionOverlap(sec1, sec2)) return false;
-
-        const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || sec1.toLowerCase().includes('combin');
-        const isComb2 = cleanSection === 'ALL' || (cleanSection || '').toUpperCase() === 'ALL' || (cleanSection || '').toLowerCase().includes('combin');
-        const isElec1 = isElectiveOrLanguageSubject(item.subject);
-        const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
-
-        if (isComb1 && isComb2 && isElec1 && isElec2 && item.subject.trim().toLowerCase() !== cleanSubject.toLowerCase()) {
-            return false; // Parallel elective
-        }
-
-        return true;
-    });
-
-    // Always check Google Sheet too (other teachers / other devices)
-    let sheetConflict = { exists: false };
     try {
-        sheetConflict = await checkSheetSlotConflict(cleanDate, yearVal, cleanSection, cleanSlot, cleanSubject);
-    } catch (e) {
-        sheetConflict = { exists: false, offline: true };
-    }
+        const cleanDate = dateVal || getTodayISOString();
+        const cleanSlot = parseInt(slotVal, 10) || 1;
+        let cleanSubject = (subjectVal || '').trim();
+        let cleanSection = sectionVal || 'A';
 
-    const hasConflict = !!existingEntry || !!(sheetConflict.exists && !sheetConflict.offline);
-    let finalRolls = formattedRolls;
-    let finalRollsArr = rollNumbersArray;
-    let conflictChoice = 'create';
-
-    if (hasConflict) {
-        // Prefer sheet truth when both exist (cross-device)
-        const prevSubj = (sheetConflict.exists && sheetConflict.subject)
-            ? sheetConflict.subject
-            : (existingEntry ? existingEntry.subject : cleanSubject);
-        const prevRolls = (sheetConflict.exists && sheetConflict.rollNumbers != null)
-            ? sheetConflict.rollNumbers
-            : (existingEntry ? existingEntry.rollNumbers : 'NIL');
-
-        const userChoice = await showSlotConflictDialog({
-            date: cleanDate,
-            year: yearVal,
-            section: cleanSection,
-            slot: cleanSlot,
-            subject: cleanSubject,
-            existingSubj: prevSubj,
-            existingRolls: prevRolls,
-            newRolls: formattedRolls
-        });
-
-        if (!userChoice || userChoice.action === 'cancel') {
+        if (!cleanSubject) {
+            alert('Please enter / select a subject name before submitting.');
             return { status: 'cancelled' };
         }
 
-        conflictChoice = userChoice.action;
-        finalRolls = userChoice.mergedRolls;
-        finalRollsArr = userChoice.mergedArr;
-    }
+        // Language / elective subjects are combined across sections
+        if (isElectiveOrLanguageSubject(cleanSubject)) {
+            cleanSection = 'ALL';
+        }
 
-    // Now disable button & show spinner during actual HTTP POST transmission
-    if (btnElem) btnElem.disabled = true;
-    if (textElem) textElem.style.opacity = '0.5';
-    if (spinnerElem) spinnerElem.style.display = 'block';
+        const rollNumbersArray = normalizeRollNumbers(rollNumbersRaw);
+        let formattedRolls = rollNumbersArray.length > 0 ? rollNumbersArray.join(', ') : 'NIL';
 
-    const isUpdate = hasConflict;
-    const prevRollsArr = (sheetConflict.exists && !sheetConflict.offline)
-        ? normalizeRollNumbers(sheetConflict.rollNumbers)
-        : (existingEntry ? normalizeRollNumbers(existingEntry.rollNumbers) : []);
-    const diff = computeRollDiff(prevRollsArr.join(', '), finalRolls);
+        // Local Storage conflict check (Instant 0ms via BCA storage)
+        const history = readAllHistory();
+        const cleanStream = currentDept || 'BCA';
+        const existingEntry = history.find(item => {
+            if ((item.stream || 'BCA') !== cleanStream) return false;
+            if (item.date !== cleanDate) return false;
+            if (item.year !== yearVal) return false;
+            if (parseInt(item.slot, 10) !== cleanSlot) return false;
 
-    const payload = {
-        action: isUpdate ? 'update' : 'create',
-        isUpdate: isUpdate,
-        stream: currentDept,
-        date: cleanDate,
-        rollNumbers: finalRolls,
-        year: yearVal,
-        section: cleanSection,
-        subject: cleanSubject,
-        slot: cleanSlot,
-        previousRollNumbers: diff.prevRolls.length > 0 ? diff.prevRolls.join(', ') : 'NIL',
-        addedRollNumbers: diff.addedRolls.length > 0 ? diff.addedRolls.join(', ') : 'NIL',
-        deletedRollNumbers: diff.deletedRolls.length > 0 ? diff.deletedRolls.join(', ') : 'NIL',
-        retainedRollNumbers: diff.retainedRolls.length > 0 ? diff.retainedRolls.join(', ') : 'NIL',
-        changesSummary: isUpdate 
-            ? (conflictChoice === 'merge' ? '🔀 Merged absentees from both entries' : '✏️ Replaced previous entry')
-            : 'Initial Submission'
-    };
+            const sec1 = item.section || 'A';
+            const sec2 = cleanSection || 'A';
+            if (!isSectionOverlap(sec1, sec2)) return false;
 
-    console.log('Submitting Attendance Payload:', payload);
+            const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || sec1.toLowerCase().includes('combin');
+            const isComb2 = cleanSection === 'ALL' || (cleanSection || '').toUpperCase() === 'ALL' || (cleanSection || '').toLowerCase().includes('combin');
+            const isElec1 = isElectiveOrLanguageSubject(item.subject);
+            const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
 
-    if (textElem) textElem.style.opacity = '0';
-    if (spinnerElem) spinnerElem.style.display = 'block';
+            if (isComb1 && isComb2 && isElec1 && isElec2 && item.subject.trim().toLowerCase() !== cleanSubject.toLowerCase()) {
+                return false; // Parallel elective
+            }
 
-    try {
-        const targetUrl = getWebhookUrl(currentDept);
-        await postWithRetry(targetUrl, withAuth(payload), 2);
-
-        // Sheet write already sent — show success now; confirm badge in background
-        saveToLocalHistory({
-            ...payload,
-            offline: false,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            return true;
         });
-        closeConfirmationModal();
-        resetAllInputs();
-        showSuccessToast(payload);
 
-        setTimeout(async () => {
-            try {
-                const verify = await verifyAttendanceOnSheet(payload);
-                if (!verify.verified) {
-                    saveToLocalHistory({
-                        ...payload,
-                        offline: true,
-                        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                    });
-                }
-            } catch (e) {}
-            fetchTodayServerHistory();
-        }, 400);
-        return { status: 'ok' };
+        const isUpdate = !!existingEntry;
+        const prevRollsArr = existingEntry ? normalizeRollNumbers(existingEntry.rollNumbers) : [];
+        const diff = computeRollDiff(prevRollsArr.join(', '), formattedRolls);
 
-    } catch (error) {
-        console.warn('Error submitting attendance:', error);
+        const payload = {
+            action: isUpdate ? 'update' : 'create',
+            isUpdate: isUpdate,
+            stream: currentDept,
+            date: cleanDate,
+            rollNumbers: formattedRolls,
+            year: yearVal,
+            section: cleanSection,
+            subject: cleanSubject,
+            slot: cleanSlot,
+            previousRollNumbers: diff.prevRolls.length > 0 ? diff.prevRolls.join(', ') : 'NIL',
+            addedRollNumbers: diff.addedRolls.length > 0 ? diff.addedRolls.join(', ') : 'NIL',
+            deletedRollNumbers: diff.deletedRolls.length > 0 ? diff.deletedRolls.join(', ') : 'NIL',
+            retainedRollNumbers: diff.retainedRolls.length > 0 ? diff.retainedRolls.join(', ') : 'NIL',
+            changesSummary: isUpdate ? '✏️ Replaced previous entry' : 'Initial Submission'
+        };
+
+        // 1. Local record, clear text box, and display Attendance Recorded toast INSTANTLY (0ms)
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         saveToLocalHistory({
             ...payload,
             offline: true,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            timestamp: timestamp
         });
-        closeConfirmationModal();
+        showSuccessToast(payload);
         resetAllInputs();
-        showCustomToast(
-            '⚠️ Saved Locally (Network Offline)',
-            'Saved on phone. Will auto-sync to Google Sheet when online or tap "Sync" in Today\'s History.'
-        );
-        return { status: 'offline' };
+
+        // 2. Transmit to Google Sheet via HTML Hidden Form + fetch (waits for network transmission)
+        let transmitted = false;
+        try {
+            const targetUrl = getWebhookUrl(currentDept);
+            transmitted = await postWithRetry(targetUrl, withAuth(payload));
+        } catch (e) {
+            console.warn('Post transmission note:', e);
+        }
+
+        // 3. Mark offline: false once transmission completes
+        if (transmitted || navigator.onLine) {
+            saveToLocalHistory({
+                ...payload,
+                offline: false,
+                timestamp: timestamp
+            });
+        }
+
+        return { status: 'ok' };
+    } catch (err) {
+        console.warn('Error during submitData execution:', err);
+        return { status: 'error' };
     } finally {
         if (btnElem) btnElem.disabled = false;
         if (textElem) textElem.style.opacity = '1';
@@ -1259,35 +1177,67 @@ function submitDirectForm() {
 
 // 5. Success Toast & Reset State
 function showSuccessToast(payload) {
-    const isUpdate = payload.isUpdate || payload.action === 'update';
-    const rollCount = payload.rollNumbers === 'NIL' ? 0 : (normalizeRollNumbers(payload.rollNumbers).length);
+    const successToast = document.getElementById('successToast');
+    const toastSubtext = document.getElementById('toastSubtext');
+    const toastTitleElem = document.querySelector('#successToast .toast-text');
+
+    if (!successToast) return;
+
+    const isUpdate = payload && (payload.isUpdate || payload.action === 'update');
+    const rollCount = (payload && payload.rollNumbers && payload.rollNumbers !== 'NIL')
+        ? normalizeRollNumbers(payload.rollNumbers).length
+        : 0;
     const actionLabel = isUpdate ? 'Attendance Updated!' : 'Attendance Recorded!';
     
-    const toastTitleElem = document.querySelector('#successToast .toast-text');
     if (toastTitleElem) toastTitleElem.textContent = actionLabel;
+    if (toastSubtext && payload) {
+        toastSubtext.textContent = `${rollCount} absentee(s) logged for ${payload.date || ''} - ${payload.year || ''} Sec ${payload.section || ''} (${payload.subject || ''})`;
+    }
     
-    toastSubtext.textContent = `${rollCount} absentee(s) logged for ${payload.date} - ${payload.year} Sec ${payload.section} (${payload.subject})`;
-    
+    // Explicit inline overrides to guarantee 100% visibility on mobile WebKit/Blink
+    successToast.style.display = 'flex';
+    successToast.style.opacity = '1';
+    successToast.style.pointerEvents = 'auto';
+    successToast.style.visibility = 'visible';
+    successToast.style.zIndex = '999999';
     successToast.classList.add('active');
 
     setTimeout(() => {
-        successToast.classList.remove('active');
-    }, 2800);
+        successToast.style.opacity = '0';
+        successToast.style.pointerEvents = 'none';
+        setTimeout(() => {
+            successToast.style.display = 'none';
+            successToast.style.visibility = 'hidden';
+            successToast.classList.remove('active');
+        }, 300);
+    }, 3500);
 }
 
 function resetAllInputs() {
     clearTranscript();
     const todayStr = getTodayISOString();
     const deptConfig = DEPT_CONFIG[currentDept] || DEPT_CONFIG.BCA;
-    manualTextInput.value = '';
-    directDateInput.value = todayStr;
-    dateInput.value = todayStr;
-    directRollInput.value = '';
-    setSubjectValue(directSubjectInput, deptConfig.defaultSubject);
-    setSubjectValue(subjectInput, deptConfig.defaultSubject);
-    directYearSelect.value = 'First Year';
-    directSectionSelect.value = 'A';
-    directSlotSelect.value = '1';
+    
+    if (manualTextInput) manualTextInput.value = '';
+    if (directDateInput) directDateInput.value = todayStr;
+    if (dateInput) dateInput.value = todayStr;
+    
+    const dRoll = document.getElementById('directRollInput') || directRollInput;
+    if (dRoll) {
+        dRoll.value = '';
+        dRoll.defaultValue = '';
+    }
+    const rRoll = document.getElementById('rollNumbersInput') || rollNumbersInput;
+    if (rRoll) {
+        rRoll.value = '';
+        rRoll.defaultValue = '';
+    }
+
+    if (directSubjectInput) setSubjectValue(directSubjectInput, deptConfig.defaultSubject);
+    if (subjectInput) setSubjectValue(subjectInput, deptConfig.defaultSubject);
+    if (directYearSelect) directYearSelect.value = 'First Year';
+    if (directSectionSelect) directSectionSelect.value = 'A';
+    if (directSlotSelect) directSlotSelect.value = '1';
 
     const directDurationSelect = document.getElementById('directDurationSelect');
     const durationSelect = document.getElementById('durationSelect');
@@ -1314,7 +1264,7 @@ async function deleteData(dateVal, yearVal, sectionVal, subjectVal, slotVal) {
     const cleanDate = dateVal || getTodayISOString();
     const cleanSlot = parseInt(slotVal, 10) || 1;
 
-    const history = JSON.parse(localStorage.getItem('mgm_attendance_history') || '[]');
+    const history = readAllHistory();
     const targetItem = history.find(item => 
         item.date === cleanDate &&
         item.year === yearVal &&
@@ -1347,7 +1297,7 @@ async function deleteData(dateVal, yearVal, sectionVal, subjectVal, slotVal) {
           item.subject.trim().toLowerCase() === subjectVal.trim().toLowerCase() &&
           parseInt(item.slot, 10) === cleanSlot)
     );
-    localStorage.setItem('mgm_attendance_history', JSON.stringify(updatedHistory));
+    localStorage.setItem('mgm_bca_attendance_history', JSON.stringify(updatedHistory));
     renderHistoryList();
 
     const payload = {
@@ -1444,7 +1394,7 @@ function entryKey(item) {
 
 function readAllHistory() {
     try {
-        return JSON.parse(localStorage.getItem('mgm_attendance_history') || '[]');
+        return JSON.parse(localStorage.getItem('mgm_bca_attendance_history') || '[]');
     } catch (e) {
         return [];
     }
@@ -1480,7 +1430,7 @@ function compactAttendanceHistory(history) {
 
 function pruneOldHistory() {
     const kept = compactAttendanceHistory(readAllHistory());
-    localStorage.setItem('mgm_attendance_history', JSON.stringify(kept));
+    localStorage.setItem('mgm_bca_attendance_history', JSON.stringify(kept));
     return kept;
 }
 
@@ -1549,7 +1499,7 @@ function saveToLocalHistory(entry) {
     }
 
     history = compactAttendanceHistory(history);
-    localStorage.setItem('mgm_attendance_history', JSON.stringify(history));
+    localStorage.setItem('mgm_bca_attendance_history', JSON.stringify(history));
     renderHistoryList();
 }
 
@@ -1616,7 +1566,7 @@ async function syncOfflineEntries() {
         }
     }
 
-    localStorage.setItem('mgm_attendance_history', JSON.stringify(history));
+    localStorage.setItem('mgm_bca_attendance_history', JSON.stringify(history));
     renderHistoryList();
     updateSyncButtonState();
 
@@ -1656,7 +1606,7 @@ function fetchTodayServerHistory() {
     const stream = currentDept || 'BCA';
     const dateVal = getTodayISOString();
     const targetUrl = getWebhookUrl(stream);
-    const cbName = 'mgm_history_server_cb_' + Date.now();
+    const cbName = 'mgm_bca_history_cb_' + Date.now();
 
     const timeout = setTimeout(() => {
         isFetchingServerHistory = false;
@@ -1706,7 +1656,7 @@ function fetchTodayServerHistory() {
             });
 
             const merged = compactAttendanceHistory(Array.from(byKey.values()));
-            localStorage.setItem('mgm_attendance_history', JSON.stringify(merged));
+            localStorage.setItem('mgm_bca_attendance_history', JSON.stringify(merged));
             renderHistoryList();
             updateSyncButtonState();
         }
@@ -1900,7 +1850,7 @@ function checkAndRefreshDate() {
 
 function getPasscodeStore() {
     try {
-        const store = JSON.parse(localStorage.getItem('mgm_custom_passcodes') || '{}');
+        const store = JSON.parse(localStorage.getItem('mgm_bca_custom_passcodes') || '{}');
         return {
             teacher: {
                 BCA: store.teacherBCA || DEPT_CONFIG.BCA.passcode
@@ -1924,7 +1874,7 @@ function getPasscodeStore() {
 }
 
 function savePasscodeStore(store) {
-    localStorage.setItem('mgm_custom_passcodes', JSON.stringify(store));
+    localStorage.setItem('mgm_bca_custom_passcodes', JSON.stringify(store));
 }
 
 // Open BCA immediately — no login / passcode gate
@@ -1932,11 +1882,11 @@ function initDepartmentManager() {
     currentRole = 'ADMIN';
     isHODAuthenticated = true;
     pendingHODTabSwitch = false;
-    localStorage.setItem('mgm_dept', 'BCA');
-    localStorage.setItem('mgm_role', 'ADMIN');
-    localStorage.setItem('mgm_auth_stream', 'BCA');
-    try { sessionStorage.setItem('mgm_auth_pass', 'open'); } catch (e) {}
-    try { localStorage.setItem('mgm_session_pass', 'open'); } catch (e) {}
+    localStorage.setItem('mgm_bca_dept', 'BCA');
+    localStorage.setItem('mgm_bca_role', 'ADMIN');
+    localStorage.setItem('mgm_bca_auth_stream', 'BCA');
+    try { sessionStorage.setItem('mgm_bca_auth_pass', 'open'); } catch (e) {}
+    try { localStorage.setItem('mgm_bca_session_pass', 'open'); } catch (e) {}
 
     if (deptLoginModal) deptLoginModal.classList.remove('active');
 
@@ -2047,38 +1997,38 @@ function updateYearSelects(config) {
 
 function getCustomSubjectsStore() {
     try {
-        return JSON.parse(localStorage.getItem('mgm_custom_subjects') || '{}');
+        return JSON.parse(localStorage.getItem('mgm_bca_custom_subjects') || '{}');
     } catch (e) {
         return {};
     }
 }
 
 function saveCustomSubjectsStore(store) {
-    localStorage.setItem('mgm_custom_subjects', JSON.stringify(store));
+    localStorage.setItem('mgm_bca_custom_subjects', JSON.stringify(store));
 }
 
 function getCloudSubjectsStore() {
     try {
-        return JSON.parse(localStorage.getItem('mgm_cloud_subjects') || '{}');
+        return JSON.parse(localStorage.getItem('mgm_bca_cloud_subjects') || '{}');
     } catch (e) {
         return {};
     }
 }
 
 function saveCloudSubjectsStore(store) {
-    localStorage.setItem('mgm_cloud_subjects', JSON.stringify(store));
+    localStorage.setItem('mgm_bca_cloud_subjects', JSON.stringify(store));
 }
 
 function getElectiveFlagsStore() {
     try {
-        return JSON.parse(localStorage.getItem('mgm_elective_flags') || '{}');
+        return JSON.parse(localStorage.getItem('mgm_bca_elective_flags') || '{}');
     } catch (e) {
         return {};
     }
 }
 
 function saveElectiveFlagsStore(store) {
-    localStorage.setItem('mgm_elective_flags', JSON.stringify(store));
+    localStorage.setItem('mgm_bca_elective_flags', JSON.stringify(store));
 }
 
 function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sectionStr, oldSubjectName, oldSectionStr) {
@@ -2098,7 +2048,7 @@ function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sec
     submitViaHiddenForm(targetUrl, payload).catch(e => console.warn('[SubjectSync] Hidden form submission error:', e));
 
     return new Promise((resolve) => {
-        const cbName = 'mgmSubjSync_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+        const cbName = 'mgm_bca_subjsync_cb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
         let scriptEl = null;
         let completed = false;
 
@@ -2149,7 +2099,7 @@ function sendSubjectToCloud(action, deptCode, yearStr, subjName, isElective, sec
         };
         document.body.appendChild(scriptEl);
     }).finally(() => {
-        try { localStorage.setItem('mgm_subject_sync_trigger', String(Date.now())); } catch (e) {}
+        try { localStorage.setItem('mgm_bca_subject_sync_trigger', String(Date.now())); } catch (e) {}
     });
 }
 
@@ -2164,7 +2114,7 @@ if (typeof window !== 'undefined') {
 
 if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('storage', (e) => {
-        if (e.key === 'mgm_subject_sync_trigger') {
+        if (e.key === 'mgm_bca_subject_sync_trigger') {
             fetchCloudSubjects();
         }
     });
@@ -2176,7 +2126,7 @@ function fetchCloudSubjects() {
 
     subjectsFetchInFlight = true;
     const targetUrl = getWebhookUrl(currentDept);
-    const cbName = 'mgmSubjectsCb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+    const cbName = 'mgm_bca_subjectscb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
     let scriptEl = null;
 
     const finishFetch = () => {
@@ -2314,7 +2264,7 @@ function fetchCloudSubjects() {
 
 function getClearedDeptsStore() {
     try {
-        return JSON.parse(localStorage.getItem('mgm_cleared_depts') || '{}');
+        return JSON.parse(localStorage.getItem('mgm_bca_cleared_depts') || localStorage.getItem('mgm_cleared_depts') || '{}');
     } catch (e) {
         return {};
     }
@@ -2322,20 +2272,20 @@ function getClearedDeptsStore() {
 
 function saveClearedDeptsStore(store) {
     try {
-        localStorage.setItem('mgm_cleared_depts', JSON.stringify(store || {}));
+        localStorage.setItem('mgm_bca_cleared_depts', JSON.stringify(store || {}));
     } catch (e) {}
 }
 
 function getDeletedSubjectsStore() {
     try {
-        return JSON.parse(localStorage.getItem('mgm_deleted_subjects') || '{}');
+        return JSON.parse(localStorage.getItem('mgm_bca_deleted_subjects') || localStorage.getItem('mgm_deleted_subjects') || '{}');
     } catch (e) {
         return {};
     }
 }
 
 function saveDeletedSubjectsStore(store) {
-    localStorage.setItem('mgm_deleted_subjects', JSON.stringify(store));
+    localStorage.setItem('mgm_bca_deleted_subjects', JSON.stringify(store));
 }
 
 function beginSubjectEdit(subjName, sectionHint) {
@@ -2869,10 +2819,50 @@ function renderStreamPresets(config) {
     });
 }
 
+function checkAndRefreshDate() {
+    const todayStr = getTodayISOString();
+    if (typeof currentDateTrack !== 'undefined' && currentDateTrack !== todayStr) {
+        currentDateTrack = todayStr;
+        const dateInput = document.getElementById('dateInput');
+        const directDateInput = document.getElementById('directDateInput');
+        const hodDatePicker = document.getElementById('hodDatePicker');
+        const todayBadge = document.getElementById('todayBadge');
+
+        if (dateInput) dateInput.value = todayStr;
+        if (directDateInput) directDateInput.value = todayStr;
+        if (hodDatePicker) hodDatePicker.value = todayStr;
+        if (todayBadge) {
+            const options = { month: 'short', day: 'numeric', year: 'numeric' };
+            todayBadge.textContent = 'Today - ' + new Date().toLocaleDateString(undefined, options);
+        }
+        applyMaxDateRestrictions();
+    }
+}
+
+function applyMaxDateRestrictions() {
+    const todayStr = getTodayISOString();
+    const dateInputIds = ['directDateInput', 'dateInput', 'hodDatePicker', 'shortageFromDate', 'shortageToDate'];
+    
+    dateInputIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.max = todayStr;
+            el.addEventListener('change', () => {
+                if (el.value && el.value > todayStr) {
+                    alert('⚠️ Future date disabled. Classes for tomorrow or future dates have not been conducted yet.');
+                    el.value = todayStr;
+                }
+            });
+        }
+    });
+}
+
 // Event Initialization
 document.addEventListener('DOMContentLoaded', () => {
     const todayStr = getTodayISOString();
     currentDateTrack = todayStr;
+    applyMaxDateRestrictions();
+
     if (dateInput) dateInput.value = todayStr;
     if (directDateInput) directDateInput.value = todayStr;
     if (todayBadge) {
@@ -2887,10 +2877,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Auto-refresh date after midnight 12 AM when page is visible/focused
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') checkAndRefreshDate();
+        if (document.visibilityState === 'visible') {
+            checkAndRefreshDate();
+            syncOfflineEntries();
+        }
     });
     window.addEventListener('focus', checkAndRefreshDate);
+    window.addEventListener('online', syncOfflineEntries);
     setInterval(checkAndRefreshDate, 60000);
+
+    if (navigator.onLine) {
+        setTimeout(syncOfflineEntries, 1500);
+    }
 
     initSpeechRecognition();
 
@@ -2900,6 +2898,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hodModeTab) hodModeTab.addEventListener('click', () => switchMode('hod'));
 
     initHODPortal();
+    initShortageCalculator();
 
     // Voice Actions
     if (micBtn) micBtn.addEventListener('click', toggleListening);
@@ -3034,6 +3033,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const openHistory = () => {
         renderHistoryList();
         historyDrawer.classList.add('active');
+        try { document.body.style.overflow = 'hidden'; } catch (e) {}
         fetchTodayServerHistory();
         syncOfflineEntries();
     };
@@ -3043,7 +3043,10 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', openHistory);
     });
 
-    if (closeHistoryBtn) closeHistoryBtn.addEventListener('click', () => historyDrawer.classList.remove('active'));
+    if (closeHistoryBtn) closeHistoryBtn.addEventListener('click', () => {
+        historyDrawer.classList.remove('active');
+        try { document.body.style.overflow = ''; } catch (e) {}
+    });
 
     const syncOfflineBtn = document.getElementById('syncOfflineBtn');
     if (syncOfflineBtn) {
@@ -3149,6 +3152,7 @@ function populateModalSectionOptions() {
 function initSubjectManager() {
     const manageBtnVoice = document.getElementById('manageSubjectBtnVoice');
     const manageBtnDirect = document.getElementById('manageSubjectBtnDirect');
+    const manageBtnHeader = document.getElementById('manageSubjectBtnHeader');
     const manageBtnModal = document.getElementById('manageSubjectBtnModal');
     const subjectManageModal = document.getElementById('subjectManageModal');
     const closeSubjectModalBtn = document.getElementById('closeSubjectModalBtn');
@@ -3177,6 +3181,7 @@ function initSubjectManager() {
 
     if (manageBtnVoice) manageBtnVoice.addEventListener('click', openModal);
     if (manageBtnDirect) manageBtnDirect.addEventListener('click', openModal);
+    if (manageBtnHeader) manageBtnHeader.addEventListener('click', openModal);
     if (manageBtnModal) manageBtnModal.addEventListener('click', openModal);
     if (closeSubjectModalBtn) closeSubjectModalBtn.addEventListener('click', () => subjectManageModal.classList.remove('active'));
     if (doneSubjectModalBtn) doneSubjectModalBtn.addEventListener('click', () => subjectManageModal.classList.remove('active'));
@@ -4111,6 +4116,321 @@ function updateThemeIcon(theme) {
           </svg>`;
         themeToggleBtn.title = 'Switch to Light Mode';
     }
+}
+
+// Attendance Shortage Calculator (Method 1: Roll Range)
+function initShortageCalculator() {
+    const subTabDaily = document.getElementById('subTabDailyInformer');
+    const subTabShortage = document.getElementById('subTabShortageCalculator');
+    const dailyContainer = document.getElementById('hodDailyInformerContainer');
+    const shortageContainer = document.getElementById('hodShortageContainer');
+
+    const startRollInput = document.getElementById('shortageStartRoll');
+    const endRollInput = document.getElementById('shortageEndRoll');
+    const yearSelect = document.getElementById('shortageYearSelect');
+    const sectionSelect = document.getElementById('shortageSectionSelect');
+    const cutoffSelect = document.getElementById('shortageCutoffSelect');
+    const periodSelect = document.getElementById('shortagePeriodSelect');
+    const customDateRow = document.getElementById('shortageCustomDateRow');
+    const fromDateInput = document.getElementById('shortageFromDate');
+    const toDateInput = document.getElementById('shortageToDate');
+    const calcBtn = document.getElementById('shortageCalculateBtn');
+    const calcBtnText = document.getElementById('shortageCalculateBtnText');
+    const spinner = document.getElementById('shortageSpinner');
+    const container = document.getElementById('shortageResultsContainer');
+
+    if (subTabDaily && subTabShortage && dailyContainer && shortageContainer) {
+        subTabDaily.addEventListener('click', () => {
+            subTabDaily.classList.add('active');
+            subTabShortage.classList.remove('active');
+            dailyContainer.style.display = 'block';
+            shortageContainer.style.display = 'none';
+        });
+
+        subTabShortage.addEventListener('click', () => {
+            subTabShortage.classList.add('active');
+            subTabDaily.classList.remove('active');
+            shortageContainer.style.display = 'block';
+            dailyContainer.style.display = 'none';
+        });
+    }
+
+    if (!calcBtn) return;
+
+    if (periodSelect && customDateRow) {
+        periodSelect.addEventListener('change', () => {
+            if (periodSelect.value === 'CUSTOM') {
+                customDateRow.style.display = 'flex';
+                if (fromDateInput && !fromDateInput.value) fromDateInput.value = getTodayISOString();
+                if (toDateInput && !toDateInput.value) toDateInput.value = getTodayISOString();
+            } else {
+                customDateRow.style.display = 'none';
+            }
+        });
+    }
+
+    const updateDefaultRollRange = () => {
+        if (!startRollInput || !endRollInput) return;
+        const sec = sectionSelect ? sectionSelect.value : 'A';
+
+        if (sec === 'A') {
+            if (!startRollInput.value) startRollInput.value = '26701';
+            if (!endRollInput.value) endRollInput.value = '26760';
+        } else if (sec === 'B') {
+            if (!startRollInput.value) startRollInput.value = '26761';
+            if (!endRollInput.value) endRollInput.value = '26820';
+        } else if (sec === 'C' || sec === 'C (AIML)') {
+            if (!startRollInput.value) startRollInput.value = '26821';
+            if (!endRollInput.value) endRollInput.value = '26880';
+        }
+    };
+
+    if (sectionSelect) sectionSelect.addEventListener('change', updateDefaultRollRange);
+    if (yearSelect) yearSelect.addEventListener('change', updateDefaultRollRange);
+    updateDefaultRollRange();
+
+    calcBtn.addEventListener('click', () => {
+        const yrVal = yearSelect ? yearSelect.value : 'First Year';
+        const secVal = sectionSelect ? sectionSelect.value : 'A';
+        const sRollStr = startRollInput ? startRollInput.value.trim() : '';
+        const eRollStr = endRollInput ? endRollInput.value.trim() : '';
+        const cutoff = cutoffSelect ? parseFloat(cutoffSelect.value) || 75 : 75;
+        const period = periodSelect ? periodSelect.value : 'ALL';
+
+        if (!sRollStr || !eRollStr) {
+            alert('Please enter both Start Roll No. (e.g. 26701) and End Roll No. (e.g. 26760).');
+            if (!sRollStr && startRollInput) startRollInput.focus();
+            else if (endRollInput) endRollInput.focus();
+            return;
+        }
+
+        const sRoll = parseInt(sRollStr.replace(/\D/g, ''), 10);
+        const eRoll = parseInt(eRollStr.replace(/\D/g, ''), 10);
+
+        if (isNaN(sRoll) || isNaN(eRoll) || sRoll > eRoll) {
+            alert('Invalid roll number range. Start roll number must be less than or equal to end roll number.');
+            return;
+        }
+
+        if (spinner) spinner.style.display = 'inline-block';
+        if (calcBtnText) calcBtnText.textContent = 'Calculating Shortage...';
+        calcBtn.disabled = true;
+
+        setTimeout(() => {
+            const history = readAllHistory();
+            const now = new Date();
+            const currentMonthStr = getTodayISOString().substring(0, 7); // YYYY-MM
+
+            let periodLabel = 'All Time (Cumulative)';
+            if (period === 'MONTH') periodLabel = 'This Month (' + currentMonthStr + ')';
+            else if (period === 'WEEK') periodLabel = 'This Week (Last 7 Days)';
+            else if (period === 'CUSTOM') {
+                const fVal = fromDateInput ? fromDateInput.value : '';
+                const tVal = toDateInput ? toDateInput.value : '';
+                periodLabel = 'Custom (' + (fVal || 'Start') + ' to ' + (tVal || 'End') + ')';
+            }
+
+            const matchingSessions = history.filter(item => {
+                const yrMatch = !item.year || item.year.toLowerCase() === yrVal.toLowerCase();
+                const secMatch = !item.section || sectionsEqualForSubject(item.section, secVal);
+                const streamMatch = !item.stream || item.stream.toUpperCase() === 'BCA';
+                if (!yrMatch || !secMatch || !streamMatch) return false;
+
+                const itemDateStr = normalizeHistoryDate(item.date) || getTodayISOString();
+                if (period === 'MONTH') {
+                    return itemDateStr.substring(0, 7) === currentMonthStr;
+                } else if (period === 'WEEK') {
+                    const itemTime = new Date(itemDateStr).getTime();
+                    const weekAgo = now.getTime() - (7 * 24 * 60 * 60 * 1000);
+                    return !isNaN(itemTime) && itemTime >= weekAgo;
+                } else if (period === 'CUSTOM') {
+                    const fVal = fromDateInput ? fromDateInput.value : '';
+                    const tVal = toDateInput ? toDateInput.value : '';
+                    if (fVal && itemDateStr < fVal) return false;
+                    if (tVal && itemDateStr > tVal) return false;
+                }
+                return true;
+            });
+
+            const prefixMatch = sRollStr.match(/^([A-Za-z]+)?(\d+)$/);
+            const prefix = prefixMatch && prefixMatch[1] ? prefixMatch[1].toUpperCase() : '';
+            const padLen = prefixMatch && prefixMatch[2] ? prefixMatch[2].length : 0;
+
+            const sNum = parseInt(sRollStr.replace(/\D/g, ''), 10);
+            const eNum = parseInt(eRollStr.replace(/\D/g, ''), 10);
+
+            const rollObjects = [];
+            for (let num = sNum; num <= eNum; num++) {
+                let code = String(num);
+                if (prefix) {
+                    code = prefix + (padLen > 0 ? String(num).padStart(padLen, '0') : String(num));
+                }
+                rollObjects.push({ code: code, num: num });
+            }
+
+            const totalConducted = matchingSessions.length;
+            const absenceCountMap = {};
+
+            rollObjects.forEach(rObj => {
+                absenceCountMap[rObj.code] = 0;
+            });
+
+            matchingSessions.forEach(item => {
+                const rolls = normalizeRollNumbers(item.rollNumbers);
+                rolls.forEach(rStr => {
+                    const cleanR = String(rStr).trim().toUpperCase();
+                    const rNum = parseInt(cleanR.replace(/\D/g, ''), 10);
+
+                    rollObjects.forEach(rObj => {
+                        const codeMatch = cleanR === rObj.code;
+                        const numMatch = !isNaN(rNum) && rNum === rObj.num;
+                        
+                        // Smart suffix matching: "234" matches "25234" (and vice versa)
+                        let suffixMatch = false;
+                        if (!isNaN(rNum) && rNum > 0) {
+                            const str1 = String(rNum);
+                            const str2 = String(rObj.num);
+                            if (str1.length >= 2 && str2.length >= 2) {
+                                suffixMatch = str1.endsWith(str2) || str2.endsWith(str1);
+                            }
+                        }
+
+                        if (codeMatch || numMatch || suffixMatch) {
+                            absenceCountMap[rObj.code] = (absenceCountMap[rObj.code] || 0) + 1;
+                        }
+                    });
+                });
+            });
+
+            const shortageList = [];
+            rollObjects.forEach(rObj => {
+                const missed = absenceCountMap[rObj.code] || 0;
+                const attended = Math.max(0, totalConducted - missed);
+                const pct = totalConducted > 0 ? (attended / totalConducted) * 100 : 100;
+                const roundedPct = Math.round(pct * 10) / 10;
+
+                if (roundedPct < cutoff || cutoff === 100) {
+                    shortageList.push({
+                        roll: rObj.code,
+                        total: totalConducted,
+                        missed: missed,
+                        attended: attended,
+                        percent: roundedPct
+                    });
+                }
+            });
+
+            shortageList.sort((a, b) => a.percent - b.percent);
+
+            if (spinner) spinner.style.display = 'none';
+            if (calcBtnText) calcBtnText.textContent = '📊 Calculate Shortage Report';
+            calcBtn.disabled = false;
+
+            renderShortageResults(container, yrVal, secVal, sRollStr, eRollStr, totalConducted, cutoff, shortageList, periodLabel);
+        }, 150);
+    });
+}
+
+function renderShortageResults(container, yearStr, sectionStr, startRoll, endRoll, totalClasses, cutoff, shortageList, periodLabel) {
+    if (!container) return;
+    container.style.display = 'block';
+
+    const pLabel = periodLabel || 'All Time (Cumulative)';
+    const count = shortageList.length;
+    let html = `
+    <div style="background: var(--card-bg, #1e293b); border: 1px solid var(--border-color, #334155); border-radius: 10px; padding: 14px; margin-top: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+            <div>
+                <h4 style="margin: 0; font-size: 0.98rem; font-weight: 800; color: var(--text-main);">
+                    📋 Shortage Results: ${escapeHTML(yearStr)} - Sec ${escapeHTML(sectionStr)}
+                </h4>
+                <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 2px;">
+                    Period: <strong>${escapeHTML(pLabel)}</strong> | Roll Range: ${escapeHTML(startRoll)} – ${escapeHTML(endRoll)} | Classes Logged: <strong>${totalClasses}</strong>
+                </div>
+            </div>
+            <span class="badge ${count > 0 ? 'badge-danger' : 'badge-success'}" style="font-weight: 800; font-size: 0.78rem;">
+                ${count} Student(s) < ${cutoff}%
+            </span>
+        </div>`;
+
+    if (count === 0) {
+        html += `
+        <div style="text-align: center; padding: 16px; color: #34d399; background: rgba(52, 211, 153, 0.1); border-radius: 8px;">
+            🎉 <strong>No Students Below ${cutoff}% Attendance!</strong><br>
+            All students in roll range ${escapeHTML(startRoll)}–${escapeHTML(endRoll)} have clean attendance records for ${escapeHTML(pLabel)}.
+        </div>`;
+    } else {
+        html += `
+        <button type="button" class="btn-whatsapp-global" id="shortageShareWaBtn" style="margin-bottom: 12px; width: 100%; font-weight: 700;">
+            📱 Share Shortage List (${count} Students) to WhatsApp
+        </button>
+        <div style="display: flex; flex-direction: column; gap: 8px; max-height: 350px; overflow-y: auto;">`;
+
+        shortageList.forEach(item => {
+            let badgeColor = '#ef4444';
+            let badgeBg = 'rgba(239, 68, 68, 0.15)';
+            let statusLabel = 'Critical Shortage';
+
+            if (item.percent >= 75) {
+                badgeColor = '#10b981';
+                badgeBg = 'rgba(16, 185, 129, 0.15)';
+                statusLabel = 'Sufficient';
+            } else if (item.percent >= 60) {
+                badgeColor = '#f59e0b';
+                badgeBg = 'rgba(245, 158, 11, 0.15)';
+                statusLabel = 'Warning Shortage';
+            }
+
+            html += `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: rgba(0,0,0,0.25); border-left: 4px solid ${badgeColor}; border-radius: 6px;">
+                <div>
+                    <strong style="font-size: 0.92rem; color: var(--text-main);">Roll ${item.roll}</strong>
+                    <div style="font-size: 0.76rem; color: var(--text-muted);">
+                        Attended: ${item.attended} / ${item.total} classes (${item.missed} missed)
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 1.05rem; font-weight: 800; color: ${badgeColor};">${item.percent}%</div>
+                    <span style="font-size: 0.68rem; padding: 2px 6px; border-radius: 4px; background: ${badgeBg}; color: ${badgeColor}; font-weight: 700;">${statusLabel}</span>
+                </div>
+            </div>`;
+        });
+
+        html += `</div>`;
+    }
+
+    html += `</div>`;
+    container.innerHTML = html;
+
+    const waBtn = document.getElementById('shortageShareWaBtn');
+    if (waBtn) {
+        waBtn.addEventListener('click', () => {
+            const waText = buildShortageWhatsAppText(yearStr, sectionStr, startRoll, endRoll, totalClasses, cutoff, shortageList, pLabel);
+            const waUrl = 'https://api.whatsapp.com/send?text=' + encodeURIComponent(waText);
+            window.open(waUrl, '_blank');
+        });
+    }
+}
+
+function buildShortageWhatsAppText(yearStr, sectionStr, startRoll, endRoll, totalClasses, cutoff, shortageList, periodLabel) {
+    const pLabel = periodLabel || 'All Time (Cumulative)';
+    let msg = `⚠️ *ATTENDANCE SHORTAGE REPORT (< ${cutoff}%)*\n`;
+    msg += `📍 *MGM College — BCA ${yearStr} Sec ${sectionStr}*\n`;
+    msg += `📅 *Period: ${pLabel}*\n`;
+    msg += `📊 *Total Classes Logged: ${totalClasses}*\n`;
+    msg += `🔢 *Roll Range: ${startRoll} – ${endRoll}*\n`;
+    msg += `------------------------------------\n\n`;
+
+    if (shortageList.length === 0) {
+        msg += `✅ *All students have attendance above ${cutoff}%. No shortage detected.*\n`;
+    } else {
+        shortageList.forEach((item, idx) => {
+            msg += `${idx + 1}. *Roll ${item.roll}* — *${item.percent}%* (${item.attended}/${item.total} classes attended)\n`;
+        });
+        msg += `\n------------------------------------\n`;
+        msg += `_Please contact the department coordinator regarding attendance shortage rectification._`;
+    }
+    return msg;
 }
 
 
