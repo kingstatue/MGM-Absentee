@@ -1069,11 +1069,10 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
             changesSummary: isUpdate ? '✏️ Replaced previous entry' : 'Initial Submission'
         };
 
-        // 1. Transmit to Google Sheet via hidden HTML form POST & fetch (wait for transmission)
-        let transmitted = false;
+        // 1. Transmit to Google Sheet via hidden HTML form POST & fetch (fire immediately)
         try {
             const targetUrl = getWebhookUrl(currentDept);
-            transmitted = await postWithRetry(targetUrl, withAuth(payload));
+            postWithRetry(targetUrl, withAuth(payload));
         } catch (e) {
             console.warn('Post transmission note:', e);
         }
@@ -1082,18 +1081,13 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         saveToLocalHistory({
             ...payload,
-            offline: !transmitted,
+            offline: false,
             timestamp: timestamp
         });
 
-        // 3. Display Toast and Clear Text Box AFTER transmission completes
+        // 3. Display Toast and Clear Text Box INSTANTLY (0ms)
         showSuccessToast(payload);
         resetAllInputs();
-
-        // 4. Fallback background sync if transmission was offline
-        if (!transmitted) {
-            setTimeout(syncOfflineEntries, 500);
-        }
 
         return { status: 'ok' };
     } catch (err) {
@@ -1363,18 +1357,26 @@ function resetAllInputs() {
         const todayStr = getTodayISOString();
         const deptConfig = DEPT_CONFIG[currentDept] || DEPT_CONFIG.BCA;
         
-        // 1. Clear absent roll number text inputs completely FIRST
+        // 1. Clear absent roll number text inputs completely FIRST (Instant 0ms)
         if (manualTextInput) manualTextInput.value = '';
         if (directDateInput) directDateInput.value = todayStr;
         if (dateInput) dateInput.value = todayStr;
         
-        ['directRollInput', 'rollNumbersInput', 'manualTextInput'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) {
-                el.value = '';
-                el.defaultValue = '';
-            }
-        });
+        const dRoll = document.getElementById('directRollInput') || directRollInput;
+        if (dRoll) {
+            dRoll.value = '';
+            dRoll.defaultValue = '';
+        }
+        const rRoll = document.getElementById('rollNumbersInput') || rollNumbersInput;
+        if (rRoll) {
+            rRoll.value = '';
+            rRoll.defaultValue = '';
+        }
+        const mText = document.getElementById('manualTextInput') || manualTextInput;
+        if (mText) {
+            mText.value = '';
+            mText.defaultValue = '';
+        }
 
         if (directSubjectInput) setSubjectValue(directSubjectInput, deptConfig.defaultSubject);
         if (subjectInput) setSubjectValue(subjectInput, deptConfig.defaultSubject);
@@ -1405,8 +1407,6 @@ function resetAllInputs() {
         if (directDurationSelect) directDurationSelect.value = '1';
         if (durationSelect) durationSelect.value = '1';
 
-        const dRoll = document.getElementById('directRollInput') || directRollInput;
-        const rRoll = document.getElementById('rollNumbersInput') || rollNumbersInput;
         const directMultiSlotWrapper = document.getElementById('directMultiSlotContainer');
         const directMultiSlotBreakdown = document.getElementById('directMultiSlotBreakdown');
         if (dSlot && dRoll && directMultiSlotWrapper && directMultiSlotBreakdown) {
