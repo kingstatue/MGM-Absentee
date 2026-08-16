@@ -1018,13 +1018,11 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
             const sec2 = cleanSection || 'A';
             if (!isSectionOverlap(sec1, sec2)) return false;
 
-            const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || sec1.toLowerCase().includes('combin');
-            const isComb2 = cleanSection === 'ALL' || (cleanSection || '').toUpperCase() === 'ALL' || (cleanSection || '').toLowerCase().includes('combin');
-            const isElec1 = isElectiveOrLanguageSubject(item.subject);
-            const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
-
-            if (isComb1 && isComb2 && isElec1 && isElec2 && item.subject.trim().toLowerCase() !== cleanSubject.toLowerCase()) {
-                return false; // Parallel elective
+            // Subject check: Different subjects in the same slot are distinct entries (do NOT overwrite)
+            const subj1 = (item.subject || '').trim().toLowerCase();
+            const subj2 = (cleanSubject || '').trim().toLowerCase();
+            if (subj1 && subj2 && subj1 !== subj2) {
+                return false;
             }
 
             return true;
@@ -1288,9 +1286,16 @@ function resetAllInputs() {
 
     if (directSubjectInput) setSubjectValue(directSubjectInput, deptConfig.defaultSubject);
     if (subjectInput) setSubjectValue(subjectInput, deptConfig.defaultSubject);
-    if (directYearSelect) directYearSelect.value = 'First Year';
-    if (directSectionSelect) directSectionSelect.value = 'A';
-    if (directSlotSelect) directSlotSelect.value = '1';
+
+    // Auto-advance slot to next slot for consecutive class submissions
+    if (directSlotSelect) {
+        let cur = parseInt(directSlotSelect.value, 10) || 1;
+        directSlotSelect.value = String(cur < 8 ? cur + 1 : 1);
+    }
+    if (slotSelect) {
+        let curM = parseInt(slotSelect.value, 10) || 1;
+        slotSelect.value = String(curM < 8 ? curM + 1 : 1);
+    }
 
     const directDurationSelect = document.getElementById('directDurationSelect');
     const durationSelect = document.getElementById('durationSelect');
