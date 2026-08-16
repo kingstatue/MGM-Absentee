@@ -24,11 +24,11 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <link rel="stylesheet" href="styles.css?v=v28.73-bca">
+  <link rel="stylesheet" href="styles.css?v=v28.75-bca">
   <script>
     // Auto-update on first open after GitHub Pages deploy (runs before app.js)
     (function () {
-      var EXPECTED = 'v28.73-bca';
+      var EXPECTED = 'v28.75-bca';
       var KEY = 'mgm_bca_shell_ver';
       var reloading = false;
 
@@ -354,8 +354,7 @@
           </div>
 
           <div class="modal-buttons" style="margin-top: 10px;">
-            <button type="button" class="btn-secondary btn-cancel" id="directResetBtn" onclick="resetAllInputs(); return false;">Clear / Reset</button>
-            <button type="button" class="btn-primary btn-submit" id="directSubmitBtn">
+            <button type="button" class="btn-primary btn-submit" id="directSubmitBtn" style="width: 100%;">
               <span id="directSubmitBtnText">Submit Absentee</span>
               <div class="spinner" id="directSubmitSpinner" style="display: none;"></div>
             </button>
@@ -448,7 +447,7 @@
             </div>
 
             <div class="hod-filter-row" style="margin-bottom: 8px;">
-              <div class="form-group" style="flex: 1; min-width: 120px;">
+              <div class="form-group" style="flex: 1; min-width: 110px;">
                 <label for="shortageYearSelect">Year</label>
                 <select id="shortageYearSelect" class="form-select">
                   <option value="First Year">First Year</option>
@@ -456,7 +455,7 @@
                   <option value="Third Year">Third Year</option>
                 </select>
               </div>
-              <div class="form-group" style="flex: 1; min-width: 120px;">
+              <div class="form-group" style="flex: 1; min-width: 110px;">
                 <label for="shortageSectionSelect">Section</label>
                 <select id="shortageSectionSelect" class="form-select">
                   <option value="A">Section A</option>
@@ -464,6 +463,12 @@
                   <option value="C">Section C</option>
                   <option value="C (AIML)">Section C (AIML)</option>
                   <option value="ALL">Combined (Electives)</option>
+                </select>
+              </div>
+              <div class="form-group" style="flex: 1; min-width: 140px;">
+                <label for="shortageSubjectSelect">Subject Filter</label>
+                <select id="shortageSubjectSelect" class="form-select">
+                  <option value="ALL" selected>All Subjects (Overall)</option>
                 </select>
               </div>
             </div>
@@ -758,7 +763,7 @@
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js?v=v28.73-bca"></script>
-  <script src="app.js?v=v28.73-bca"></script>
+  <script src="parser.js?v=v28.75-bca"></script>
+  <script src="app.js?v=v28.75-bca"></script>
 </body>
 </html>
