@@ -1274,15 +1274,16 @@ function showSuccessToast(payload) {
     }, 3500);
 }
 
-let isRefreshingSlots = false;
+const refreshingElements = new WeakSet();
 
 function updateAvailableSlots(dept, dateVal, yearVal, sectionVal, slotSelectEl) {
-    if (!slotSelectEl || isRefreshingSlots) return;
-    isRefreshingSlots = true;
+    if (!slotSelectEl || refreshingElements.has(slotSelectEl)) return;
+    refreshingElements.add(slotSelectEl);
     try {
         const history = readAllHistory();
-        const cleanStream = dept || currentDept || 'BCA';
-        const cleanDate = dateVal || getTodayISOString();
+        const cleanStream = (dept || currentDept || 'BCA').toUpperCase();
+        const cleanDate = normalizeHistoryDate(dateVal || getTodayISOString());
+        const targetYear = normalizeYearCode(yearVal);
         const isCombined = sectionVal === 'ALL' || (sectionVal || '').toUpperCase() === 'ALL' || (sectionVal || '').toLowerCase().includes('combin');
 
         // Categorize used slots for this Date + Year
@@ -1290,16 +1291,20 @@ function updateAvailableSlots(dept, dateVal, yearVal, sectionVal, slotSelectEl) 
         const combinedUsedSlots = new Set();
 
         history.forEach(item => {
-            if ((item.stream || 'BCA') !== cleanStream) return;
+            const itemStream = (item.stream || 'BCA').toUpperCase();
+            if (itemStream !== cleanStream) return;
+
             const itemDate = normalizeHistoryDate(item.date);
-            const targetDate = normalizeHistoryDate(cleanDate);
-            if (itemDate !== targetDate) return;
-            if (!isYearMatching(item.year, yearVal)) return;
+            if (itemDate !== cleanDate) return;
+
+            const itemYear = normalizeYearCode(item.year);
+            if (itemYear && targetYear && itemYear !== targetYear) return;
             
             const itemSec = item.section || 'A';
             const sl = parseInt(item.slot, 10);
             if (sl >= 1 && sl <= 8) {
-                if (itemSec.toUpperCase() === 'ALL' || itemSec.toLowerCase().includes('combin')) {
+                const normSec = (itemSec || '').toUpperCase();
+                if (normSec === 'ALL' || normSec.includes('COMBIN')) {
                     combinedUsedSlots.add(sl);
                 } else if (isSectionOverlap(itemSec, sectionVal)) {
                     usedSlots.add(sl);
@@ -1350,7 +1355,7 @@ function updateAvailableSlots(dept, dateVal, yearVal, sectionVal, slotSelectEl) 
     } catch (e) {
         console.warn('Error in updateAvailableSlots:', e);
     } finally {
-        isRefreshingSlots = false;
+        refreshingElements.delete(slotSelectEl);
     }
 }
 
