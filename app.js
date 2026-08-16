@@ -1566,25 +1566,20 @@ function readAllHistory() {
  * - For already-synced entries, keep only today's rows (drawer).
  */
 function compactAttendanceHistory(history) {
-    const today = getTodayISOString();
     let offlineKept = 0;
-    let syncedTodayKept = 0;
-    const MAX_OFFLINE = 80;
-    const MAX_SYNCED_TODAY = 120;
+    let syncedKept = 0;
+    const MAX_OFFLINE = 100;
+    const MAX_SYNCED_TOTAL = 2000;
 
     return history.filter(item => {
-        const itemDate = normalizeHistoryDate(item.date);
         if (item.offline === true) {
             if (offlineKept >= MAX_OFFLINE) return false;
             offlineKept++;
             return true;
         }
-        if (itemDate === today) {
-            if (syncedTodayKept >= MAX_SYNCED_TODAY) return false;
-            syncedTodayKept++;
-            return true;
-        }
-        return false;
+        if (syncedKept >= MAX_SYNCED_TOTAL) return false;
+        syncedKept++;
+        return true;
     });
 }
 
@@ -4384,6 +4379,86 @@ function initShortageCalculator() {
     if (yearSelect) yearSelect.addEventListener('change', updateDefaultRollRange);
     updateDefaultRollRange();
 
+function fetchServerHistoryForShortage(stream, dateVal, callback) {
+    const targetUrl = getWebhookUrl(stream || currentDept || 'BCA');
+    if (!targetUrl) {
+        if (callback) callback();
+        return;
+    }
+
+    const cbName = 'mgm_bca_shortage_history_cb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+    let done = false;
+
+    const timeout = setTimeout(() => {
+        if (done) return;
+        done = true;
+        try { delete window[cbName]; } catch (e) {}
+        if (callback) callback();
+    }, 4000);
+
+    window[cbName] = function (res) {
+        if (done) return;
+        done = true;
+        clearTimeout(timeout);
+        try { delete window[cbName]; } catch (e) {}
+
+        if (res && (res.result === 'success' || res.status === 'ok') && Array.isArray(res.entries)) {
+            const history = readAllHistory();
+            const byKey = new Map();
+            history.forEach(item => {
+                const k = entryKey(item);
+                if (k) byKey.set(k, item);
+            });
+
+            res.entries.forEach(srv => {
+                const normalizedDate = normalizeHistoryDate(srv.date);
+                if (!normalizedDate) return;
+                const formattedRolls = Array.isArray(srv.rollNumbers) ? srv.rollNumbers.join(', ') : String(srv.rollNumbers || '');
+                const srvObj = {
+                    action: 'create',
+                    stream: stream || currentDept || 'BCA',
+                    date: normalizedDate,
+                    year: srv.year || 'First Year',
+                    section: srv.section || 'A',
+                    subject: srv.subject || '',
+                    slot: String(parseInt(srv.slot, 10) || 1),
+                    rollNumbers: formattedRolls,
+                    offline: false,
+                    timestamp: srv.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                };
+                const k = entryKey(srvObj);
+                if (k && !byKey.has(k)) {
+                    byKey.set(k, srvObj);
+                }
+            });
+
+            const merged = Array.from(byKey.values());
+            localStorage.setItem('mgm_bca_attendance_history', JSON.stringify(merged));
+        }
+
+        if (callback) callback();
+    };
+
+    const params = new URLSearchParams({
+        action: 'get_absentees',
+        stream: stream || currentDept || 'BCA',
+        date: dateVal || 'ALL',
+        callback: cbName
+    });
+    appendAuthToParams(params);
+
+    const scriptEl = document.createElement('script');
+    scriptEl.src = targetUrl + (targetUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
+    scriptEl.onerror = function () {
+        if (done) return;
+        done = true;
+        clearTimeout(timeout);
+        try { delete window[cbName]; } catch (e) {}
+        if (callback) callback();
+    };
+    document.body.appendChild(scriptEl);
+}
+
     calcBtn.addEventListener('click', () => {
         const yrVal = yearSelect ? yearSelect.value : 'First Year';
         const secVal = sectionSelect ? sectionSelect.value : 'A';
@@ -4412,7 +4487,7 @@ function initShortageCalculator() {
         if (calcBtnText) calcBtnText.textContent = 'Calculating Shortage...';
         calcBtn.disabled = true;
 
-        setTimeout(() => {
+        fetchServerHistoryForShortage(currentDept, 'ALL', () => {
             const history = readAllHistory();
             const now = new Date();
             const currentMonthStr = getTodayISOString().substring(0, 7); // YYYY-MM
@@ -4560,7 +4635,7 @@ function initShortageCalculator() {
             calcBtn.disabled = false;
 
             renderShortageResults(container, yrVal, secVal, subjFilter, sRollStr, eRollStr, totalConducted, cutoff, shortageList, periodLabel);
-        }, 150);
+        });
     });
 }
 
