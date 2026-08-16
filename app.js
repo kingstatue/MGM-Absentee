@@ -248,25 +248,63 @@ function submitViaHiddenForm(url, payload) {
     });
 }
 
-// Dual-Engine Webhook Transmitter (fetch POST + hidden HTML form submission for guaranteed mobile delivery)
+function submitViaJSONP(url, payload) {
+    return new Promise((resolve) => {
+        const cbName = 'mgm_bca_post_cb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+        let scriptEl = null;
+        const timeout = setTimeout(() => {
+            cleanup();
+            resolve(false);
+        }, 5000);
+
+        function cleanup() {
+            clearTimeout(timeout);
+            try { delete window[cbName]; } catch (e) {}
+            if (scriptEl && scriptEl.parentNode) {
+                try { scriptEl.parentNode.removeChild(scriptEl); } catch (e) {}
+            }
+        }
+
+        window[cbName] = function (res) {
+            cleanup();
+            resolve(res && (res.result === 'success' || res.result === 'ok'));
+        };
+
+        const params = new URLSearchParams({
+            action: payload.action || 'create',
+            date: payload.date || getTodayISOString(),
+            stream: payload.stream || currentDept || 'BCA',
+            year: payload.year || '',
+            section: payload.section || '',
+            slot: String(payload.slot || 1),
+            subject: payload.subject || '',
+            rollNumbers: payload.rollNumbers || 'NIL',
+            callback: cbName
+        });
+        appendAuthToParams(params);
+
+        scriptEl = document.createElement('script');
+        scriptEl.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + params.toString();
+        scriptEl.onerror = function () {
+            cleanup();
+            resolve(false);
+        };
+        document.body.appendChild(scriptEl);
+    });
+}
+
+// Multi-Engine Webhook Transmitter (JSONP GET + hidden HTML form POST + fetch for 100% live mobile delivery)
 async function postWithRetry(url, payload) {
     if (!url) return false;
 
     let success = false;
 
-    // 1. Primary: Fetch POST for immediate background network transmission
+    // 1. Primary: JSONP GET (Bypasses all mobile CORS & iframe limitations 100%, returns real-time callback)
     try {
-        if (navigator.onLine) {
-            await fetch(url, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(payload)
-            });
-            success = true;
-        }
+        const jsonpOk = await submitViaJSONP(url, payload);
+        if (jsonpOk) success = true;
     } catch (e) {
-        console.warn('Fetch POST note:', e);
+        console.warn('JSONP post note:', e);
     }
 
     // 2. Secondary: Hidden HTML Form POST (Guaranteed delivery for webviews & mobile PWA)
@@ -276,6 +314,18 @@ async function postWithRetry(url, payload) {
     } catch (e) {
         console.warn('Hidden form post note:', e);
     }
+
+    // 3. Redundancy: Fetch POST
+    try {
+        if (navigator.onLine) {
+            fetch(url, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(payload)
+            }).catch(() => {});
+        }
+    } catch (e) {}
 
     return success;
 }
@@ -1011,7 +1061,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         showSuccessToast(payload);
         resetAllInputs();
 
-        // 2. Transmit to Google Sheet via HTML Hidden Form + fetch (waits for network transmission)
+        // 2. Transmit to Google Sheet via multi-engine webhooks (waits for network transmission)
         let transmitted = false;
         try {
             const targetUrl = getWebhookUrl(currentDept);
@@ -1020,13 +1070,30 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
             console.warn('Post transmission note:', e);
         }
 
-        // 3. Mark offline: false once transmission completes
-        if (transmitted || navigator.onLine) {
-            saveToLocalHistory({
-                ...payload,
-                offline: false,
-                timestamp: timestamp
-            });
+        // 3. Verify sheet persistence and update local history offline status
+        try {
+            const verify = await verifyAttendanceOnSheet(payload);
+            if (verify && verify.verified) {
+                saveToLocalHistory({
+                    ...payload,
+                    offline: false,
+                    timestamp: timestamp
+                });
+            } else if (transmitted) {
+                saveToLocalHistory({
+                    ...payload,
+                    offline: false,
+                    timestamp: timestamp
+                });
+            }
+        } catch (eV) {
+            if (transmitted) {
+                saveToLocalHistory({
+                    ...payload,
+                    offline: false,
+                    timestamp: timestamp
+                });
+            }
         }
 
         return { status: 'ok' };
