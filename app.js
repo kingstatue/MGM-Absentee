@@ -1085,7 +1085,8 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
             timestamp: timestamp
         });
 
-        // 3. Display Toast and Clear Text Box INSTANTLY (0ms)
+        // 3. Clear text box instantly (0ms) & reset inputs
+        clearAllRollTextBoxes();
         showSuccessToast(payload);
         resetAllInputs();
 
@@ -1351,32 +1352,27 @@ function refreshAllSlotDropdowns() {
     } catch (e) {}
 }
 
+function clearAllRollTextBoxes() {
+    ['directRollInput', 'rollNumbersInput', 'manualTextInput'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.value = '';
+            el.defaultValue = '';
+            try { el.setAttribute('value', ''); } catch (e) {}
+        }
+    });
+}
+
 function resetAllInputs() {
     try {
         clearTranscript();
+        clearAllRollTextBoxes();
+
         const todayStr = getTodayISOString();
         const deptConfig = DEPT_CONFIG[currentDept] || DEPT_CONFIG.BCA;
         
-        // 1. Clear absent roll number text inputs completely FIRST (Instant 0ms)
-        if (manualTextInput) manualTextInput.value = '';
         if (directDateInput) directDateInput.value = todayStr;
         if (dateInput) dateInput.value = todayStr;
-        
-        const dRoll = document.getElementById('directRollInput') || directRollInput;
-        if (dRoll) {
-            dRoll.value = '';
-            dRoll.defaultValue = '';
-        }
-        const rRoll = document.getElementById('rollNumbersInput') || rollNumbersInput;
-        if (rRoll) {
-            rRoll.value = '';
-            rRoll.defaultValue = '';
-        }
-        const mText = document.getElementById('manualTextInput') || manualTextInput;
-        if (mText) {
-            mText.value = '';
-            mText.defaultValue = '';
-        }
 
         if (directSubjectInput) setSubjectValue(directSubjectInput, deptConfig.defaultSubject);
         if (subjectInput) setSubjectValue(subjectInput, deptConfig.defaultSubject);
