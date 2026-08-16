@@ -1274,6 +1274,32 @@ function showSuccessToast(payload) {
     }, 3500);
 }
 
+function normalizeYearCode(val) {
+    if (!val) return '';
+    const s = String(val).toLowerCase().trim();
+    if (s.includes('first') || s.includes('1st') || s.includes(' 1') || s === '1' || s === 'i') return '1';
+    if (s.includes('second') || s.includes('2nd') || s.includes(' 2') || s === '2' || s === 'ii') return '2';
+    if (s.includes('third') || s.includes('3rd') || s.includes(' 3') || s === '3' || s === 'iii') return '3';
+    return s;
+}
+
+function isYearMatching(year1, year2) {
+    if (!year1 || !year2) return true;
+    const y1 = normalizeYearCode(year1);
+    const y2 = normalizeYearCode(year2);
+    if (!y1 || !y2) return true;
+    return y1 === y2;
+}
+
+function isSubjectMatching(sub1, sub2) {
+    if (!sub1 || !sub2) return true;
+    const s1 = String(sub1).toLowerCase().trim();
+    const s2 = String(sub2).toLowerCase().trim();
+    if (s1 === 'all' || s2 === 'all') return true;
+    if (s1 === s2) return true;
+    return s1.includes(s2) || s2.includes(s1);
+}
+
 function updateAvailableSlots(dept, dateVal, yearVal, sectionVal, slotSelectEl) {
     if (!slotSelectEl) return;
     try {
@@ -4382,31 +4408,7 @@ function initShortageCalculator() {
         });
     }
 
-function normalizeYearCode(val) {
-    if (!val) return '';
-    const s = String(val).toLowerCase().trim();
-    if (s.includes('first') || s.includes('1st') || s.includes(' 1') || s === '1' || s === 'i') return '1';
-    if (s.includes('second') || s.includes('2nd') || s.includes(' 2') || s === '2' || s === 'ii') return '2';
-    if (s.includes('third') || s.includes('3rd') || s.includes(' 3') || s === '3' || s === 'iii') return '3';
-    return s;
-}
 
-function isYearMatching(year1, year2) {
-    if (!year1 || !year2) return true;
-    const y1 = normalizeYearCode(year1);
-    const y2 = normalizeYearCode(year2);
-    if (!y1 || !y2) return true;
-    return y1 === y2;
-}
-
-function isSubjectMatching(sub1, sub2) {
-    if (!sub1 || !sub2) return true;
-    const s1 = String(sub1).toLowerCase().trim();
-    const s2 = String(sub2).toLowerCase().trim();
-    if (s1 === 'all' || s2 === 'all') return true;
-    if (s1 === s2) return true;
-    return s1.includes(s2) || s2.includes(s1);
-}
 
     const updateDefaultRollRange = () => {
         updateShortageSubjectDropdown();
