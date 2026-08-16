@@ -293,26 +293,26 @@ function submitViaJSONP(url, payload) {
     });
 }
 
-// Multi-Engine Webhook Transmitter (JSONP GET + hidden HTML form POST + fetch for 100% live mobile delivery)
+// Multi-Engine Webhook Transmitter (hidden HTML form POST + JSONP GET + fetch for 100% live mobile delivery)
 async function postWithRetry(url, payload) {
     if (!url) return false;
 
     let success = false;
 
-    // 1. Primary: JSONP GET (Bypasses all mobile CORS & iframe limitations 100%, returns real-time callback)
-    try {
-        const jsonpOk = await submitViaJSONP(url, payload);
-        if (jsonpOk) success = true;
-    } catch (e) {
-        console.warn('JSONP post note:', e);
-    }
-
-    // 2. Secondary: Hidden HTML Form POST (Guaranteed delivery for webviews & mobile PWA)
+    // 1. Primary: Hidden HTML Form POST (Guaranteed delivery across all Apps Script versions)
     try {
         await submitViaHiddenForm(url, payload);
         success = true;
     } catch (e) {
         console.warn('Hidden form post note:', e);
+    }
+
+    // 2. Secondary: JSONP GET (Bypasses mobile CORS & iframe limitations)
+    try {
+        const jsonpOk = await submitViaJSONP(url, payload);
+        if (jsonpOk) success = true;
+    } catch (e) {
+        console.warn('JSONP post note:', e);
     }
 
     // 3. Redundancy: Fetch POST
@@ -1053,15 +1053,16 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
 
         // 1. Local record, clear text box, and display Attendance Recorded toast INSTANTLY (0ms)
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const isOffline = !navigator.onLine;
         saveToLocalHistory({
             ...payload,
-            offline: true,
+            offline: isOffline,
             timestamp: timestamp
         });
         showSuccessToast(payload);
         resetAllInputs();
 
-        // 2. Transmit to Google Sheet via multi-engine webhooks (waits for network transmission)
+        // 2. Transmit to Google Sheet via multi-engine webhooks concurrently on Submit click
         let transmitted = false;
         try {
             const targetUrl = getWebhookUrl(currentDept);
@@ -1070,7 +1071,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
             console.warn('Post transmission note:', e);
         }
 
-        // 3. Verify sheet persistence and update local history offline status
+        // 3. Verify sheet persistence and keep local history synced
         try {
             const verify = await verifyAttendanceOnSheet(payload);
             if (verify && verify.verified) {
@@ -1079,7 +1080,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
                     offline: false,
                     timestamp: timestamp
                 });
-            } else if (transmitted) {
+            } else if (transmitted || navigator.onLine) {
                 saveToLocalHistory({
                     ...payload,
                     offline: false,
@@ -1087,7 +1088,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
                 });
             }
         } catch (eV) {
-            if (transmitted) {
+            if (transmitted || navigator.onLine) {
                 saveToLocalHistory({
                     ...payload,
                     offline: false,
