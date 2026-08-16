@@ -1279,57 +1279,143 @@ function showSuccessToast(payload) {
     }, 3500);
 }
 
-function resetAllInputs() {
-    clearTranscript();
-    const todayStr = getTodayISOString();
-    const deptConfig = DEPT_CONFIG[currentDept] || DEPT_CONFIG.BCA;
-    
-    if (manualTextInput) manualTextInput.value = '';
-    if (directDateInput) directDateInput.value = todayStr;
-    if (dateInput) dateInput.value = todayStr;
-    
-    // Clear absent roll number text inputs completely across form variants
-    ['directRollInput', 'rollNumbersInput', 'manualTextInput'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-            el.value = '';
-            el.defaultValue = '';
+function updateAvailableSlots(dept, dateVal, yearVal, sectionVal, slotSelectEl) {
+    if (!slotSelectEl) return;
+    try {
+        const history = readAllHistory();
+        const cleanStream = dept || currentDept || 'BCA';
+        const cleanDate = dateVal || getTodayISOString();
+        const isCombined = sectionVal === 'ALL' || (sectionVal || '').toUpperCase() === 'ALL' || (sectionVal || '').toLowerCase().includes('combin');
+
+        // Find used slots for this Date + Year + Section (except Combined)
+        const usedSlots = new Set();
+        if (!isCombined) {
+            history.forEach(item => {
+                if ((item.stream || 'BCA') !== cleanStream) return;
+                if (item.date !== cleanDate) return;
+                if (item.year !== yearVal) return;
+                
+                const itemSec = item.section || 'A';
+                if (isSectionOverlap(itemSec, sectionVal)) {
+                    const sl = parseInt(item.slot, 10);
+                    if (sl >= 1 && sl <= 8) {
+                        usedSlots.add(sl);
+                    }
+                }
+            });
         }
-    });
 
-    if (directSubjectInput) setSubjectValue(directSubjectInput, deptConfig.defaultSubject);
-    if (subjectInput) setSubjectValue(subjectInput, deptConfig.defaultSubject);
+        const currentSelectedSlot = parseInt(slotSelectEl.value, 10) || 1;
+        let firstAvailableSlot = null;
 
-    // Auto-advance slot to next slot for consecutive class submissions
-    const dSlot = document.getElementById('directSlotSelect') || directSlotSelect;
-    if (dSlot) {
-        let cur = parseInt(dSlot.value, 10) || 1;
-        dSlot.value = String(cur < 8 ? cur + 1 : 1);
+        Array.from(slotSelectEl.options).forEach(opt => {
+            const slotNum = parseInt(opt.value, 10);
+            const timeLabel = SLOT_TIME_LABELS[slotNum] || ('Slot ' + slotNum);
+            
+            if (usedSlots.has(slotNum)) {
+                opt.disabled = true;
+                opt.textContent = `Slot ${slotNum} (${timeLabel}) — 🔴 Marked`;
+            } else {
+                opt.disabled = false;
+                opt.textContent = `Slot ${slotNum} (${timeLabel})`;
+                if (firstAvailableSlot === null) {
+                    firstAvailableSlot = slotNum;
+                }
+            }
+        });
+
+        if (usedSlots.has(currentSelectedSlot) && firstAvailableSlot !== null) {
+            slotSelectEl.value = String(firstAvailableSlot);
+        }
+    } catch (e) {
+        console.warn('Error in updateAvailableSlots:', e);
     }
-    const mSlot = document.getElementById('slotSelect') || slotSelect;
-    if (mSlot) {
-        let curM = parseInt(mSlot.value, 10) || 1;
-        mSlot.value = String(curM < 8 ? curM + 1 : 1);
+}
+
+function refreshAllSlotDropdowns() {
+    try {
+        const dSlot = document.getElementById('directSlotSelect') || directSlotSelect;
+        const mSlot = document.getElementById('slotSelect') || slotSelect;
+        const dDate = document.getElementById('directDateInput') || directDateInput;
+        const dYear = document.getElementById('directYearSelect') || directYearSelect;
+        const dSec = document.getElementById('directSectionSelect') || directSectionSelect;
+        const mDate = document.getElementById('dateInput') || dateInput;
+        const mYear = document.getElementById('yearSelect') || yearSelect;
+        const mSec = document.getElementById('sectionSelect') || sectionSelect;
+
+        if (dSlot && dYear && dSec) {
+            updateAvailableSlots(currentDept, dDate ? dDate.value : getTodayISOString(), dYear.value, dSec.value, dSlot);
+        }
+        if (mSlot && mYear && mSec) {
+            updateAvailableSlots(currentDept, mDate ? mDate.value : getTodayISOString(), mYear.value, mSec.value, mSlot);
+        }
+    } catch (e) {}
+}
+
+function resetAllInputs() {
+    try {
+        clearTranscript();
+        const todayStr = getTodayISOString();
+        const deptConfig = DEPT_CONFIG[currentDept] || DEPT_CONFIG.BCA;
+        
+        if (manualTextInput) manualTextInput.value = '';
+        if (directDateInput) directDateInput.value = todayStr;
+        if (dateInput) dateInput.value = todayStr;
+        
+        // Clear absent roll number text inputs completely across form variants
+        ['directRollInput', 'rollNumbersInput', 'manualTextInput'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.value = '';
+                el.defaultValue = '';
+            }
+        });
+
+        if (directSubjectInput) setSubjectValue(directSubjectInput, deptConfig.defaultSubject);
+        if (subjectInput) setSubjectValue(subjectInput, deptConfig.defaultSubject);
+
+        // Auto-advance slot to next available slot for consecutive class submissions
+        const dSlot = document.getElementById('directSlotSelect') || directSlotSelect;
+        const mSlot = document.getElementById('slotSelect') || slotSelect;
+
+        if (dSlot) {
+            let cur = parseInt(dSlot.value, 10) || 1;
+            dSlot.value = String(cur < 8 ? cur + 1 : 1);
+        }
+        if (mSlot) {
+            let curM = parseInt(mSlot.value, 10) || 1;
+            mSlot.value = String(curM < 8 ? curM + 1 : 1);
+        }
+
+        refreshAllSlotDropdowns();
+
+        const directDurationSelect = document.getElementById('directDurationSelect');
+        const durationSelect = document.getElementById('durationSelect');
+        if (directDurationSelect) directDurationSelect.value = '1';
+        if (durationSelect) durationSelect.value = '1';
+
+        const dRoll = document.getElementById('directRollInput') || directRollInput;
+        const rRoll = document.getElementById('rollNumbersInput') || rollNumbersInput;
+        const directMultiSlotWrapper = document.getElementById('directMultiSlotContainer');
+        const directMultiSlotBreakdown = document.getElementById('directMultiSlotBreakdown');
+        if (dSlot && dRoll && directMultiSlotWrapper && directMultiSlotBreakdown) {
+            handleMultiSlotVisibility(directDurationSelect, dSlot, dRoll, directMultiSlotWrapper, directMultiSlotBreakdown);
+        }
+
+        const modalMultiSlotWrapper = document.getElementById('modalMultiSlotContainer');
+        const modalMultiSlotBreakdown = document.getElementById('modalMultiSlotBreakdown');
+        if (mSlot && rRoll && modalMultiSlotWrapper && modalMultiSlotBreakdown) {
+            handleMultiSlotVisibility(durationSelect, mSlot, rRoll, modalMultiSlotWrapper, modalMultiSlotBreakdown);
+        }
+
+        if (deleteBtn) deleteBtn.style.display = 'none';
+        if (modalAlertBox) modalAlertBox.style.display = 'none';
+        if (directAlertBox) directAlertBox.style.display = 'none';
+        if (submitBtnText) submitBtnText.textContent = 'Submit Absentee';
+        if (directSubmitBtnText) directSubmitBtnText.textContent = 'Submit Absentee';
+    } catch (err) {
+        console.warn('Error in resetAllInputs:', err);
     }
-
-    const directDurationSelect = document.getElementById('directDurationSelect');
-    const durationSelect = document.getElementById('durationSelect');
-    if (directDurationSelect) directDurationSelect.value = '1';
-    if (durationSelect) durationSelect.value = '1';
-
-    const directMultiSlotWrapper = document.getElementById('directMultiSlotContainer');
-    const directMultiSlotBreakdown = document.getElementById('directMultiSlotBreakdown');
-    handleMultiSlotVisibility(directDurationSelect, directSlotSelect, directRollInput, directMultiSlotWrapper, directMultiSlotBreakdown);
-
-    const modalMultiSlotWrapper = document.getElementById('modalMultiSlotContainer');
-    const modalMultiSlotBreakdown = document.getElementById('modalMultiSlotBreakdown');
-    handleMultiSlotVisibility(durationSelect, slotSelect, rollNumbersInput, modalMultiSlotWrapper, modalMultiSlotBreakdown);
-
-    if (deleteBtn) deleteBtn.style.display = 'none';
-    if (modalAlertBox) modalAlertBox.style.display = 'none';
-    if (directAlertBox) directAlertBox.style.display = 'none';
-    if (submitBtnText) submitBtnText.textContent = 'Submit Absentee';
-    if (directSubmitBtnText) directSubmitBtnText.textContent = 'Submit Absentee';
 }
 
 // Delete = app history + Raw Data row (section B/C formulas refresh to blank)
@@ -1758,6 +1844,7 @@ function renderHistoryList() {
     const today = getTodayEntries();
     updateTodayBadge();
     updateSyncButtonState();
+    refreshAllSlotDropdowns();
 
     if (!historyList) return;
 
