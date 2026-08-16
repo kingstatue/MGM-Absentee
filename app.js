@@ -1279,8 +1279,11 @@ function showSuccessToast(payload) {
     }, 3500);
 }
 
+let isRefreshingSlots = false;
+
 function updateAvailableSlots(dept, dateVal, yearVal, sectionVal, slotSelectEl) {
-    if (!slotSelectEl) return;
+    if (!slotSelectEl || isRefreshingSlots) return;
+    isRefreshingSlots = true;
     try {
         const history = readAllHistory();
         const cleanStream = dept || currentDept || 'BCA';
@@ -1329,6 +1332,8 @@ function updateAvailableSlots(dept, dateVal, yearVal, sectionVal, slotSelectEl) 
         }
     } catch (e) {
         console.warn('Error in updateAvailableSlots:', e);
+    } finally {
+        isRefreshingSlots = false;
     }
 }
 
@@ -1358,11 +1363,11 @@ function resetAllInputs() {
         const todayStr = getTodayISOString();
         const deptConfig = DEPT_CONFIG[currentDept] || DEPT_CONFIG.BCA;
         
+        // 1. Clear absent roll number text inputs completely FIRST
         if (manualTextInput) manualTextInput.value = '';
         if (directDateInput) directDateInput.value = todayStr;
         if (dateInput) dateInput.value = todayStr;
         
-        // Clear absent roll number text inputs completely across form variants
         ['directRollInput', 'rollNumbersInput', 'manualTextInput'].forEach(id => {
             const el = document.getElementById(id);
             if (el) {
@@ -1374,7 +1379,13 @@ function resetAllInputs() {
         if (directSubjectInput) setSubjectValue(directSubjectInput, deptConfig.defaultSubject);
         if (subjectInput) setSubjectValue(subjectInput, deptConfig.defaultSubject);
 
-        // Auto-advance slot to next available slot for consecutive class submissions
+        if (deleteBtn) deleteBtn.style.display = 'none';
+        if (modalAlertBox) modalAlertBox.style.display = 'none';
+        if (directAlertBox) directAlertBox.style.display = 'none';
+        if (submitBtnText) submitBtnText.textContent = 'Submit Absentee';
+        if (directSubmitBtnText) directSubmitBtnText.textContent = 'Submit Absentee';
+
+        // 2. Auto-advance slot to next available slot for consecutive class submissions
         const dSlot = document.getElementById('directSlotSelect') || directSlotSelect;
         const mSlot = document.getElementById('slotSelect') || slotSelect;
 
@@ -1407,12 +1418,6 @@ function resetAllInputs() {
         if (mSlot && rRoll && modalMultiSlotWrapper && modalMultiSlotBreakdown) {
             handleMultiSlotVisibility(durationSelect, mSlot, rRoll, modalMultiSlotWrapper, modalMultiSlotBreakdown);
         }
-
-        if (deleteBtn) deleteBtn.style.display = 'none';
-        if (modalAlertBox) modalAlertBox.style.display = 'none';
-        if (directAlertBox) directAlertBox.style.display = 'none';
-        if (submitBtnText) submitBtnText.textContent = 'Submit Absentee';
-        if (directSubmitBtnText) directSubmitBtnText.textContent = 'Submit Absentee';
     } catch (err) {
         console.warn('Error in resetAllInputs:', err);
     }
@@ -3088,6 +3093,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const yrVal = directYearSelect.value;
             updateSectionSelects(hasSec, currentDept, yrVal);
             refreshSubjectDropdowns(config ? config.defaultSubject : null);
+            refreshAllSlotDropdowns();
         });
     }
 
@@ -3099,12 +3105,14 @@ document.addEventListener('DOMContentLoaded', () => {
             updateSectionSelects(hasSec, currentDept, yrVal);
             const secVal = sectionSelect ? sectionSelect.value : 'A';
             updateSubjectDropdowns(getSubjectsForActiveYear(currentDept, yrVal, secVal), config ? config.defaultSubject : null);
+            refreshAllSlotDropdowns();
         });
     }
 
     if (directSectionSelect) {
         directSectionSelect.addEventListener('change', () => {
             refreshSubjectDropdowns();
+            refreshAllSlotDropdowns();
         });
     }
 
@@ -3116,6 +3124,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 getSubjectsForActiveYear(currentDept, yrVal, sectionSelect.value),
                 config ? config.defaultSubject : null
             );
+            refreshAllSlotDropdowns();
         });
     }
 
