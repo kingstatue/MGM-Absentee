@@ -4392,11 +4392,20 @@ function isSubjectMatching(sub1, sub2) {
     if (yearSelect) yearSelect.addEventListener('change', updateDefaultRollRange);
     updateDefaultRollRange();
 
-function fetchServerHistoryForShortage(stream, dateVal, callback) {
+function fetchServerHistoryForShortage(stream, period, fVal, tVal, callback) {
     const targetUrl = getWebhookUrl(stream || currentDept || 'BCA');
     if (!targetUrl) {
         if (callback) callback();
         return;
+    }
+
+    let dateParam = 'ALL';
+    if (period === 'CUSTOM') {
+        if (fVal && tVal && fVal === tVal) {
+            dateParam = fVal;
+        } else if (fVal) {
+            dateParam = fVal;
+        }
     }
 
     const cbName = 'mgm_bca_shortage_history_cb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
@@ -4407,7 +4416,7 @@ function fetchServerHistoryForShortage(stream, dateVal, callback) {
         done = true;
         try { delete window[cbName]; } catch (e) {}
         if (callback) callback();
-    }, 4000);
+    }, 4500);
 
     window[cbName] = function (res) {
         if (done) return;
@@ -4455,7 +4464,9 @@ function fetchServerHistoryForShortage(stream, dateVal, callback) {
     const params = new URLSearchParams({
         action: 'get_absentees',
         stream: stream || currentDept || 'BCA',
-        date: dateVal || 'ALL',
+        date: dateParam,
+        fromDate: fVal || '',
+        toDate: tVal || '',
         callback: cbName
     });
     appendAuthToParams(params);
@@ -4500,7 +4511,10 @@ function fetchServerHistoryForShortage(stream, dateVal, callback) {
         if (calcBtnText) calcBtnText.textContent = 'Calculating Shortage...';
         calcBtn.disabled = true;
 
-        fetchServerHistoryForShortage(currentDept, 'ALL', () => {
+        const fVal = fromDateInput ? fromDateInput.value : '';
+        const tVal = toDateInput ? toDateInput.value : '';
+
+        fetchServerHistoryForShortage(currentDept, period, fVal, tVal, () => {
             const history = readAllHistory();
             const now = new Date();
             const currentMonthStr = getTodayISOString().substring(0, 7); // YYYY-MM
