@@ -24,12 +24,12 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <link rel="stylesheet" href="styles.css?v=v28.22-wa-revert">
+  <link rel="stylesheet" href="styles.css?v=v28.55-bca">
   <script>
     // Auto-update on first open after GitHub Pages deploy (runs before app.js)
     (function () {
-      var EXPECTED = 'v28.22-wa-revert';
-      var KEY = 'mgm_shell_ver';
+      var EXPECTED = 'v28.55-bca';
+      var KEY = 'mgm_bca_shell_ver';
       var reloading = false;
 
       function hardReload() {
@@ -63,12 +63,11 @@
       function applyNewVersion(ver) {
         var prev = '';
         try { prev = localStorage.getItem(KEY) || ''; } catch (e) {}
-        if (prev && prev !== ver) {
+        if (prev !== ver) {
           try { localStorage.setItem(KEY, ver); } catch (e2) {}
           hardReload();
           return true;
         }
-        try { localStorage.setItem(KEY, ver); } catch (e3) {}
         return false;
       }
 
@@ -86,7 +85,7 @@
       // 2) Register SW with versioned URL so GitHub Pages cannot keep old sw.js forever
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          var swUrl = './sw.js?v=v68-wa-revert';
+          var swUrl = './sw.js?v=v101-bca';
           navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' })
             .then(function (reg) {
               reg.update();
@@ -206,6 +205,13 @@
           <span>Today</span>
           <span class="today-count-badge" id="todayCountBadge" hidden>0</span>
         </button>
+        <button class="history-pill-btn" id="manageSubjectBtnHeader" title="Add or manage subjects" aria-label="Manage Subjects">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+          <span>Subjects</span>
+        </button>
         <button class="logout-btn" id="logoutBtn" title="Exit Department / Logout" aria-label="Exit Department" style="display: none;">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
@@ -233,114 +239,28 @@
     <!-- Main Interactive Body -->
     <div class="app-body">
       
-      <!-- Dual Input Mode Switcher Tab Bar -->
+      <!-- Input Mode Switcher Tab Bar -->
       <div class="mode-switcher">
-        <button class="mode-tab active" id="voiceModeTab">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-            <line x1="12" y1="19" x2="12" y2="22"></line>
-          </svg>
-          Voice Input
-        </button>
-        <button class="mode-tab" id="typingModeTab">
+        <button class="mode-tab active" id="typingModeTab">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="2" y="4" width="20" height="16" rx="2"></rect>
             <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 16h8"></path>
           </svg>
-          Manual Typing
+          Mark Absentees
         </button>
         <button class="mode-tab" id="hodModeTab">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-            <circle cx="8.5" cy="7" r="4"></circle>
-            <polyline points="17 11 19 13 23 9"></polyline>
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
           </svg>
-          HOD Portal
+          Parent Informer
         </button>
       </div>
 
-      <!-- VOICE INPUT MODE CONTAINER -->
-      <div class="mode-container" id="voiceSection">
-        
-        <!-- Live Status Pill with Today's Date -->
-        <div class="status-pill" id="statusPill">
-          <span class="status-dot"></span>
-          <span id="statusText">Tap microphone to speak</span>
-          <span class="today-badge" id="todayBadge">📅 Today</span>
-        </div>
-
-        <!-- Microphone Section -->
-        <div class="mic-section">
-          <div class="mic-wrapper" id="micWrapper">
-            <div class="pulse-ring pulse-ring-1"></div>
-            <div class="pulse-ring pulse-ring-2"></div>
-            
-            <button class="mic-btn" id="micBtn" aria-label="Tap to speak">
-              <svg id="micIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                <line x1="12" y1="19" x2="12" y2="22"></line>
-                <line x1="8" y1="22" x2="16" y2="22"></line>
-              </svg>
-              <span id="micBtnLabel">Tap to Speak</span>
-            </button>
-          </div>
-
-          <canvas class="visualizer-canvas" id="audioVisualizer"></canvas>
-        </div>
-
-        <!-- Speech Transcript Card -->
-        <div class="transcript-card">
-          <div class="transcript-header">
-            <h3>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-              </svg>
-              Live Speech Transcript
-            </h3>
-            <button class="clear-btn" id="clearTranscriptBtn" title="Clear text">Clear</button>
-          </div>
-          <div class="transcript-text" id="transcriptText">
-            <span class="transcript-placeholder">Spoken words will appear here in real-time...</span>
-          </div>
-        </div>
-
-        <!-- Voice Presets -->
-        <div class="presets-section">
-          <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 4px;">
-            <span class="section-label">Sample Spoken Phrases</span>
-            <button type="button" class="btn-manage-subj" id="manageSubjectBtnVoice" title="Add custom subjects">+ Add / Manage Subjects</button>
-          </div>
-          <div class="preset-pills">
-            <button class="preset-pill" data-phrase="26709 26717 English First Year A Slot 1">
-              "26709 26717 English 1st Yr A Slot 1"
-            </button>
-            <button class="preset-pill" data-phrase="Roll numbers 26701, 26705 2nd Year BCA Sec B Java 10-10.55">
-              "Roll 26701, 26705 2nd Yr Sec B Java 10-10.55"
-            </button>
-            <button class="preset-pill" data-phrase="Third year Section A Database slot 1 absentees 5 8 19">
-              "3rd Yr Sec A Database Slot 1 - Absentees 5, 8, 19"
-            </button>
-          </div>
-        </div>
-
-        <div class="action-controls" style="display: flex; flex-direction: column; gap: 8px;">
-          <button class="btn-primary" id="processBtn" disabled>
-            <span>Verify & Confirm</span>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <polyline points="9 18 15 12 9 6"></polyline>
-            </svg>
-          </button>
-          <button type="button" class="btn-secondary history-open-btn" id="historyBtnVoice" style="width: 100%;">
-            Today’s entries — Edit / Delete
-          </button>
-        </div>
-
-      </div>
-
-      <!-- MANUAL TYPING MODE CONTAINER -->
-      <div class="mode-container" id="typingSection" style="display: none;">
+      <!-- MANUAL TYPING / ATTENDANCE LOGGER CONTAINER -->
+      <div class="mode-container" id="typingSection">
         
         <!-- Text Dictation / Quick Parse Box -->
         <div class="transcript-card">
@@ -451,26 +371,32 @@
       <!-- HOD PORTAL CONTAINER -->
       <div class="mode-container" id="hodSection" style="display: none;">
         <div class="hod-header-card">
-          <div class="hod-title-group" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
+          <div class="hod-title-group" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
             <div>
-              <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--text-main); margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
-                👔 HOD Absentee Portal & WhatsApp Generator
-                <span id="hodRoleBadge" class="badge badge-success" style="font-size: 0.72rem; font-weight: 800;">🔒 HOD Mode</span>
+              <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--text-main); margin: 0; display: flex; align-items: center; gap: 8px;">
+                📱 Parent Informer
+                <span id="hodRoleBadge" style="display: none;"></span>
               </h2>
-              <p style="font-size: 0.82rem; color: var(--text-muted);">
-                Select date to fetch BCA section-wise absentees and generate parent WhatsApp messages.
-              </p>
             </div>
             <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-              <button type="button" class="btn-secondary" onclick="switchMode('typing')" style="padding: 6px 12px; font-size: 0.78rem; font-weight: 600;">
-                ← Back to Attendance Logger
-              </button>
               <button type="button" class="btn-secondary" id="hodPasscodeSettingsBtn" style="padding: 6px 12px; font-size: 0.78rem; display: none;">
                 ⚙️ Change Passcodes
               </button>
             </div>
           </div>
           
+        <!-- Parent Informer Sub-Tool Switcher Tabs -->
+        <div class="mode-switcher" style="margin-top: 14px; margin-bottom: 14px; background: rgba(0,0,0,0.25); padding: 4px; border-radius: 10px;">
+          <button class="mode-tab active" id="subTabDailyInformer" type="button" style="padding: 8px 12px; font-size: 0.82rem; font-weight: 700;">
+            📱 Daily Absentees Report
+          </button>
+          <button class="mode-tab" id="subTabShortageCalculator" type="button" style="padding: 8px 12px; font-size: 0.82rem; font-weight: 700;">
+            ⚠️ Attendance Shortage Report (< 75%)
+          </button>
+        </div>
+
+        <!-- CONTAINER 1: DAILY INFORMER -->
+        <div id="hodDailyInformerContainer">
           <div class="hod-filter-row">
             <div class="form-group" style="flex: 1; min-width: 140px; display: none;">
               <label for="hodStreamSelect">Department</label>
@@ -491,23 +417,104 @@
               </button>
             </div>
           </div>
-        </div>
 
-        <div id="hodStatusMessage" class="alert-banner" style="display: none; margin-top: 14px;"></div>
+          <div id="hodStatusMessage" class="alert-banner" style="display: none; margin-top: 14px;"></div>
 
-        <!-- Global Master WhatsApp Share Button -->
-        <div id="hodGlobalShareContainer" style="display: none; margin-bottom: 16px;">
-          <button type="button" class="btn-whatsapp-global" id="hodShareAllWaBtn" style="width: 100%;">
-            📱 Share Full Department Summary (All Sections) to WhatsApp
-          </button>
-        </div>
-
-        <!-- Section Cards Container -->
-        <div class="hod-section-cards" id="hodSectionCardsContainer">
-          <div class="hod-empty-state">
-            <div style="font-size: 2.5rem; margin-bottom: 8px;">📊</div>
-            <p style="font-size: 0.88rem; color: var(--text-muted); font-weight: 500;">Select date and click <strong>"Fetch Absentees"</strong> to generate section report.</p>
+          <!-- Global Master WhatsApp Share Button -->
+          <div id="hodGlobalShareContainer" style="display: none; margin-bottom: 16px;">
+            <button type="button" class="btn-whatsapp-global" id="hodShareAllWaBtn" style="width: 100%;">
+              📱 Share Full Department Summary (All Sections) to WhatsApp
+            </button>
           </div>
+
+          <!-- Section Cards Container -->
+          <div class="hod-section-cards" id="hodSectionCardsContainer">
+            <div class="hod-empty-state">
+              <div style="font-size: 2.5rem; margin-bottom: 8px;">📊</div>
+              <p style="font-size: 0.88rem; color: var(--text-muted); font-weight: 500;">Select date and click <strong>"Fetch Absentees"</strong> to generate section report.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- CONTAINER 2: SHORTAGE CALCULATOR -->
+        <div id="hodShortageContainer" style="display: none;">
+          <!-- Attendance Shortage Calculator Card (Method 1: Roll Range) -->
+          <div class="hod-header-card" style="border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.05);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+              <h3 style="font-size: 1.05rem; font-weight: 800; color: #f87171; display: flex; align-items: center; gap: 8px; margin: 0;">
+                ⚠️ Attendance Shortage Report Generator
+              </h3>
+              <span class="badge" style="background: rgba(239, 68, 68, 0.2); color: #f87171; font-size: 0.72rem; font-weight: 700;">Roll Range Method</span>
+            </div>
+
+            <div class="hod-filter-row" style="margin-bottom: 8px;">
+              <div class="form-group" style="flex: 1; min-width: 120px;">
+                <label for="shortageYearSelect">Year</label>
+                <select id="shortageYearSelect" class="form-select">
+                  <option value="First Year">First Year</option>
+                  <option value="Second Year">Second Year</option>
+                  <option value="Third Year">Third Year</option>
+                </select>
+              </div>
+              <div class="form-group" style="flex: 1; min-width: 120px;">
+                <label for="shortageSectionSelect">Section</label>
+                <select id="shortageSectionSelect" class="form-select">
+                  <option value="A">Section A</option>
+                  <option value="B">Section B</option>
+                  <option value="C">Section C</option>
+                  <option value="C (AIML)">Section C (AIML)</option>
+                  <option value="ALL">Combined (Electives)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="hod-filter-row" style="margin-bottom: 8px;">
+              <div class="form-group" style="flex: 1; min-width: 110px;">
+                <label for="shortageStartRoll">Start Roll No.</label>
+                <input type="text" id="shortageStartRoll" class="form-input" placeholder="e.g. 26701" />
+              </div>
+              <div class="form-group" style="flex: 1; min-width: 110px;">
+                <label for="shortageEndRoll">End Roll No.</label>
+                <input type="text" id="shortageEndRoll" class="form-input" placeholder="e.g. 26760" />
+              </div>
+              <div class="form-group" style="flex: 1; min-width: 130px;">
+                <label for="shortageCutoffSelect">Cutoff Threshold</label>
+                <select id="shortageCutoffSelect" class="form-select">
+                  <option value="75" selected>Below 75% (Shortage)</option>
+                  <option value="80">Below 80%</option>
+                  <option value="60">Below 60% (Critical)</option>
+                  <option value="100">All Students (Complete List)</option>
+                </select>
+              </div>
+              <div class="form-group" style="flex: 1; min-width: 130px;">
+                <label for="shortagePeriodSelect">Time Period</label>
+                <select id="shortagePeriodSelect" class="form-select">
+                  <option value="ALL" selected>All Time (Cumulative)</option>
+                  <option value="MONTH">This Month (Monthly)</option>
+                  <option value="WEEK">This Week (Weekly)</option>
+                  <option value="CUSTOM">Custom Date Range</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="shortageCustomDateRow" class="hod-filter-row" style="display: none; margin-bottom: 8px;">
+              <div class="form-group" style="flex: 1; min-width: 130px;">
+                <label for="shortageFromDate">From Date</label>
+                <input type="date" id="shortageFromDate" class="form-input" />
+              </div>
+              <div class="form-group" style="flex: 1; min-width: 130px;">
+                <label for="shortageToDate">To Date</label>
+                <input type="date" id="shortageToDate" class="form-input" />
+              </div>
+            </div>
+
+            <button type="button" class="btn-primary" id="shortageCalculateBtn" style="width: 100%; background: linear-gradient(135deg, #ef4444, #dc2626); border: none; margin-top: 6px; padding: 10px 16px; font-weight: 700;">
+              <span id="shortageCalculateBtnText">📊 Calculate Shortage Report</span>
+              <div class="spinner" id="shortageSpinner" style="display: none;"></div>
+            </button>
+          </div>
+
+          <div id="shortageResultsContainer" style="display: none; margin-top: 14px;"></div>
         </div>
       </div>
 
@@ -631,9 +638,9 @@
           <h2>Today’s entries</h2>
           <p class="drawer-subtitle" id="todayDrawerSubtitle">Correct any class you marked today</p>
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
+        <div class="drawer-header-actions">
           <button type="button" class="btn-primary" id="syncOfflineBtn" style="display: none; padding: 6px 12px; font-size: 0.78rem;">⚡ Sync Pending (<span id="pendingSyncCount">0</span>)</button>
-          <button class="icon-btn" id="closeHistoryBtn" aria-label="Close">&times;</button>
+          <button type="button" id="closeHistoryBtn" aria-label="Close Today's entries">&times;</button>
         </div>
       </div>
       <div class="drawer-body" id="historyList">
@@ -751,7 +758,7 @@
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js?v=v28.22-wa-revert"></script>
-  <script src="app.js?v=v28.22-wa-revert"></script>
+  <script src="parser.js?v=v28.55-bca"></script>
+  <script src="app.js?v=v28.55-bca"></script>
 </body>
 </html>
