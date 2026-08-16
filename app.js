@@ -1274,17 +1274,15 @@ function showSuccessToast(payload) {
     }, 3500);
 }
 
-const refreshingElements = new WeakSet();
-
 function updateAvailableSlots(dept, dateVal, yearVal, sectionVal, slotSelectEl) {
-    if (!slotSelectEl || refreshingElements.has(slotSelectEl)) return;
-    refreshingElements.add(slotSelectEl);
+    if (!slotSelectEl) return;
     try {
         const history = readAllHistory();
         const cleanStream = (dept || currentDept || 'BCA').toUpperCase();
         const cleanDate = normalizeHistoryDate(dateVal || getTodayISOString());
         const targetYear = normalizeYearCode(yearVal);
-        const isCombined = sectionVal === 'ALL' || (sectionVal || '').toUpperCase() === 'ALL' || (sectionVal || '').toLowerCase().includes('combin');
+        const normSection = normalizeSectionCode(sectionVal);
+        const isCombined = normSection === 'ALL';
 
         // Categorize used slots for this Date + Year
         const usedSlots = new Set();
@@ -1300,11 +1298,10 @@ function updateAvailableSlots(dept, dateVal, yearVal, sectionVal, slotSelectEl) 
             const itemYear = normalizeYearCode(item.year);
             if (itemYear && targetYear && itemYear !== targetYear) return;
             
-            const itemSec = item.section || 'A';
+            const itemSec = normalizeSectionCode(item.section || 'A');
             const sl = parseInt(item.slot, 10);
             if (sl >= 1 && sl <= 8) {
-                const normSec = (itemSec || '').toUpperCase();
-                if (normSec === 'ALL' || normSec.includes('COMBIN')) {
+                if (itemSec === 'ALL') {
                     combinedUsedSlots.add(sl);
                 } else if (isSectionOverlap(itemSec, sectionVal)) {
                     usedSlots.add(sl);
@@ -1312,7 +1309,6 @@ function updateAvailableSlots(dept, dateVal, yearVal, sectionVal, slotSelectEl) 
             }
         });
 
-        const currentSelectedSlot = parseInt(slotSelectEl.value, 10) || 1;
         let firstAvailableSlot = null;
 
         Array.from(slotSelectEl.options).forEach(opt => {
@@ -1348,27 +1344,28 @@ function updateAvailableSlots(dept, dateVal, yearVal, sectionVal, slotSelectEl) 
             }
         });
 
-        const selectedOpt = slotSelectEl.options[slotSelectEl.selectedIndex];
-        if (selectedOpt && selectedOpt.disabled && firstAvailableSlot !== null) {
-            slotSelectEl.value = String(firstAvailableSlot);
+        if (slotSelectEl.selectedIndex >= 0) {
+            const selectedOpt = slotSelectEl.options[slotSelectEl.selectedIndex];
+            if (selectedOpt && selectedOpt.disabled && firstAvailableSlot !== null) {
+                slotSelectEl.value = String(firstAvailableSlot);
+            }
         }
     } catch (e) {
         console.warn('Error in updateAvailableSlots:', e);
-    } finally {
-        refreshingElements.delete(slotSelectEl);
     }
 }
 
 function refreshAllSlotDropdowns() {
     try {
-        const dSlot = document.getElementById('directSlotSelect') || directSlotSelect;
-        const mSlot = document.getElementById('slotSelect') || slotSelect;
-        const dDate = document.getElementById('directDateInput') || directDateInput;
-        const dYear = document.getElementById('directYearSelect') || directYearSelect;
-        const dSec = document.getElementById('directSectionSelect') || directSectionSelect;
-        const mDate = document.getElementById('dateInput') || dateInput;
-        const mYear = document.getElementById('yearSelect') || yearSelect;
-        const mSec = document.getElementById('sectionSelect') || sectionSelect;
+        const dSlot = document.getElementById('directSlotSelect');
+        const dDate = document.getElementById('directDateInput');
+        const dYear = document.getElementById('directYearSelect');
+        const dSec = document.getElementById('directSectionSelect');
+
+        const mSlot = document.getElementById('slotSelect');
+        const mDate = document.getElementById('dateInput');
+        const mYear = document.getElementById('yearSelect');
+        const mSec = document.getElementById('sectionSelect');
 
         if (dSlot && dYear && dSec) {
             updateAvailableSlots(currentDept, dDate ? dDate.value : getTodayISOString(), dYear.value, dSec.value, dSlot);
