@@ -1288,28 +1288,28 @@ function resetAllInputs() {
     if (directDateInput) directDateInput.value = todayStr;
     if (dateInput) dateInput.value = todayStr;
     
-    const dRoll = document.getElementById('directRollInput') || directRollInput;
-    if (dRoll) {
-        dRoll.value = '';
-        dRoll.defaultValue = '';
-    }
-    const rRoll = document.getElementById('rollNumbersInput') || rollNumbersInput;
-    if (rRoll) {
-        rRoll.value = '';
-        rRoll.defaultValue = '';
-    }
+    // Clear absent roll number text inputs completely across form variants
+    ['directRollInput', 'rollNumbersInput', 'manualTextInput'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.value = '';
+            el.defaultValue = '';
+        }
+    });
 
     if (directSubjectInput) setSubjectValue(directSubjectInput, deptConfig.defaultSubject);
     if (subjectInput) setSubjectValue(subjectInput, deptConfig.defaultSubject);
 
     // Auto-advance slot to next slot for consecutive class submissions
-    if (directSlotSelect) {
-        let cur = parseInt(directSlotSelect.value, 10) || 1;
-        directSlotSelect.value = String(cur < 8 ? cur + 1 : 1);
+    const dSlot = document.getElementById('directSlotSelect') || directSlotSelect;
+    if (dSlot) {
+        let cur = parseInt(dSlot.value, 10) || 1;
+        dSlot.value = String(cur < 8 ? cur + 1 : 1);
     }
-    if (slotSelect) {
-        let curM = parseInt(slotSelect.value, 10) || 1;
-        slotSelect.value = String(curM < 8 ? curM + 1 : 1);
+    const mSlot = document.getElementById('slotSelect') || slotSelect;
+    if (mSlot) {
+        let curM = parseInt(mSlot.value, 10) || 1;
+        mSlot.value = String(curM < 8 ? curM + 1 : 1);
     }
 
     const directDurationSelect = document.getElementById('directDurationSelect');
