@@ -1285,23 +1285,25 @@ function updateAvailableSlots(dept, dateVal, yearVal, sectionVal, slotSelectEl) 
         const cleanDate = dateVal || getTodayISOString();
         const isCombined = sectionVal === 'ALL' || (sectionVal || '').toUpperCase() === 'ALL' || (sectionVal || '').toLowerCase().includes('combin');
 
-        // Find used slots for this Date + Year + Section (except Combined)
+        // Categorize used slots for this Date + Year
         const usedSlots = new Set();
-        if (!isCombined) {
-            history.forEach(item => {
-                if ((item.stream || 'BCA') !== cleanStream) return;
-                if (item.date !== cleanDate) return;
-                if (item.year !== yearVal) return;
-                
-                const itemSec = item.section || 'A';
-                if (isSectionOverlap(itemSec, sectionVal)) {
-                    const sl = parseInt(item.slot, 10);
-                    if (sl >= 1 && sl <= 8) {
-                        usedSlots.add(sl);
-                    }
+        const combinedUsedSlots = new Set();
+
+        history.forEach(item => {
+            if ((item.stream || 'BCA') !== cleanStream) return;
+            if (item.date !== cleanDate) return;
+            if (!isYearMatching(item.year, yearVal)) return;
+            
+            const itemSec = item.section || 'A';
+            const sl = parseInt(item.slot, 10);
+            if (sl >= 1 && sl <= 8) {
+                if (itemSec.toUpperCase() === 'ALL' || itemSec.toLowerCase().includes('combin')) {
+                    combinedUsedSlots.add(sl);
+                } else if (isSectionOverlap(itemSec, sectionVal)) {
+                    usedSlots.add(sl);
                 }
-            });
-        }
+            }
+        });
 
         const currentSelectedSlot = parseInt(slotSelectEl.value, 10) || 1;
         let firstAvailableSlot = null;
@@ -1310,19 +1312,37 @@ function updateAvailableSlots(dept, dateVal, yearVal, sectionVal, slotSelectEl) 
             const slotNum = parseInt(opt.value, 10);
             const timeLabel = SLOT_TIME_LABELS[slotNum] || ('Slot ' + slotNum);
             
-            if (usedSlots.has(slotNum)) {
-                opt.disabled = true;
-                opt.textContent = `Slot ${slotNum} (${timeLabel}) — 🔴 Marked`;
+            if (isCombined) {
+                if (combinedUsedSlots.has(slotNum)) {
+                    // Combined slot already active today — keep ENABLED for parallel electives/languages (Hindi, Sanskrit)
+                    opt.disabled = false;
+                    opt.textContent = `Slot ${slotNum} (${timeLabel}) — 🌐 Combined Active`;
+                    if (firstAvailableSlot === null) firstAvailableSlot = slotNum;
+                } else if (usedSlots.has(slotNum)) {
+                    // Regular section class used this slot — DISABLE
+                    opt.disabled = true;
+                    opt.textContent = `Slot ${slotNum} (${timeLabel}) — 🔴 Marked`;
+                } else {
+                    // Completely unused slot — ENABLED
+                    opt.disabled = false;
+                    opt.textContent = `Slot ${slotNum} (${timeLabel})`;
+                    if (firstAvailableSlot === null) firstAvailableSlot = slotNum;
+                }
             } else {
-                opt.disabled = false;
-                opt.textContent = `Slot ${slotNum} (${timeLabel})`;
-                if (firstAvailableSlot === null) {
-                    firstAvailableSlot = slotNum;
+                // Regular Section A / B / C
+                if (usedSlots.has(slotNum) || combinedUsedSlots.has(slotNum)) {
+                    opt.disabled = true;
+                    opt.textContent = `Slot ${slotNum} (${timeLabel}) — 🔴 Marked`;
+                } else {
+                    opt.disabled = false;
+                    opt.textContent = `Slot ${slotNum} (${timeLabel})`;
+                    if (firstAvailableSlot === null) firstAvailableSlot = slotNum;
                 }
             }
         });
 
-        if (usedSlots.has(currentSelectedSlot) && firstAvailableSlot !== null) {
+        const selectedOpt = slotSelectEl.options[slotSelectEl.selectedIndex];
+        if (selectedOpt && selectedOpt.disabled && firstAvailableSlot !== null) {
             slotSelectEl.value = String(firstAvailableSlot);
         }
     } catch (e) {
