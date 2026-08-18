@@ -1950,12 +1950,10 @@ function fetchAllServerHistory() {
             const history = readAllHistory();
             const byKey = new Map();
 
-            // Keep offline queue (any date)
+            // Keep all local history items (offline queue & past generated entries)
             history.forEach(item => {
                 const k = historyMatchKey(item);
-                if (item.offline === true) {
-                    byKey.set(k, item);
-                }
+                byKey.set(k, item);
             });
 
             // Sheet is source of truth for all entries
@@ -1975,6 +1973,8 @@ function fetchAllServerHistory() {
         action: 'get_absentees',
         stream: stream,
         date: 'ALL',
+        fromDate: '2026-01-01',
+        toDate: '2030-12-31',
         callback: cbName
     });
     appendAuthToParams(params);
@@ -3588,10 +3588,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (tabAll) tabAll.addEventListener('click', () => {
         currentHistoryTabMode = 'ALL';
-        const curYr = (typeof yearSelect !== 'undefined' && yearSelect) ? yearSelect.value : 'ALL';
-        if (yearFilterEl && yearFilterEl.value === 'ALL' && curYr) {
-            yearFilterEl.value = curYr;
-        }
         renderHistoryList();
         fetchAllServerHistory();
     });
@@ -3869,7 +3865,7 @@ function initSubjectManager() {
 // Version upgrade check to update stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    const APP_VER = 'v28.93-bca';
+    const APP_VER = 'v28.94-bca';
     if (localStorage.getItem('mgm_app_ver') !== APP_VER) {
         localStorage.removeItem('mgm_cloud_subjects');
         localStorage.setItem('mgm_app_ver', APP_VER);
