@@ -1572,9 +1572,9 @@ async function deleteData(dateVal, yearVal, sectionVal, subjectVal, slotVal) {
     setTimeout(() => successToast.classList.remove('active'), 2800);
 }
 
-function deleteHistoryEntry(index) {
-    const today = getTodayEntries();
-    const item = today[index];
+function deleteHistoryEntry(index, sourceList) {
+    const list = sourceList || getActiveDrawerEntries();
+    const item = list[index];
     if (!item) return;
     deleteData(item.date, item.year, item.section, item.subject, item.slot);
 }
@@ -1914,21 +1914,66 @@ function fetchTodayServerHistory() {
     document.body.appendChild(scriptEl);
 }
 
+let currentHistoryTabMode = 'TODAY'; // 'TODAY' or 'ALL'
+
+function getActiveDrawerEntries() {
+    if (currentHistoryTabMode === 'ALL') {
+        return readAllHistory()
+            .filter(item => (item.stream || 'BCA') === currentDept)
+            .sort((a, b) => {
+                const dA = normalizeHistoryDate(a.date) || '';
+                const dB = normalizeHistoryDate(b.date) || '';
+                if (dA !== dB) return dB.localeCompare(dA);
+                return (parseInt(b.slot, 10) || 1) - (parseInt(a.slot, 10) || 1);
+            });
+    }
+    return getTodayEntries();
+}
+
+function updateHistoryTabStyles() {
+    const tabToday = document.getElementById('historyTabToday');
+    const tabAll = document.getElementById('historyTabAll');
+    const titleEl = document.getElementById('historyDrawerTitle');
+    const subEl = document.getElementById('todayDrawerSubtitle');
+
+    if (tabToday && tabAll) {
+        if (currentHistoryTabMode === 'ALL') {
+            tabToday.style.background = 'transparent';
+            tabToday.style.color = 'var(--text-muted, #94a3b8)';
+            tabAll.style.background = 'var(--primary-color, #6366f1)';
+            tabAll.style.color = '#fff';
+            if (titleEl) titleEl.textContent = 'All History';
+            if (subEl) subEl.textContent = 'View, edit or delete any past class entry';
+        } else {
+            tabToday.style.background = 'var(--primary-color, #6366f1)';
+            tabToday.style.color = '#fff';
+            tabAll.style.background = 'transparent';
+            tabAll.style.color = 'var(--text-muted, #94a3b8)';
+            if (titleEl) titleEl.textContent = 'Today’s entries';
+            if (subEl) subEl.textContent = 'Correct any class you marked today';
+        }
+    }
+}
+
 function renderHistoryList() {
     pruneOldHistory();
-    const today = getTodayEntries();
+    const displayEntries = getActiveDrawerEntries();
     updateTodayBadge();
     updateSyncButtonState();
+    updateHistoryTabStyles();
     refreshAllSlotDropdowns();
 
     if (!historyList) return;
 
-    if (today.length === 0) {
-        historyList.innerHTML = '<p class="transcript-placeholder" style="text-align: center; margin-top: 20px;">No entries today — submit above.</p>';
+    if (displayEntries.length === 0) {
+        const emptyMsg = currentHistoryTabMode === 'ALL'
+            ? 'No attendance history saved yet.'
+            : 'No entries today — submit above.';
+        historyList.innerHTML = '<p class="transcript-placeholder" style="text-align: center; margin-top: 20px;">' + emptyMsg + '</p>';
         return;
     }
 
-    historyList.innerHTML = today.map((item, index) => {
+    historyList.innerHTML = displayEntries.map((item, index) => {
         const slotNum = parseInt(item.slot, 10) || 1;
         const slotLabel = SLOT_TIME_LABELS[slotNum] || ('Slot ' + slotNum);
         const rolls = item.rollNumbers === 'NIL'
@@ -1936,7 +1981,7 @@ function renderHistoryList() {
             : (Array.isArray(item.rollNumbers) ? escapeHTML(item.rollNumbers.join(', ')) : escapeHTML(String(item.rollNumbers)));
 
         const todayStr = getTodayISOString();
-        const dateLabel = (item.date && item.date !== todayStr)
+        const dateLabel = item.date
             ? ' · ' + escapeHTML(item.date)
             : '';
 
@@ -1969,21 +2014,21 @@ function renderHistoryList() {
     document.querySelectorAll('.btn-history-edit').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const idx = parseInt(e.currentTarget.getAttribute('data-index'), 10);
-            editHistoryEntry(idx);
+            editHistoryEntry(idx, displayEntries);
         });
     });
 
     document.querySelectorAll('.btn-history-delete').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const idx = parseInt(e.currentTarget.getAttribute('data-index'), 10);
-            deleteHistoryEntry(idx);
+            deleteHistoryEntry(idx, displayEntries);
         });
     });
 }
 
-function editHistoryEntry(index) {
-    const today = getTodayEntries();
-    const item = today[index];
+function editHistoryEntry(index, sourceList) {
+    const list = sourceList || getActiveDrawerEntries();
+    const item = list[index];
     if (!item) return;
 
     dateInput.value = item.date || getTodayISOString();
@@ -3433,7 +3478,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Header Drawer & Theme Toggle
+    const tabToday = document.getElementById('historyTabToday');
+    const tabAll = document.getElementById('historyTabAll');
+    if (tabToday) tabToday.addEventListener('click', () => {
+        currentHistoryTabMode = 'TODAY';
+        renderHistoryList();
+    });
+    if (tabAll) tabAll.addEventListener('click', () => {
+        currentHistoryTabMode = 'ALL';
+        renderHistoryList();
+    });
+
     const openHistory = () => {
+        currentHistoryTabMode = 'TODAY';
         renderHistoryList();
         historyDrawer.classList.add('active');
         try { document.body.style.overflow = 'hidden'; } catch (e) {}
@@ -3705,7 +3762,7 @@ function initSubjectManager() {
 // Version upgrade check to update stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    const APP_VER = 'v28.89-bca';
+    const APP_VER = 'v28.91-bca';
     if (localStorage.getItem('mgm_app_ver') !== APP_VER) {
         localStorage.removeItem('mgm_cloud_subjects');
         localStorage.setItem('mgm_app_ver', APP_VER);

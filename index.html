@@ -24,11 +24,11 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <link rel="stylesheet" href="styles.css?v=v28.89-bca">
+  <link rel="stylesheet" href="styles.css?v=v28.91-bca">
   <script>
     // Auto-update on first open after GitHub Pages deploy (runs before app.js)
     (function () {
-      var EXPECTED = 'v28.89-bca';
+      var EXPECTED = 'v28.91-bca';
       var KEY = 'mgm_bca_shell_ver';
       var reloading = false;
 
@@ -92,7 +92,7 @@
       // 2) Register SW with versioned URL so GitHub Pages cannot keep old sw.js forever
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          var swUrl = './sw.js?v=v136-bca';
+          var swUrl = './sw.js?v=v138-bca';
           navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' })
             .then(function (reg) {
               if (navigator.onLine) {
@@ -527,7 +527,7 @@
               <div class="spinner" id="shortageSpinner" style="display: none;"></div>
             </button>
             <button type="button" class="btn-secondary" id="openBulkGeneratorModalBtn" style="width: 100%; margin-top: 10px; font-weight: 700; background: rgba(99,102,241,0.12); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3); padding: 9px 16px; border-radius: 8px; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px;">
-              ⚡ Bulk Past Class Generator (July 21 - Aug 10)
+              ⚡ Bulk Past Class Generator
             </button>
           </div>
 
@@ -652,11 +652,16 @@
     <div class="history-drawer" id="historyDrawer">
       <div class="drawer-header">
         <div>
-          <h2>Today’s entries</h2>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <h2 id="historyDrawerTitle" style="margin: 0;">Today’s entries</h2>
+            <div style="display: flex; background: rgba(0,0,0,0.3); padding: 2px; border-radius: 6px; border: 1px solid var(--border-color, rgba(255,255,255,0.1));">
+              <button type="button" id="historyTabToday" style="padding: 3px 8px; font-size: 0.72rem; font-weight: 700; border: none; border-radius: 4px; background: var(--primary-color, #6366f1); color: #fff; cursor: pointer;">Today</button>
+              <button type="button" id="historyTabAll" style="padding: 3px 8px; font-size: 0.72rem; font-weight: 700; border: none; border-radius: 4px; background: transparent; color: var(--text-muted, #94a3b8); cursor: pointer;">All History</button>
+            </div>
+          </div>
           <p class="drawer-subtitle" id="todayDrawerSubtitle">Correct any class you marked today</p>
         </div>
         <div class="drawer-header-actions">
-          <button type="button" class="btn-primary" id="drawerBulkGeneratorBtn" style="padding: 6px 12px; font-size: 0.78rem; background: rgba(99,102,241,0.2); border: 1px solid rgba(99,102,241,0.4); color: #a5b4fc;">⚡ Bulk Past Generator</button>
           <button type="button" class="btn-primary" id="syncOfflineBtn" style="display: none; padding: 6px 12px; font-size: 0.78rem;">⚡ Sync Pending (<span id="pendingSyncCount">0</span>)</button>
           <button type="button" id="closeHistoryBtn" aria-label="Close Today's entries">&times;</button>
         </div>
@@ -867,7 +872,7 @@
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js?v=v28.89-bca"></script>
-  <script src="app.js?v=v28.89-bca"></script>
+  <script src="parser.js?v=v28.91-bca"></script>
+  <script src="app.js?v=v28.91-bca"></script>
 </body>
 </html>
