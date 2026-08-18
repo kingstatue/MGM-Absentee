@@ -1,25 +1,31 @@
-const CACHE_NAME = 'mgm-bca-absentee-informer-v133-bca';
-// Do NOT precache app.js / index / css — mobile was stuck on broken cached JS after updates.
-// Network-first fetch handler still caches them after a successful live load.
+const CACHE_NAME = 'mgm-bca-absentee-informer-v136-bca';
+
 const ASSETS_TO_CACHE = [
+  './',
+  './index.html',
+  './styles.css',
+  './app.js',
+  './parser.js',
   './manifest.json',
+  './version.json',
   './icon-192.png',
-  './icon-512.png',
-  './version.json'
+  './icon-512.png'
 ];
 
-// Install Event - Precache icons only and skip waiting immediately
+// Install Event - Precache core app assets & skip waiting
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[PWA SW] Install', CACHE_NAME);
-      return cache.addAll(ASSETS_TO_CACHE).catch(() => undefined);
+      console.log('[PWA SW] Pre-caching assets for offline availability:', CACHE_NAME);
+      return cache.addAll(ASSETS_TO_CACHE).catch((err) => {
+        console.warn('[PWA SW] Pre-cache warning:', err);
+      });
     })
   );
 });
 
-// Activate Event - Purge ALL other caches & claim clients immediately
+// Activate Event - Purge old caches & claim clients immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -42,49 +48,40 @@ self.addEventListener('message', (event) => {
   }
 });
 
-// Fetch Event - ALWAYS NETWORK FIRST for HTML, JS, CSS, version.json
+// Fetch Event - Network First when online, Cache Fallback when offline
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
 
-  // Bypass cache for external APIs (Google Apps Script API)
-  if (url.origin !== location.origin) return;
+  // Bypass cache for external APIs (Google Apps Script webhooks)
+  if (url.origin !== location.origin && !url.hostname.includes('fonts.g')) return;
 
-  const path = url.pathname;
-  const isCoreAsset =
-    path.endsWith('.html') ||
-    path.endsWith('.js') ||
-    path.endsWith('.css') ||
-    path.endsWith('version.json') ||
-    path.endsWith('sw.js') ||
-    path === '/' ||
-    path.endsWith('/');
+  const isNavigation = event.request.mode === 'navigate' || (event.request.headers.get('accept') && event.request.headers.get('accept').includes('text/html'));
 
-  if (isCoreAsset) {
-    // Network-First — never prefer stale JS after GitHub Pages deploy
-    event.respondWith(
-      fetch(event.request, { cache: 'no-store' })
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
-          }
-          return networkResponse;
-        })
-        .catch(() => caches.match(event.request))
-    );
-  } else {
-    // Cache-First for images/fonts
-    event.respondWith(
-      caches.match(event.request).then((cached) => {
-        return cached || fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
-          }
-          return networkResponse;
-        });
+  event.respondWith(
+    fetch(event.request, { cache: 'no-store' })
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+        }
+        return networkResponse;
       })
-    );
-  }
+      .catch(async () => {
+        // Device is OFFLINE or network failed — serve from cache
+        const cachedResponse = await caches.match(event.request);
+        if (cachedResponse) return cachedResponse;
+
+        // If requesting page navigation / HTML, fallback to cached index.html
+        if (isNavigation || url.pathname.endsWith('.html') || url.pathname === '/' || url.pathname.endsWith('/')) {
+          const indexFallback = (await caches.match('./index.html')) ||
+                                (await caches.match('/index.html')) ||
+                                (await caches.match('./')) ||
+                                (await caches.match('/'));
+          if (indexFallback) return indexFallback;
+        }
+
+        return new Response('Offline resource unavailable', { status: 503, statusText: 'Offline' });
+      })
+  );
 });

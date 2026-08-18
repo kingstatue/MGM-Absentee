@@ -24,16 +24,16 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <link rel="stylesheet" href="styles.css?v=v28.85-bca">
+  <link rel="stylesheet" href="styles.css?v=v28.89-bca">
   <script>
     // Auto-update on first open after GitHub Pages deploy (runs before app.js)
     (function () {
-      var EXPECTED = 'v28.84-bca';
+      var EXPECTED = 'v28.89-bca';
       var KEY = 'mgm_bca_shell_ver';
       var reloading = false;
 
       function hardReload() {
-        if (reloading) return;
+        if (reloading || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
         reloading = true;
         var finish = function () {
           try { sessionStorage.setItem('mgm_just_updated', EXPECTED); } catch (e) {}
@@ -61,8 +61,13 @@
       }
 
       function applyNewVersion(ver) {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
         var prev = '';
         try { prev = localStorage.getItem(KEY) || ''; } catch (e) {}
+        if (!prev) {
+          try { localStorage.setItem(KEY, ver); } catch (e2) {}
+          return false;
+        }
         if (prev !== ver) {
           try { localStorage.setItem(KEY, ver); } catch (e2) {}
           hardReload();
@@ -71,24 +76,28 @@
         return false;
       }
 
-      // 1) Compare published version.json (network, no cache)
-      fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          var ver = (data && (data.version || data.v)) || EXPECTED;
-          applyNewVersion(ver);
-        })
-        .catch(function () {
-          applyNewVersion(EXPECTED);
-        });
+      // 1) Compare published version.json (ONLY when online)
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            var ver = (data && (data.version || data.v)) || EXPECTED;
+            applyNewVersion(ver);
+          })
+          .catch(function () {});
+      } else {
+        try { localStorage.setItem(KEY, EXPECTED); } catch (e) {}
+      }
 
       // 2) Register SW with versioned URL so GitHub Pages cannot keep old sw.js forever
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          var swUrl = './sw.js?v=v131-bca';
+          var swUrl = './sw.js?v=v136-bca';
           navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' })
             .then(function (reg) {
-              reg.update();
+              if (navigator.onLine) {
+                try { reg.update(); } catch (e) {}
+              }
               function watch(worker) {
                 if (!worker) return;
                 worker.addEventListener('statechange', function () {
@@ -105,7 +114,7 @@
               });
               // Recheck when teacher returns to the app
               document.addEventListener('visibilitychange', function () {
-                if (document.visibilityState === 'visible') {
+                if (document.visibilityState === 'visible' && navigator.onLine) {
                   try { reg.update(); } catch (e) {}
                   fetch('./version.json?t=' + Date.now(), { cache: 'no-store' })
                     .then(function (r) { return r.json(); })
@@ -121,7 +130,7 @@
 
           var refreshing = false;
           navigator.serviceWorker.addEventListener('controllerchange', function () {
-            if (refreshing) return;
+            if (refreshing || !navigator.onLine) return;
             refreshing = true;
             window.location.reload();
           });
@@ -475,12 +484,12 @@
 
             <div class="hod-filter-row" style="margin-bottom: 8px;">
               <div class="form-group" style="flex: 1; min-width: 110px;">
-                <label for="shortageStartRoll">Start Roll No.</label>
-                <input type="text" id="shortageStartRoll" class="form-input" placeholder="e.g. 26701" />
+                <label for="shortageStartRoll">Start Roll No. / Ranges</label>
+                <input type="text" id="shortageStartRoll" class="form-input" placeholder="e.g. S0180 or S0180-S0260, S0352" />
               </div>
               <div class="form-group" style="flex: 1; min-width: 110px;">
-                <label for="shortageEndRoll">End Roll No.</label>
-                <input type="text" id="shortageEndRoll" class="form-input" placeholder="e.g. 26760" />
+                <label for="shortageEndRoll">End Roll No. (Optional)</label>
+                <input type="text" id="shortageEndRoll" class="form-input" placeholder="e.g. S0352" />
               </div>
               <div class="form-group" style="flex: 1; min-width: 130px;">
                 <label for="shortageCutoffSelect">Cutoff Threshold</label>
@@ -516,6 +525,9 @@
             <button type="button" class="btn-primary" id="shortageCalculateBtn" style="width: 100%; background: linear-gradient(135deg, #ef4444, #dc2626); border: none; margin-top: 6px; padding: 10px 16px; font-weight: 700;">
               <span id="shortageCalculateBtnText">📊 Calculate Shortage Report</span>
               <div class="spinner" id="shortageSpinner" style="display: none;"></div>
+            </button>
+            <button type="button" class="btn-secondary" id="openBulkGeneratorModalBtn" style="width: 100%; margin-top: 10px; font-weight: 700; background: rgba(99,102,241,0.12); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3); padding: 9px 16px; border-radius: 8px; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px;">
+              ⚡ Bulk Past Class Generator (July 21 - Aug 10)
             </button>
           </div>
 
@@ -644,6 +656,7 @@
           <p class="drawer-subtitle" id="todayDrawerSubtitle">Correct any class you marked today</p>
         </div>
         <div class="drawer-header-actions">
+          <button type="button" class="btn-primary" id="drawerBulkGeneratorBtn" style="padding: 6px 12px; font-size: 0.78rem; background: rgba(99,102,241,0.2); border: 1px solid rgba(99,102,241,0.4); color: #a5b4fc;">⚡ Bulk Past Generator</button>
           <button type="button" class="btn-primary" id="syncOfflineBtn" style="display: none; padding: 6px 12px; font-size: 0.78rem;">⚡ Sync Pending (<span id="pendingSyncCount">0</span>)</button>
           <button type="button" id="closeHistoryBtn" aria-label="Close Today's entries">&times;</button>
         </div>
@@ -751,6 +764,97 @@
       </div>
     </div>
 
+    <!-- Bulk Past Class Generator Modal -->
+    <div class="modal-overlay" id="bulkGeneratorModal">
+      <div class="modal-card" style="max-width: 460px;">
+        <div class="modal-header">
+          <h2>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2.5">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+            Bulk Past Class Generator
+          </h2>
+          <button class="icon-btn" id="closeBulkModalBtn" aria-label="Close modal">&times;</button>
+        </div>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px; line-height: 1.4;">
+          Auto-generate conducted class entries for past dates (e.g. 21-Jul to 10-Aug). All generated classes default to <strong>NIL (All Present)</strong> so you only need to edit absentees for dates students missed.
+        </p>
+
+        <form id="bulkGeneratorForm" onsubmit="return false;">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="bulkYearSelect">Year</label>
+              <select id="bulkYearSelect" class="form-select" required>
+                <option value="First Year">First Year</option>
+                <option value="Second Year" selected>Second Year</option>
+                <option value="Third Year">Third Year</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="bulkSectionSelect">Section</label>
+              <select id="bulkSectionSelect" class="form-select" required>
+                <option value="A">Section A</option>
+                <option value="B">Section B</option>
+                <option value="C">Section C</option>
+                <option value="ALL">Combined (Sec A,B,C)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="bulkSubjectInput">Subject</label>
+              <select id="bulkSubjectInput" class="form-select" required></select>
+            </div>
+            <div class="form-group">
+              <label for="bulkSlotSelect">Slot / Time Period</label>
+              <select id="bulkSlotSelect" class="form-select" required>
+                <option value="1">Slot 1 (9-9.55)</option>
+                <option value="2">Slot 2 (10-10.55)</option>
+                <option value="3">Slot 3 (11.10-12.05)</option>
+                <option value="4">Slot 4 (12.10-1.05)</option>
+                <option value="5">Slot 5 (1.05-2)</option>
+                <option value="6">Slot 6 (2-2.55)</option>
+                <option value="7">Slot 7 (3-3.55)</option>
+                <option value="8">Slot 8 (4-4.55)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="bulkStartDate">Start Date</label>
+              <input type="date" id="bulkStartDate" class="form-input" value="2026-07-21" required>
+            </div>
+            <div class="form-group">
+              <label for="bulkEndDate">End Date</label>
+              <input type="date" id="bulkEndDate" class="form-input" value="2026-08-10" required>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label style="margin-bottom: 6px; font-weight: 600;">Class Days (Days of Week)</label>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; padding: 8px 10px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+              <label style="font-size: 0.82rem; display: flex; align-items: center; gap: 4px; cursor: pointer;"><input type="checkbox" class="bulkDayCheck" value="1" checked /> Mon</label>
+              <label style="font-size: 0.82rem; display: flex; align-items: center; gap: 4px; cursor: pointer;"><input type="checkbox" class="bulkDayCheck" value="2" checked /> Tue</label>
+              <label style="font-size: 0.82rem; display: flex; align-items: center; gap: 4px; cursor: pointer;"><input type="checkbox" class="bulkDayCheck" value="3" checked /> Wed</label>
+              <label style="font-size: 0.82rem; display: flex; align-items: center; gap: 4px; cursor: pointer;"><input type="checkbox" class="bulkDayCheck" value="4" checked /> Thu</label>
+              <label style="font-size: 0.82rem; display: flex; align-items: center; gap: 4px; cursor: pointer;"><input type="checkbox" class="bulkDayCheck" value="5" checked /> Fri</label>
+              <label style="font-size: 0.82rem; display: flex; align-items: center; gap: 4px; cursor: pointer;"><input type="checkbox" class="bulkDayCheck" value="6" /> Sat</label>
+            </div>
+          </div>
+
+          <div class="modal-buttons" style="margin-top: 14px;">
+            <button type="button" class="btn-secondary" id="cancelBulkModalBtn">Cancel</button>
+            <button type="submit" class="btn-primary" id="submitBulkBtn" style="background: linear-gradient(135deg, #6366f1, #4f46e5); font-weight: 700;">
+              <span id="submitBulkBtnText">⚡ Generate Past Classes</span>
+              <div class="spinner" id="submitBulkSpinner" style="display: none;"></div>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <footer class="app-footer" style="text-align: center; padding: 18px 20px; margin-top: 30px; font-size: 0.85rem; color: var(--text-muted); border-top: 1px solid var(--border-color, rgba(255,255,255,0.08)); border-radius: 8px;">
       <div>Designed by <strong style="color: var(--primary-light, #818cf8);">Kingstatue</strong> for <strong>MGM College, Udupi</strong></div>
       <div style="margin-top: 8px;">
@@ -763,7 +867,7 @@
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js?v=v28.85-bca"></script>
-  <script src="app.js?v=v28.85-bca"></script>
+  <script src="parser.js?v=v28.89-bca"></script>
+  <script src="app.js?v=v28.89-bca"></script>
 </body>
 </html>
