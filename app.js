@@ -1914,12 +1914,99 @@ function fetchTodayServerHistory() {
     document.body.appendChild(scriptEl);
 }
 
+let isFetchingAllServerHistory = false;
+
+function fetchAllServerHistory() {
+    if (isFetchingAllServerHistory) return;
+    isFetchingAllServerHistory = true;
+
+    const stream = currentDept || 'BCA';
+    const targetUrl = getWebhookUrl(stream);
+    const cbName = 'mgm_bca_all_history_cb_' + Date.now();
+
+    const timeout = setTimeout(() => {
+        isFetchingAllServerHistory = false;
+        try { delete window[cbName]; } catch (e) {}
+    }, 8000);
+
+    window[cbName] = function (data) {
+        clearTimeout(timeout);
+        isFetchingAllServerHistory = false;
+        try { delete window[cbName]; } catch (e) {}
+
+        if (data && data.result === 'success' && Array.isArray(data.entries)) {
+            const serverEntries = data.entries.map(e => ({
+                stream: stream,
+                date: e.date || getTodayISOString(),
+                year: e.year || 'First Year',
+                section: e.section || 'A',
+                subject: e.subject || 'Subject',
+                slot: parseInt(e.slot, 10) || 1,
+                rollNumbers: e.rollNumbers || 'NIL',
+                offline: false,
+                timestamp: 'From Sheet'
+            }));
+
+            const history = readAllHistory();
+            const byKey = new Map();
+
+            // Keep offline queue (any date)
+            history.forEach(item => {
+                const k = historyMatchKey(item);
+                if (item.offline === true) {
+                    byKey.set(k, item);
+                }
+            });
+
+            // Sheet is source of truth for all entries
+            serverEntries.forEach(sEntry => {
+                const k = historyMatchKey(sEntry);
+                byKey.set(k, sEntry);
+            });
+
+            const merged = compactAttendanceHistory(Array.from(byKey.values()));
+            localStorage.setItem('mgm_bca_attendance_history', JSON.stringify(merged));
+            renderHistoryList();
+            updateSyncButtonState();
+        }
+    };
+
+    const params = new URLSearchParams({
+        action: 'get_absentees',
+        stream: stream,
+        date: 'ALL',
+        callback: cbName
+    });
+    appendAuthToParams(params);
+
+    const scriptEl = document.createElement('script');
+    scriptEl.src = targetUrl + (targetUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
+    scriptEl.onerror = function () {
+        clearTimeout(timeout);
+        isFetchingAllServerHistory = false;
+        try { delete window[cbName]; } catch (e) {}
+        try { document.body.removeChild(scriptEl); } catch (e) {}
+    };
+    document.body.appendChild(scriptEl);
+}
+
 let currentHistoryTabMode = 'TODAY'; // 'TODAY' or 'ALL'
 
 function getActiveDrawerEntries() {
     if (currentHistoryTabMode === 'ALL') {
+        const yearFilter = document.getElementById('allHistoryYearFilter');
+        const dateFilter = document.getElementById('allHistoryDateFilter');
+        
+        const selYear = yearFilter ? yearFilter.value : 'ALL';
+        const selDate = dateFilter ? dateFilter.value : '';
+
         return readAllHistory()
-            .filter(item => (item.stream || 'BCA') === currentDept)
+            .filter(item => {
+                if ((item.stream || 'BCA') !== currentDept) return false;
+                if (selYear && selYear !== 'ALL' && isYearMatching(item.year, selYear) === false) return false;
+                if (selDate && normalizeHistoryDate(item.date) !== selDate) return false;
+                return true;
+            })
             .sort((a, b) => {
                 const dA = normalizeHistoryDate(a.date) || '';
                 const dB = normalizeHistoryDate(b.date) || '';
@@ -1935,6 +2022,7 @@ function updateHistoryTabStyles() {
     const tabAll = document.getElementById('historyTabAll');
     const titleEl = document.getElementById('historyDrawerTitle');
     const subEl = document.getElementById('todayDrawerSubtitle');
+    const filterRow = document.getElementById('allHistoryFilterRow');
 
     if (tabToday && tabAll) {
         if (currentHistoryTabMode === 'ALL') {
@@ -1944,6 +2032,7 @@ function updateHistoryTabStyles() {
             tabAll.style.color = '#fff';
             if (titleEl) titleEl.textContent = 'All History';
             if (subEl) subEl.textContent = 'View, edit or delete any past class entry';
+            if (filterRow) filterRow.style.display = 'flex';
         } else {
             tabToday.style.background = 'var(--primary-color, #6366f1)';
             tabToday.style.color = '#fff';
@@ -1951,6 +2040,7 @@ function updateHistoryTabStyles() {
             tabAll.style.color = 'var(--text-muted, #94a3b8)';
             if (titleEl) titleEl.textContent = 'Today’s entries';
             if (subEl) subEl.textContent = 'Correct any class you marked today';
+            if (filterRow) filterRow.style.display = 'none';
         }
     }
 }
@@ -3480,13 +3570,30 @@ document.addEventListener('DOMContentLoaded', () => {
     // Header Drawer & Theme Toggle
     const tabToday = document.getElementById('historyTabToday');
     const tabAll = document.getElementById('historyTabAll');
+    const yearFilterEl = document.getElementById('allHistoryYearFilter');
+    const dateFilterEl = document.getElementById('allHistoryDateFilter');
+    const clearFilterBtn = document.getElementById('clearAllHistoryFilterBtn');
+
+    if (yearFilterEl) yearFilterEl.addEventListener('change', () => renderHistoryList());
+    if (dateFilterEl) dateFilterEl.addEventListener('change', () => renderHistoryList());
+    if (clearFilterBtn) clearFilterBtn.addEventListener('click', () => {
+        if (yearFilterEl) yearFilterEl.value = 'ALL';
+        if (dateFilterEl) dateFilterEl.value = '';
+        renderHistoryList();
+    });
+
     if (tabToday) tabToday.addEventListener('click', () => {
         currentHistoryTabMode = 'TODAY';
         renderHistoryList();
     });
     if (tabAll) tabAll.addEventListener('click', () => {
         currentHistoryTabMode = 'ALL';
+        const curYr = (typeof yearSelect !== 'undefined' && yearSelect) ? yearSelect.value : 'ALL';
+        if (yearFilterEl && yearFilterEl.value === 'ALL' && curYr) {
+            yearFilterEl.value = curYr;
+        }
         renderHistoryList();
+        fetchAllServerHistory();
     });
 
     const openHistory = () => {
@@ -3762,7 +3869,7 @@ function initSubjectManager() {
 // Version upgrade check to update stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    const APP_VER = 'v28.91-bca';
+    const APP_VER = 'v28.93-bca';
     if (localStorage.getItem('mgm_app_ver') !== APP_VER) {
         localStorage.removeItem('mgm_cloud_subjects');
         localStorage.setItem('mgm_app_ver', APP_VER);

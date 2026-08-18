@@ -24,11 +24,11 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <link rel="stylesheet" href="styles.css?v=v28.91-bca">
+  <link rel="stylesheet" href="styles.css?v=v28.93-bca">
   <script>
     // Auto-update on first open after GitHub Pages deploy (runs before app.js)
     (function () {
-      var EXPECTED = 'v28.91-bca';
+      var EXPECTED = 'v28.93-bca';
       var KEY = 'mgm_bca_shell_ver';
       var reloading = false;
 
@@ -92,7 +92,7 @@
       // 2) Register SW with versioned URL so GitHub Pages cannot keep old sw.js forever
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          var swUrl = './sw.js?v=v138-bca';
+          var swUrl = './sw.js?v=v140-bca';
           navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' })
             .then(function (reg) {
               if (navigator.onLine) {
@@ -666,6 +666,16 @@
           <button type="button" id="closeHistoryBtn" aria-label="Close Today's entries">&times;</button>
         </div>
       </div>
+      <div id="allHistoryFilterRow" style="display: none; padding: 10px 16px; background: rgba(0,0,0,0.2); border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08)); gap: 8px; align-items: center; flex-wrap: wrap;">
+        <select id="allHistoryYearFilter" class="form-select" style="flex: 1; padding: 5px 8px; font-size: 0.78rem;">
+          <option value="ALL">All Years</option>
+          <option value="First Year">First Year</option>
+          <option value="Second Year">Second Year</option>
+          <option value="Third Year">Third Year</option>
+        </select>
+        <input type="date" id="allHistoryDateFilter" class="form-input" style="flex: 1; padding: 4px 8px; font-size: 0.78rem;" title="Filter by date" />
+        <button type="button" id="clearAllHistoryFilterBtn" class="btn-secondary" style="padding: 4px 8px; font-size: 0.75rem;">Clear</button>
+      </div>
       <div class="drawer-body" id="historyList">
         <p class="transcript-placeholder" style="text-align: center; margin-top: 20px;">No entries today — submit above.</p>
       </div>
@@ -872,7 +882,7 @@
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js?v=v28.91-bca"></script>
-  <script src="app.js?v=v28.91-bca"></script>
+  <script src="parser.js?v=v28.93-bca"></script>
+  <script src="app.js?v=v28.93-bca"></script>
 </body>
 </html>
