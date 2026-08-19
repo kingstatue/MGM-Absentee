@@ -1005,7 +1005,10 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         let cleanSection = sectionVal || 'A';
 
         if (!cleanSubject) {
-            alert('Please enter / select a subject name before submitting.');
+            alert('Please select a subject before submitting.');
+            if (btnElem) btnElem.disabled = false;
+            if (textElem) textElem.style.opacity = '1';
+            if (spinnerElem) spinnerElem.style.display = 'none';
             return { status: 'cancelled' };
         }
 
@@ -3041,12 +3044,12 @@ function subjectListFingerprint(subjects) {
     return (subjects || []).map(s => String(s).toLowerCase()).join('\u0001');
 }
 
-function refreshSubjectDropdowns(preferredSubject) {
+function refreshSubjectDropdowns(preferredSubject, forceReset) {
     const yr = directYearSelect ? directYearSelect.value : 'First Year';
     const sec = directSectionSelect ? directSectionSelect.value : 'A';
     const list = getSubjectsForActiveYear(currentDept, yr, sec);
     const config = DEPT_CONFIG[currentDept];
-    updateSubjectDropdowns(list, preferredSubject || (config ? config.defaultSubject : null));
+    updateSubjectDropdowns(list, preferredSubject || (config ? config.defaultSubject : null), forceReset);
 }
 
 function getSubjectsForActiveYear(deptCode, yearStr, sectionStr) {
@@ -3143,7 +3146,7 @@ function getAllSubjectsForYearManage(deptCode, yearStr) {
     return entries;
 }
 
-function updateSubjectDropdowns(subjects, defaultSubject) {
+function updateSubjectDropdowns(subjects, defaultSubject, forceReset) {
     const subjectSelects = [directSubjectInput, subjectInput];
     const nextFp = subjectListFingerprint(subjects);
 
@@ -3156,7 +3159,7 @@ function updateSubjectDropdowns(subjects, defaultSubject) {
         );
 
         // Skip DOM rebuild when options are unchanged (stops flash on open/sync)
-        if (curFp === nextFp && subjects && subjects.length > 0) {
+        if (curFp === nextFp && subjects && subjects.length > 0 && !forceReset) {
             if (defaultSubject && subjects.some(s => s.toLowerCase() === String(defaultSubject).toLowerCase())) {
                 const match = subjects.find(s => s.toLowerCase() === String(defaultSubject).toLowerCase());
                 if (match) selectEl.value = match;
@@ -3165,6 +3168,12 @@ function updateSubjectDropdowns(subjects, defaultSubject) {
         }
 
         selectEl.innerHTML = '';
+
+        const placeholderOpt = document.createElement('option');
+        placeholderOpt.value = '';
+        placeholderOpt.textContent = '-- Select Subject --';
+        selectEl.appendChild(placeholderOpt);
+
         if (subjects && Array.isArray(subjects) && subjects.length > 0) {
             subjects.forEach(subj => {
                 const opt = document.createElement('option');
@@ -3173,15 +3182,15 @@ function updateSubjectDropdowns(subjects, defaultSubject) {
                 selectEl.appendChild(opt);
             });
         } else {
-            const opt = document.createElement('option');
-            opt.value = '';
-            opt.textContent = '-- Add Subject via (+ Add Subject) button above --';
-            selectEl.appendChild(opt);
+            placeholderOpt.textContent = '-- Add Subject via (+ Add Subject) button above --';
         }
+
         if (defaultSubject && subjects && subjects.some(s => s.toLowerCase() === String(defaultSubject).toLowerCase())) {
             setSubjectValue(selectEl, defaultSubject);
-        } else if (prev && subjects && subjects.some(s => s.toLowerCase() === String(prev).toLowerCase())) {
+        } else if (!forceReset && prev && subjects && subjects.some(s => s.toLowerCase() === String(prev).toLowerCase())) {
             selectEl.value = prev;
+        } else {
+            selectEl.value = '';
         }
     });
 }
@@ -3230,7 +3239,11 @@ function checkLanguageElectiveAutoCombined(subjectVal, sectionSelectElem, yearSe
 }
 
 function setSubjectValue(selectEl, subjectVal) {
-    if (!selectEl || !subjectVal || !selectEl.options) return;
+    if (!selectEl || !selectEl.options) return;
+    if (!subjectVal || !String(subjectVal).trim()) {
+        selectEl.value = '';
+        return;
+    }
     let matchingOpt = Array.from(selectEl.options).find(o => o.value && o.value.toLowerCase() === subjectVal.toLowerCase());
     if (matchingOpt) {
         selectEl.value = matchingOpt.value;
@@ -3461,7 +3474,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const hasSec = config ? config.hasSections : true;
             const yrVal = directYearSelect.value;
             updateSectionSelects(hasSec, currentDept, yrVal);
-            refreshSubjectDropdowns(config ? config.defaultSubject : null);
+            refreshSubjectDropdowns('', true);
             refreshAllSlotDropdowns();
         });
     }
@@ -3473,7 +3486,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const yrVal = yearSelect.value;
             updateSectionSelects(hasSec, currentDept, yrVal);
             const secVal = sectionSelect ? sectionSelect.value : 'A';
-            updateSubjectDropdowns(getSubjectsForActiveYear(currentDept, yrVal, secVal), config ? config.defaultSubject : null);
+            updateSubjectDropdowns(getSubjectsForActiveYear(currentDept, yrVal, secVal), '', true);
             refreshAllSlotDropdowns();
         });
     }
