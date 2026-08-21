@@ -5225,3 +5225,544 @@ function buildShortageWhatsAppText(yearStr, sectionStr, subjectFilter, startRoll
 }
 
 
+// ==========================================
+// AI ATTENDANCE REGISTER IMAGE SCANNER (OCR)
+// ==========================================
+
+let currentRegisterImageBase64 = null;
+let currentRegisterImageMimeType = 'image/jpeg';
+let currentScannedRecords = [];
+
+function initRegisterScannerUI() {
+    const openBtn = document.getElementById('openRegisterScannerBtn');
+    const openBulkBtn = document.getElementById('openScannerFromBulkBtn');
+    const modal = document.getElementById('registerScannerModal');
+    const closeBtn = document.getElementById('closeRegisterScannerModalBtn');
+    const dropzone = document.getElementById('registerImageDropzone');
+    const fileInput = document.getElementById('registerImageInput');
+    const previewWrap = document.getElementById('registerImagePreviewWrap');
+    const previewImg = document.getElementById('registerImagePreview');
+    const placeholder = document.getElementById('registerImagePlaceholder');
+    const changeImgBtn = document.getElementById('changeRegisterImgBtn');
+    const apiKeyInput = document.getElementById('scannerApiKeyInput');
+    const analyzeBtn = document.getElementById('analyzeRegisterBtn');
+    const scannerYearSelect = document.getElementById('scannerYearSelect');
+    const scannerSectionSelect = document.getElementById('scannerSectionSelect');
+    const scannerSubjectSelect = document.getElementById('scannerSubjectSelect');
+    const scannerSlotSelect = document.getElementById('scannerSlotSelect');
+    const scannedResultsContainer = document.getElementById('scannedResultsContainer');
+    const scannedRowsList = document.getElementById('scannedRowsList');
+    const addDateRowBtn = document.getElementById('addScannedDateRowBtn');
+    const cancelResultsBtn = document.getElementById('cancelScannedResultsBtn');
+    const saveAllBtn = document.getElementById('saveAllScannedEntriesBtn');
+    const statusMsg = document.getElementById('scannerStatusMessage');
+
+    if (!modal) return;
+
+    // Load stored API key if exists
+    try {
+        const storedKey = localStorage.getItem('mgm_gemini_api_key') || '';
+        if (storedKey && apiKeyInput) apiKeyInput.value = storedKey;
+    } catch (e) {}
+
+    // Populate Subjects dropdown in scanner
+    function syncScannerSubjects() {
+        if (!scannerSubjectSelect) return;
+        const currentYear = scannerYearSelect ? scannerYearSelect.value : 'Second Year';
+        const currentSec = scannerSectionSelect ? scannerSectionSelect.value : 'A';
+        let subjects = [];
+        try {
+            if (typeof getSubjectsForActiveYear === 'function') {
+                subjects = getSubjectsForActiveYear(currentDept || 'BCA', currentYear, currentSec);
+            }
+        } catch (e) {
+            console.warn('Error fetching scanner subjects:', e);
+        }
+        scannerSubjectSelect.innerHTML = '';
+        if (subjects && subjects.length > 0) {
+            subjects.forEach(subj => {
+                const opt = document.createElement('option');
+                opt.value = subj;
+                opt.textContent = subj;
+                scannerSubjectSelect.appendChild(opt);
+            });
+        }
+    }
+
+    if (scannerYearSelect) {
+        scannerYearSelect.addEventListener('change', syncScannerSubjects);
+    }
+    if (scannerSectionSelect) {
+        scannerSectionSelect.addEventListener('change', syncScannerSubjects);
+    }
+    syncScannerSubjects();
+
+    function openScannerModal() {
+        syncScannerSubjects();
+        modal.classList.add('active');
+        if (statusMsg) statusMsg.style.display = 'none';
+    }
+
+    window.openRegisterScannerModalDirect = openScannerModal;
+
+    function closeScannerModal() {
+        modal.classList.remove('active');
+    }
+
+    if (openBtn) openBtn.addEventListener('click', openScannerModal);
+    if (openBulkBtn) openBulkBtn.addEventListener('click', () => {
+        const bulkModal = document.getElementById('bulkGeneratorModal');
+        if (bulkModal) bulkModal.classList.remove('active');
+        openScannerModal();
+    });
+    if (closeBtn) closeBtn.addEventListener('click', closeScannerModal);
+
+    // Image Picker / Dropzone
+    if (dropzone && fileInput) {
+        dropzone.addEventListener('click', (e) => {
+            if (e.target !== changeImgBtn) fileInput.click();
+        });
+
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            try {
+                const compressed = await compressRegisterImageForApi(file);
+                currentRegisterImageMimeType = compressed.mimeType;
+                currentRegisterImageBase64 = compressed.base64;
+                if (previewImg) previewImg.src = compressed.dataUrl;
+                if (placeholder) placeholder.style.display = 'none';
+                if (previewWrap) previewWrap.style.display = 'block';
+            } catch (err) {
+                console.warn('Register image compress failed, using original file.', err);
+                currentRegisterImageMimeType = file.type || 'image/jpeg';
+                const reader = new FileReader();
+                reader.onload = function (evt) {
+                    const dataUrl = evt.target.result;
+                    currentRegisterImageBase64 = dataUrl.split(',')[1];
+                    if (previewImg) previewImg.src = dataUrl;
+                    if (placeholder) placeholder.style.display = 'none';
+                    if (previewWrap) previewWrap.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+
+    if (changeImgBtn && fileInput) {
+        changeImgBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            fileInput.click();
+        });
+    }
+
+    // Save API key on change
+    if (apiKeyInput) {
+        apiKeyInput.addEventListener('change', () => {
+            const k = apiKeyInput.value.trim();
+            if (k) {
+                try { localStorage.setItem('mgm_gemini_api_key', k); } catch (e) {}
+            }
+        });
+    }
+
+    // Analyze Button click
+    if (analyzeBtn) {
+        analyzeBtn.addEventListener('click', async () => {
+            if (!currentRegisterImageBase64) {
+                showScannerStatus('Please select or capture a photo of the attendance register first.', 'warning');
+                return;
+            }
+
+            const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
+            if (!apiKey) {
+                showScannerStatus('Please enter your Gemini API key above. Click "Get free key" if you don\'t have one.', 'warning');
+                if (apiKeyInput) apiKeyInput.focus();
+                return;
+            }
+
+            try { localStorage.setItem('mgm_gemini_api_key', apiKey); } catch (e) {}
+
+            const monthHint = document.getElementById('scannerMonthSelect') ? document.getElementById('scannerMonthSelect').value : 'July & August 2026';
+
+            setScannerLoading(true, 'Analyzing register photo with AI Vision…');
+            showScannerStatus('Scanning dates, roll numbers, and absent "a" marks…', 'info');
+
+            try {
+                const result = await callGeminiVisionAPI(currentRegisterImageBase64, currentRegisterImageMimeType, monthHint, apiKey);
+                setScannerLoading(false);
+
+                if (result && result.records && result.records.length > 0) {
+                    currentScannedRecords = result.records;
+                    renderScannedResultsTable(currentScannedRecords);
+                    showScannerStatus(`Successfully extracted ${result.records.length} date entries! Please review below.`, 'success');
+                    if (scannedResultsContainer) scannedResultsContainer.style.display = 'block';
+                } else {
+                    showScannerStatus('No date/absent entries detected. Please check if photo is clear and retry.', 'warning');
+                }
+            } catch (err) {
+                setScannerLoading(false);
+                console.error('Gemini Vision OCR Error:', err);
+                showScannerStatus('Error reading register image: ' + (err.message || 'API call failed. Check your API key.'), 'error');
+            }
+        });
+    }
+
+    if (addDateRowBtn) {
+        addDateRowBtn.addEventListener('click', () => {
+            currentScannedRecords.push({
+                dateISO: getTodayISOString(),
+                displayDate: getTodayISOString(),
+                absentRolls: []
+            });
+            renderScannedResultsTable(currentScannedRecords);
+        });
+    }
+
+    if (cancelResultsBtn) {
+        cancelResultsBtn.addEventListener('click', () => {
+            if (scannedResultsContainer) scannedResultsContainer.style.display = 'none';
+        });
+    }
+
+    if (saveAllBtn) {
+        saveAllBtn.addEventListener('click', async () => {
+            const rows = scannedRowsList ? scannedRowsList.querySelectorAll('.scanned-row-item') : [];
+            const recordsToSave = [];
+            rows.forEach(row => {
+                const dateInputEl = row.querySelector('.scanned-date-input');
+                const rollsInputEl = row.querySelector('.scanned-rolls-input');
+                if (dateInputEl && rollsInputEl) {
+                    recordsToSave.push({
+                        dateISO: dateInputEl.value.trim(),
+                        absentRolls: rollsInputEl.value.trim()
+                    });
+                }
+            });
+
+            if (recordsToSave.length === 0) {
+                alert('No date records to save.');
+                return;
+            }
+
+            const yr = scannerYearSelect ? scannerYearSelect.value : 'Second Year';
+            const sec = scannerSectionSelect ? scannerSectionSelect.value : 'A';
+            const subj = scannerSubjectSelect ? scannerSubjectSelect.value : '';
+            const slot = scannerSlotSelect ? scannerSlotSelect.value : '1';
+
+            if (!subj) {
+                alert('Please select a Subject for these entries.');
+                return;
+            }
+
+            const saveBtnText = document.getElementById('saveAllScannedBtnText');
+            const saveBtnSpinner = document.getElementById('saveAllScannedSpinner');
+            if (saveAllBtn) saveAllBtn.disabled = true;
+            if (saveBtnText) saveBtnText.textContent = `Saving 0 of ${recordsToSave.length}…`;
+            if (saveBtnSpinner) saveBtnSpinner.style.display = 'inline-block';
+
+            let savedCount = 0;
+            for (let i = 0; i < recordsToSave.length; i++) {
+                const rec = recordsToSave[i];
+                if (saveBtnText) saveBtnText.textContent = `Saving ${i + 1} of ${recordsToSave.length} (${rec.dateISO})…`;
+                try {
+                    await submitData(rec.dateISO, rec.absentRolls, yr, sec, subj, slot, null, null, null);
+                    savedCount++;
+                } catch (e) {
+                    console.warn('Error saving scanned entry for date ' + rec.dateISO, e);
+                }
+            }
+
+            if (saveAllBtn) saveAllBtn.disabled = false;
+            if (saveBtnText) saveBtnText.textContent = '💾 Save All Backdated Entries to Sheet';
+            if (saveBtnSpinner) saveBtnSpinner.style.display = 'none';
+
+            alert(`✅ Success! ${savedCount} backdated attendance entries saved successfully!`);
+            closeScannerModal();
+            if (typeof renderHistoryDrawer === 'function') renderHistoryDrawer();
+            if (typeof updateTodayCountBadge === 'function') updateTodayCountBadge();
+        });
+    }
+}
+
+function showScannerStatus(msg, type) {
+    const el = document.getElementById('scannerStatusMessage');
+    if (!el) return;
+    el.style.display = 'block';
+    el.className = 'alert-banner alert-' + (type === 'error' ? 'danger' : type);
+    el.textContent = msg;
+}
+
+function setScannerLoading(isLoading, text) {
+    const btn = document.getElementById('analyzeRegisterBtn');
+    const btnText = document.getElementById('analyzeRegisterBtnText');
+    const spinner = document.getElementById('analyzeRegisterSpinner');
+    if (btn) btn.disabled = isLoading;
+    if (btnText) btnText.textContent = isLoading ? (text || 'Processing…') : '⚡ Read Register & Extract Absentees';
+    if (spinner) spinner.style.display = isLoading ? 'inline-block' : 'none';
+}
+
+function renderScannedResultsTable(records) {
+    const container = document.getElementById('scannedRowsList');
+    if (!container) return;
+    container.innerHTML = '';
+
+    records.forEach((rec, idx) => {
+        const row = document.createElement('div');
+        row.className = 'scanned-row-item';
+        row.style.cssText = 'display: flex; gap: 8px; align-items: center; background: rgba(0,0,0,0.3); padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);';
+
+        const rollsStr = Array.isArray(rec.absentRolls) ? rec.absentRolls.join(', ') : (rec.absentRolls || 'NIL');
+
+        row.innerHTML = `
+            <input type="date" class="form-input scanned-date-input" value="${rec.dateISO || getTodayISOString()}" style="width: 130px; font-size: 0.8rem; padding: 6px;" />
+            <input type="text" class="form-input scanned-rolls-input" value="${escapeHTML(rollsStr)}" placeholder="Absent rolls e.g. 24903, 24917 (or NIL)" style="flex: 1; font-size: 0.8rem; padding: 6px;" />
+            <button type="button" class="btn-secondary remove-scanned-row-btn" style="padding: 6px 10px; font-size: 0.75rem; color: #f87171; border-color: rgba(239,68,68,0.3);">&times;</button>
+        `;
+
+        const delBtn = row.querySelector('.remove-scanned-row-btn');
+        if (delBtn) {
+            delBtn.addEventListener('click', () => {
+                currentScannedRecords.splice(idx, 1);
+                renderScannedResultsTable(currentScannedRecords);
+            });
+        }
+
+        container.appendChild(row);
+    });
+}
+
+function compressRegisterImageForApi(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Could not read image file.'));
+        reader.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+                const maxSide = 1920;
+                let w = img.width;
+                let h = img.height;
+                if (w > maxSide || h > maxSide) {
+                    if (w > h) {
+                        h = Math.round(h * maxSide / w);
+                        w = maxSide;
+                    } else {
+                        w = Math.round(w * maxSide / h);
+                        h = maxSide;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+                resolve({
+                    dataUrl,
+                    base64: dataUrl.split(',')[1],
+                    mimeType: 'image/jpeg'
+                });
+            };
+            img.onerror = () => reject(new Error('Could not decode image.'));
+            img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+const GEMINI_VISION_MODELS = [
+    'gemini-flash-latest',
+    'gemini-3.7-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
+    'gemini-3.1-flash-lite',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite'
+];
+
+function isGeminiVisionModelName(name) {
+    const n = String(name || '').replace(/^models\//, '').toLowerCase();
+    if (!n.includes('gemini')) return false;
+    if (/image|tts|live|embedding|aqa|robotics|veo|imagen|native-audio/.test(n)) return false;
+    return /flash|pro/.test(n);
+}
+
+function isUnrecoverableGeminiKeyError(status, message) {
+    const msg = String(message || '').toLowerCase();
+    if (status === 401 || status === 403) return true;
+    return /api[_ ]?key (not valid|invalid|expired)|api key not found|permission_denied|consumer_invalid|invalid api key/.test(msg);
+}
+
+function pickGeminiVisionModels(discovered) {
+    const names = (discovered || []).map(n => String(n).replace(/^models\//, ''));
+    const vision = names.filter(isGeminiVisionModelName);
+    const ordered = [];
+    GEMINI_VISION_MODELS.forEach(pref => {
+        if (vision.includes(pref) && !ordered.includes(pref)) ordered.push(pref);
+        vision.forEach(n => {
+            if ((n === pref || n.startsWith(pref + '-')) && !ordered.includes(n)) ordered.push(n);
+        });
+    });
+    vision.forEach(n => { if (!ordered.includes(n)) ordered.push(n); });
+    GEMINI_VISION_MODELS.forEach(n => { if (!ordered.includes(n)) ordered.push(n); });
+    return ordered;
+}
+
+async function fetchGeminiVisionModelNames(apiKey) {
+    const cleanKey = (apiKey || '').trim();
+    if (!cleanKey) throw new Error('API key is empty. Please enter your Gemini API key.');
+
+    const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}`;
+    const res = await fetch(listUrl, {
+        headers: { 'x-goog-api-key': cleanKey }
+    }).catch(() => null);
+
+    if (res && res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const validModels = Array.isArray(data.models)
+            ? data.models
+                .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
+                .map(m => String(m.name || '').replace(/^models\//, ''))
+            : [];
+        console.log('[Gemini Vision] Active models discovered for API Key:', validModels);
+        return pickGeminiVisionModels(validModels);
+    }
+
+    if (res) {
+        const errJson = await res.json().catch(() => ({}));
+        const msg = (errJson.error && errJson.error.message) || res.statusText || '';
+        if (isUnrecoverableGeminiKeyError(res.status, msg)) {
+            throw new Error(`API Key error: ${msg}. Please copy a fresh key from https://aistudio.google.com/app/apikey`);
+        }
+        console.warn('[Gemini Vision] Model list failed, using current default models.', msg);
+    }
+
+    return pickGeminiVisionModels([]);
+}
+
+async function callGeminiVisionAPI(base64Img, mimeType, monthHint, apiKey) {
+    const cleanKey = (apiKey || '').trim();
+    if (!cleanKey) {
+        throw new Error('Please enter your Gemini Vision API key. Click "Get free key" if you need one.');
+    }
+
+    const modelOrder = await fetchGeminiVisionModelNames(cleanKey);
+
+    const promptText = `
+You are an intelligent OCR scanner for college attendance registers (e.g. MGM College).
+Examine this photo of an attendance register book page.
+
+INSTRUCTIONS:
+1. Look at the top row of column headers for DATES. Header numbers like 21, 27, 28, 31 represent days in July 2026. Header numbers like 3, 4, 6, 10, 11, 14 represent days in August 2026. (Period context: ${monthHint}).
+2. Look at the left column for Student Roll Numbers (e.g., 24901 to 24924).
+3. For each date column, look down each student row.
+4. Detect cells containing 'a' or 'A' (which stand for ABSENT). Ignore numbers like 1, 2, 3, 4 which represent present count ticks.
+5. Group the absent roll numbers under their corresponding date.
+
+Generate dates in ISO YYYY-MM-DD format (e.g., July 21 -> 2026-07-21, August 10 -> 2026-08-10).
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON object with NO markdown, NO backticks, formatted exactly as:
+{
+  "records": [
+    { "dateISO": "2026-07-21", "displayDate": "21/07/2026", "absentRolls": [24919] },
+    { "dateISO": "2026-07-27", "displayDate": "27/07/2026", "absentRolls": [24909, 24919] },
+    { "dateISO": "2026-07-31", "displayDate": "31/07/2026", "absentRolls": [24907, 24912, 24918, 24919, 24921, 24923] },
+    { "dateISO": "2026-08-10", "displayDate": "10/08/2026", "absentRolls": [24903, 24917, 24924] }
+  ]
+}
+`;
+
+    const normalizedMimeType = (mimeType === 'image/jpg' || !mimeType) ? 'image/jpeg' : mimeType;
+
+    const requestBody = {
+        contents: [
+            {
+                parts: [
+                    { text: promptText },
+                    {
+                        inlineData: {
+                            mimeType: normalizedMimeType,
+                            data: base64Img
+                        }
+                    }
+                ]
+            }
+        ],
+        generationConfig: {
+            temperature: 0.1,
+            responseMimeType: 'application/json'
+        }
+    };
+
+    let lastErrorMsg = '';
+    let response = null;
+
+    for (let i = 0; i < modelOrder.length; i++) {
+        const modelName = modelOrder[i];
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+        try {
+            response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': cleanKey
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (response.ok) {
+                console.log('[Gemini Vision] Using model', modelName);
+                break;
+            }
+
+            const errJson = await response.json().catch(() => ({}));
+            lastErrorMsg = errJson.error ? errJson.error.message : response.statusText;
+            console.warn(`Model candidate ${i} (${modelName}) failed: ${lastErrorMsg}`);
+
+            if (isUnrecoverableGeminiKeyError(response.status, lastErrorMsg)) {
+                throw new Error(`API key error: ${lastErrorMsg}. Please check your Gemini API key from https://aistudio.google.com/app/apikey`);
+            }
+            if (response.status === 429) {
+                throw new Error(`Gemini API rate limit or quota exceeded: ${lastErrorMsg}`);
+            }
+        } catch (e) {
+            if (e.message.startsWith('API key error:') || e.message.startsWith('Gemini API rate limit')) {
+                throw e;
+            }
+            lastErrorMsg = e.message;
+            console.warn(`Model candidate ${i} network error, trying next fallback…`);
+        }
+    }
+
+    if (!response || !response.ok) {
+        throw new Error(lastErrorMsg || 'API call failed on all available Gemini models. Please check your API key.');
+    }
+
+    const data = await response.json();
+    const candidate = data.candidates && data.candidates[0];
+    if (!candidate || !candidate.content || !candidate.content.parts) {
+        const reason = candidate && candidate.finishReason ? ` (${candidate.finishReason})` : '';
+        throw new Error('No content returned from AI Vision model' + reason + '.');
+    }
+
+    let rawText = candidate.content.parts.map(p => p.text || '').join('\n');
+    rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+        throw new Error('Could not parse structured JSON from vision response.');
+    }
+
+    return JSON.parse(jsonMatch[0]);
+}
+
+// Hook into initialization
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initRegisterScannerUI);
+} else {
+    initRegisterScannerUI();
+}
+
+
+

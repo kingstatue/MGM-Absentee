@@ -24,11 +24,11 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <link rel="stylesheet" href="styles.css?v=v28.95-bca">
+  <link rel="stylesheet" href="styles.css?v=v29.04-bca">
   <script>
     // Auto-update on first open after GitHub Pages deploy (runs before app.js)
     (function () {
-      var EXPECTED = 'v28.95-bca';
+      var EXPECTED = 'v29.04-bca';
       var KEY = 'mgm_bca_shell_ver';
       var reloading = false;
 
@@ -92,7 +92,7 @@
       // 2) Register SW with versioned URL so GitHub Pages cannot keep old sw.js forever
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          var swUrl = './sw.js?v=v142-bca';
+          var swUrl = './sw.js?v=v151-bca';
           navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' })
             .then(function (reg) {
               if (navigator.onLine) {
@@ -270,53 +270,21 @@
 
       <!-- MANUAL TYPING / ATTENDANCE LOGGER CONTAINER -->
       <div class="mode-container" id="typingSection">
-        
-        <!-- Text Dictation / Quick Parse Box -->
-        <div class="transcript-card">
-          <div class="transcript-header">
-            <h3>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-              </svg>
-              Quick Text Input / Paste
-            </h3>
-            <button class="clear-btn" id="clearManualTextBtn">Clear</button>
-          </div>
-          <textarea id="manualTextInput" class="manual-textarea" placeholder="Type or paste attendance details... e.g. '26709 26717 English First Year A Slot 1'"></textarea>
-          <button class="btn-secondary" id="parseTypedTextBtn" style="margin-top: 6px; width: 100%;">
-            ⚡ Auto-Parse Typed Text
-          </button>
-        </div>
+        <!-- Hidden stubs — Quick Text removed; keep IDs for legacy JS -->
+        <textarea id="manualTextInput" style="display:none" aria-hidden="true"></textarea>
+        <button type="button" id="clearManualTextBtn" style="display:none" aria-hidden="true"></button>
+        <button type="button" id="parseTypedTextBtn" style="display:none" aria-hidden="true"></button>
 
-        <!-- Direct Form Dropdowns & Fields -->
+        <button class="btn-primary" id="openRegisterScannerBtn" onclick="if(window.openRegisterScannerModalDirect) window.openRegisterScannerModalDirect(); else document.getElementById('registerScannerModal').classList.add('active');" style="margin-bottom: 10px; width: 100%; background: linear-gradient(135deg, #a855f7, #7e22ce); border: none; font-weight: 700; color: #fff;">
+          📷 Scan Attendance Register Photo (AI)
+        </button>
+
+        <!-- Direct Form — Date → Year/Section → Slot/Duration → Subject → Rolls -->
         <form class="direct-form" id="directForm" onsubmit="return false;">
           <div class="form-row">
-            <div class="form-group">
+            <div class="form-group form-group-full">
               <label for="directDateInput">Date</label>
               <input type="date" id="directDateInput" class="form-input" required>
-            </div>
-            <div class="form-group">
-              <label for="directSlotSelect">Slot / Time</label>
-              <select id="directSlotSelect" class="form-select">
-                <option value="1">Slot 1 (9:00 - 9:55 AM)</option>
-                <option value="2">Slot 2 (10:00 - 10:55 AM)</option>
-                <option value="3">Slot 3 (11:10 - 12:05 PM)</option>
-                <option value="4">Slot 4 (12:10 - 1:05 PM)</option>
-                <option value="5">Slot 5 (1:05 - 2:00 PM)</option>
-                <option value="6">Slot 6 (2:00 - 2:55 PM)</option>
-                <option value="7">Slot 7 (3:00 - 3:55 PM)</option>
-                <option value="8">Slot 8 (4:00 - 4:55 PM)</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="directDurationSelect">Duration / Multi-Slot</label>
-              <select id="directDurationSelect" class="form-select">
-                <option value="1">1 Hour (Single Slot)</option>
-                <option value="2">2 Hours (2 Slots - Double Class / Lab)</option>
-                <option value="3">3 Hours (3 Slots - Multi Class / Lab)</option>
-                <option value="4">4 Hours (4 Slots - Multi Class / Lab)</option>
-              </select>
             </div>
           </div>
 
@@ -345,14 +313,39 @@
 
           <div class="form-row">
             <div class="form-group">
+              <label for="directSlotSelect">Slot / Time</label>
+              <select id="directSlotSelect" class="form-select">
+                <option value="1">Slot 1 (9:00 - 9:55 AM)</option>
+                <option value="2">Slot 2 (10:00 - 10:55 AM)</option>
+                <option value="3">Slot 3 (11:10 - 12:05 PM)</option>
+                <option value="4">Slot 4 (12:10 - 1:05 PM)</option>
+                <option value="5">Slot 5 (1:05 - 2:00 PM)</option>
+                <option value="6">Slot 6 (2:00 - 2:55 PM)</option>
+                <option value="7">Slot 7 (3:00 - 3:55 PM)</option>
+                <option value="8">Slot 8 (4:00 - 4:55 PM)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="directDurationSelect">Duration / Multi-Slot</label>
+              <select id="directDurationSelect" class="form-select">
+                <option value="1">1 Hour (Single Slot)</option>
+                <option value="2">2 Hours (2 Slots - Double Class / Lab)</option>
+                <option value="3">3 Hours (3 Slots - Multi Class / Lab)</option>
+                <option value="4">4 Hours (4 Slots - Multi Class / Lab)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group form-group-full">
               <label for="directSubjectInput">Subject</label>
               <select id="directSubjectInput" class="form-select" required></select>
             </div>
+          </div>
 
-            <div class="form-group">
-              <label for="directRollInput">Absent Roll Numbers</label>
-              <input type="text" id="directRollInput" class="form-input" placeholder="e.g. 26709, 26717 (or leave blank for NIL)">
-            </div>
+          <div class="form-group form-group-full">
+            <label for="directRollInput">Absent Roll Numbers</label>
+            <textarea id="directRollInput" class="form-input mark-roll-input" rows="3" placeholder="e.g. 26709, 26717 (or leave blank for NIL)"></textarea>
           </div>
 
           <div id="directMultiSlotContainer" style="display: none; margin-bottom: 12px; padding: 10px; background: rgba(0,0,0,0.25); border: 1px dashed var(--primary-light); border-radius: 8px;">
@@ -866,7 +859,138 @@
               <div class="spinner" id="submitBulkSpinner" style="display: none;"></div>
             </button>
           </div>
+          <button type="button" class="btn-secondary" id="openScannerFromBulkBtn" onclick="if(window.openRegisterScannerModalDirect) window.openRegisterScannerModalDirect(); else document.getElementById('registerScannerModal').classList.add('active');" style="margin-top: 10px; width: 100%; font-weight: 700; border: 1px dashed #c084fc; color: #c084fc; background: rgba(168,85,247,0.1); padding: 9px; border-radius: 8px; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 6px;">
+            📷 Read Absent Rolls from Register Photo (AI Vision)
+          </button>
         </form>
+      </div>
+    </div>
+
+    <!-- AI Attendance Register Image Scanner Modal -->
+    <div class="modal-overlay" id="registerScannerModal">
+      <div class="modal-card" style="max-width: 540px; width: 95%;">
+        <div class="modal-header">
+          <h2>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a855f7" stroke-width="2.5">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+              <circle cx="12" cy="13" r="4"></circle>
+            </svg>
+            AI Register Photo Scanner
+          </h2>
+          <button class="icon-btn" id="closeRegisterScannerModalBtn" onclick="document.getElementById('registerScannerModal').classList.remove('active');" aria-label="Close modal">&times;</button>
+        </div>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.4;">
+          Upload or snap a photo of an attendance register page. AI reads dates (e.g. 21/7 to 10/8), roll numbers, and extracts absentees marked with <strong>'a' / 'A'</strong>!
+        </p>
+
+        <!-- Dropzone / Image Picker -->
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label style="font-weight: 700; display: block; margin-bottom: 6px;">Select or Take Register Photo</label>
+          <div id="registerImageDropzone" style="border: 2px dashed rgba(168, 85, 247, 0.4); background: rgba(168, 85, 247, 0.06); padding: 16px; border-radius: 12px; text-align: center; cursor: pointer;">
+            <input type="file" id="registerImageInput" accept="image/*" style="display: none;">
+            <div id="registerImagePlaceholder">
+              <div style="font-size: 2rem; margin-bottom: 4px;">📷</div>
+              <div style="font-size: 0.88rem; font-weight: 700; color: #c084fc;">Tap to select or take Register Photo</div>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">Supports JPG, PNG, WEBP register pages</div>
+            </div>
+            <div id="registerImagePreviewWrap" style="display: none; position: relative;">
+              <img id="registerImagePreview" src="" alt="Register Preview" style="max-height: 180px; max-width: 100%; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);" />
+              <button type="button" id="changeRegisterImgBtn" class="btn-secondary" style="position: absolute; bottom: 8px; right: 8px; padding: 4px 10px; font-size: 0.72rem; background: rgba(0,0,0,0.75); color: #fff;">Change Photo</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scanner Metadata Controls -->
+        <div class="form-row" style="gap: 8px;">
+          <div class="form-group" style="flex: 1; min-width: 110px;">
+            <label for="scannerYearSelect">Year</label>
+            <select id="scannerYearSelect" class="form-select">
+              <option value="First Year">First Year</option>
+              <option value="Second Year" selected>Second Year</option>
+              <option value="Third Year">Third Year</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex: 1; min-width: 110px;">
+            <label for="scannerSectionSelect">Section</label>
+            <select id="scannerSectionSelect" class="form-select">
+              <option value="A">Section A</option>
+              <option value="B">Section B</option>
+              <option value="C">Section C</option>
+              <option value="ALL">Combined (ALL)</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex: 1; min-width: 130px;">
+            <label for="scannerMonthSelect">Register Period</label>
+            <select id="scannerMonthSelect" class="form-select">
+              <option value="July & August 2026" selected>July &amp; Aug 2026</option>
+              <option value="July 2026">July 2026</option>
+              <option value="August 2026">August 2026</option>
+              <option value="September 2026">September 2026</option>
+              <option value="October 2026">October 2026</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row" style="gap: 8px; margin-top: 6px;">
+          <div class="form-group" style="flex: 1; min-width: 130px;">
+            <label for="scannerSubjectSelect">Subject</label>
+            <select id="scannerSubjectSelect" class="form-select" required></select>
+          </div>
+          <div class="form-group" style="flex: 1; min-width: 110px;">
+            <label for="scannerSlotSelect">Slot / Period</label>
+            <select id="scannerSlotSelect" class="form-select">
+              <option value="1">Slot 1 (9:00 - 9:55 AM)</option>
+              <option value="2">Slot 2 (10:00 - 10:55 AM)</option>
+              <option value="3">Slot 3 (11:10 - 12:05 PM)</option>
+              <option value="4">Slot 4 (12:10 - 1:05 PM)</option>
+              <option value="5">Slot 5 (1:05 - 2:00 PM)</option>
+              <option value="6">Slot 6 (2:00 - 2:55 PM)</option>
+              <option value="7">Slot 7 (3:00 - 3:55 PM)</option>
+              <option value="8">Slot 8 (4:00 - 4:55 PM)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Optional Gemini API Key Section -->
+        <div style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.25); border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label for="scannerApiKeyInput" style="font-size: 0.78rem; font-weight: 700; color: #c084fc;">
+              🔑 Gemini Vision API Key
+            </label>
+            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="font-size: 0.72rem; color: #60a5fa; text-decoration: underline;">Get free key</a>
+          </div>
+          <input type="password" id="scannerApiKeyInput" class="form-input" placeholder="Paste Gemini API key (saved locally on device)" style="font-size: 0.8rem; padding: 6px 10px;" />
+        </div>
+
+        <button type="button" class="btn-primary" id="analyzeRegisterBtn" style="width: 100%; margin-top: 12px; background: linear-gradient(135deg, #a855f7, #7e22ce); border: none; font-weight: 700; padding: 11px;">
+          <span id="analyzeRegisterBtnText">⚡ Read Register & Extract Absentees</span>
+          <div class="spinner" id="analyzeRegisterSpinner" style="display: none;"></div>
+        </button>
+
+        <!-- Status Message Banner -->
+        <div id="scannerStatusMessage" class="alert-banner" style="display: none; margin-top: 12px;"></div>
+
+        <!-- Verification Table for Scanned Extracted Absentees -->
+        <div id="scannedResultsContainer" style="display: none; margin-top: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <h3 style="font-size: 0.92rem; font-weight: 800; color: #c084fc; margin: 0;">
+              📋 Extracted Dates & Absent Roll Numbers
+            </h3>
+            <button type="button" id="addScannedDateRowBtn" class="btn-secondary" style="padding: 4px 8px; font-size: 0.75rem;">+ Add Date Row</button>
+          </div>
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 10px;">Review or edit detected absent numbers for each date before saving.</p>
+
+          <div id="scannedRowsList" style="display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; padding-right: 4px;"></div>
+
+          <div class="modal-buttons" style="margin-top: 14px;">
+            <button type="button" class="btn-secondary" id="cancelScannedResultsBtn">Cancel</button>
+            <button type="button" class="btn-primary" id="saveAllScannedEntriesBtn" style="background: linear-gradient(135deg, #10b981, #059669); font-weight: 800;">
+              <span id="saveAllScannedBtnText">💾 Save All Backdated Entries to Sheet</span>
+              <div class="spinner" id="saveAllScannedSpinner" style="display: none;"></div>
+            </button>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -882,7 +1006,7 @@
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js?v=v28.94-bca"></script>
-  <script src="app.js?v=v28.94-bca"></script>
+  <script src="parser.js?v=v29.04-bca"></script>
+  <script src="app.js?v=v29.04-bca"></script>
 </body>
 </html>

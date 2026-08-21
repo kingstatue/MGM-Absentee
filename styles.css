@@ -462,6 +462,21 @@ body {
   border-radius: var(--radius-md);
 }
 
+.direct-form .form-group-full {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.direct-form .mark-roll-input {
+  width: 100%;
+  min-height: 5.5rem;
+  resize: vertical;
+  font-size: 1.05rem;
+  line-height: 1.45;
+  padding: 12px 14px;
+  font-family: inherit;
+}
+
 /* Status Banner */
 .status-pill {
   align-self: center;
