@@ -425,6 +425,221 @@ function normalizeRollNumbers(rollInput) {
     return result;
 }
 
+/** localStorage key for roll prefix per stream + year + section */
+function rollPrefixStorageKey(stream, year, section) {
+    return 'mgm_roll_prefix_' + String(stream || currentDept || 'BCA') + '_' +
+        String(year || '').trim() + '_' + String(section || '').trim();
+}
+
+function getStoredRollPrefix(stream, year, section) {
+    if (!year || !section) return '';
+    try {
+        return String(localStorage.getItem(rollPrefixStorageKey(stream, year, section)) || '').trim();
+    } catch (e) {
+        return '';
+    }
+}
+
+function setStoredRollPrefix(stream, year, section, prefix) {
+    if (!year || !section) return;
+    const p = String(prefix || '').trim();
+    try {
+        const key = rollPrefixStorageKey(stream, year, section);
+        if (p) localStorage.setItem(key, p);
+        else localStorage.removeItem(key);
+    } catch (e) {}
+}
+
+/** Longest common prefix of full-looking rolls (for auto-learn). */
+function inferRollPrefixFromList(rolls) {
+    const list = (rolls || []).map(r => String(r).trim()).filter(r => {
+        if (!r) return false;
+        return /^(?:[A-Za-z]+)?\d{4,}$/.test(r);
+    });
+    if (list.length === 0) return '';
+    let common = list[0];
+    for (let i = 1; i < list.length; i++) {
+        const s = list[i];
+        let j = 0;
+        while (j < common.length && j < s.length && common[j].toUpperCase() === s[j].toUpperCase()) j++;
+        common = common.slice(0, j);
+        if (!common) return '';
+    }
+    const m = common.match(/^(.*?)(\d*)$/);
+    if (!m) return '';
+    let letterPart = m[1] || '';
+    let digitPart = m[2] || '';
+    while (digitPart.length > 0) {
+        const sample = list[0];
+        const shortLen = sample.length - (letterPart.length + digitPart.length);
+        if (shortLen >= 2) break;
+        digitPart = digitPart.slice(0, -1);
+    }
+    const prefix = letterPart + digitPart;
+    const shortLen = list[0].length - prefix.length;
+    if (shortLen < 2 || shortLen > 4) {
+        const sample = list[0];
+        if (sample.length >= 5) return sample.slice(0, sample.length - 3);
+        if (sample.length === 4) return sample.slice(0, 2);
+        return '';
+    }
+    return prefix;
+}
+
+/**
+ * Expand short 1–3 digit tokens with section prefix.
+ * Full rolls (4+ digits) and codes like S0105 stay unchanged.
+ */
+function expandShortRollNumbers(rollInput, prefix) {
+    const items = normalizeRollNumbers(rollInput);
+    if (items.length === 0) return '';
+    const p = String(prefix || '').trim();
+    const out = items.map((token) => {
+        const t = String(token).trim();
+        if (!t) return t;
+        if (/^[A-Za-z]+\d+$/.test(t)) return t;
+        if (/^\d+$/.test(t)) {
+            if (!p) return t;
+            if (t.length >= 4) return t;
+            return p + t;
+        }
+        return t;
+    });
+    const seen = new Set();
+    const uniq = [];
+    out.forEach((r) => {
+        const key = r.toUpperCase();
+        if (!seen.has(key)) {
+            seen.add(key);
+            uniq.push(r);
+        }
+    });
+    return uniq.join(', ');
+}
+
+function getActiveRollPrefixFromUI(preferModal) {
+    const directEl = document.getElementById('directRollPrefix');
+    const modalEl = document.getElementById('modalRollPrefix');
+    if (preferModal && modalEl && String(modalEl.value || '').trim()) return String(modalEl.value).trim();
+    if (directEl && String(directEl.value || '').trim()) return String(directEl.value).trim();
+    if (modalEl && String(modalEl.value || '').trim()) return String(modalEl.value).trim();
+    return '';
+}
+
+function isConfirmModalActive() {
+    return !!(confirmationModal && confirmationModal.classList.contains('active'));
+}
+
+/** Load/learn section prefix when editing from Today / All History. */
+function prepareRollPrefixForEdit(item) {
+    const year = (item && item.year) || (yearSelect && yearSelect.value) || (directYearSelect && directYearSelect.value) || '';
+    const sec = (item && item.section) || (sectionSelect && sectionSelect.value) || (directSectionSelect && directSectionSelect.value) || '';
+    const stream = (item && item.stream) || currentDept || 'BCA';
+    const rollsRaw = (item && item.rollNumbers != null)
+        ? item.rollNumbers
+        : (rollNumbersInput ? rollNumbersInput.value : '');
+
+    syncRollPrefixFieldsFromStorage();
+
+    const inferred = inferRollPrefixFromList(normalizeRollNumbers(rollsRaw));
+    if (inferred) {
+        setStoredRollPrefix(stream, year, sec, inferred);
+        const dP = document.getElementById('directRollPrefix');
+        const mP = document.getElementById('modalRollPrefix');
+        if (dP) dP.value = inferred;
+        if (mP) mP.value = inferred;
+    }
+
+    updateRollExpandPreview(false);
+    updateRollExpandPreview(true);
+
+    try {
+        if (rollNumbersInput) {
+            setTimeout(() => {
+                try { rollNumbersInput.focus(); } catch (e2) {}
+            }, 80);
+        }
+    } catch (e) {}
+}
+
+function syncRollPrefixFieldsFromStorage() {
+    const stream = currentDept || 'BCA';
+    const dYear = directYearSelect ? directYearSelect.value : '';
+    const dSec = directSectionSelect ? directSectionSelect.value : '';
+    const mYear = yearSelect ? yearSelect.value : '';
+    const mSec = sectionSelect ? sectionSelect.value : '';
+    const directEl = document.getElementById('directRollPrefix');
+    const modalEl = document.getElementById('modalRollPrefix');
+    if (directEl) {
+        if (dYear && dSec) directEl.value = getStoredRollPrefix(stream, dYear, dSec);
+        else directEl.value = '';
+    }
+    if (modalEl) {
+        if (mYear && mSec) modalEl.value = getStoredRollPrefix(stream, mYear, mSec);
+        else modalEl.value = '';
+    }
+    updateRollExpandPreview(false);
+    updateRollExpandPreview(true);
+}
+
+function updateRollExpandPreview(forModal) {
+    const rollEl = forModal
+        ? document.getElementById('rollNumbersInput')
+        : document.getElementById('directRollInput');
+    const prefixEl = forModal
+        ? document.getElementById('modalRollPrefix')
+        : document.getElementById('directRollPrefix');
+    const previewEl = forModal
+        ? document.getElementById('modalRollExpandPreview')
+        : document.getElementById('directRollExpandPreview');
+    if (!rollEl || !previewEl) return;
+
+    const raw = String(rollEl.value || '').trim();
+    if (!raw || raw.toUpperCase() === 'NIL' || raw.toUpperCase() === 'NONE') {
+        previewEl.hidden = true;
+        previewEl.textContent = '';
+        return;
+    }
+    const prefix = prefixEl ? String(prefixEl.value || '').trim() : '';
+    const expanded = expandShortRollNumbers(raw, prefix);
+    if (expanded) {
+        previewEl.hidden = false;
+        previewEl.textContent = 'Will save: ' + expanded;
+    } else {
+        previewEl.hidden = true;
+        previewEl.textContent = '';
+    }
+}
+
+/** Expand shorts in an input; persist prefix; return expanded string. */
+function applyRollPrefixExpansion(rollRaw, yearVal, sectionVal, options) {
+    const opts = options || {};
+    const stream = currentDept || 'BCA';
+    let prefix = String(opts.prefix != null ? opts.prefix : getActiveRollPrefixFromUI(!!opts.preferModal)).trim();
+    if (!prefix) prefix = getStoredRollPrefix(stream, yearVal, sectionVal);
+
+    const expanded = expandShortRollNumbers(rollRaw, prefix);
+    const rolls = normalizeRollNumbers(expanded);
+
+    if (rolls.length > 0) {
+        const inferred = inferRollPrefixFromList(rolls);
+        if (inferred) {
+            prefix = inferred;
+            setStoredRollPrefix(stream, yearVal, sectionVal, inferred);
+            const directEl = document.getElementById('directRollPrefix');
+            const modalEl = document.getElementById('modalRollPrefix');
+            if (directEl) directEl.value = inferred;
+            if (modalEl) modalEl.value = inferred;
+        } else if (prefix) {
+            setStoredRollPrefix(stream, yearVal, sectionVal, prefix);
+        }
+    } else if (prefix && yearVal && sectionVal) {
+        setStoredRollPrefix(stream, yearVal, sectionVal, prefix);
+    }
+
+    return expanded;
+}
+
 function computeRollDiff(prevRollInput, newRollInput) {
     const prevRolls = normalizeRollNumbers(prevRollInput);
     const newRolls = normalizeRollNumbers(newRollInput);
@@ -1017,7 +1232,18 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
             cleanSection = 'ALL';
         }
 
-        const rollNumbersArray = normalizeRollNumbers(rollNumbersRaw);
+        // Expand short 2–3 digit rolls with section prefix → sheet always gets full rolls
+        // Today Edit uses confirm modal — prefer that modal's prefix field
+        const useModalPrefix = isConfirmModalActive();
+        const expandedRollsRaw = applyRollPrefixExpansion(rollNumbersRaw, yearVal, cleanSection, { preferModal: useModalPrefix });
+        if (directRollInput && String(rollNumbersRaw || '') === String(directRollInput.value || '')) {
+            try { if (expandedRollsRaw) directRollInput.value = expandedRollsRaw; } catch (e) {}
+        }
+        if (rollNumbersInput && String(rollNumbersRaw || '') === String(rollNumbersInput.value || '')) {
+            try { if (expandedRollsRaw) rollNumbersInput.value = expandedRollsRaw; } catch (e) {}
+        }
+
+        const rollNumbersArray = normalizeRollNumbers(expandedRollsRaw);
         let formattedRolls = rollNumbersArray.length > 0 ? rollNumbersArray.join(', ') : 'NIL';
 
         // Local Storage conflict check (Instant 0ms via BCA storage)
@@ -1194,6 +1420,9 @@ async function handleMultiSlotSubmit(dateVal, masterRollRaw, yearVal, sectionVal
     // CRITICAL: snapshot every slot's absentees BEFORE the first submit.
     // submitData → resetAllInputs() wipes the multi-slot DOM, so later slots
     // used to fall back to empty master → NIL (edit later still worked).
+    const stream = currentDept || 'BCA';
+    const useModalPrefix = isConfirmModalActive();
+    const prefixHint = getActiveRollPrefixFromUI(useModalPrefix) || getStoredRollPrefix(stream, yearVal, sectionVal);
     const slotRollMap = {};
     for (let slotNum = startSlot; slotNum <= endSlot; slotNum++) {
         let slotRollRaw = masterRollRaw;
@@ -1203,7 +1432,10 @@ async function handleMultiSlotSubmit(dateVal, masterRollRaw, yearVal, sectionVal
                 slotRollRaw = slotInput.value;
             }
         }
-        slotRollMap[slotNum] = slotRollRaw;
+        slotRollMap[slotNum] = applyRollPrefixExpansion(slotRollRaw, yearVal, sectionVal, {
+            prefix: prefixHint,
+            preferModal: useModalPrefix
+        });
     }
 
     for (let slotNum = startSlot; slotNum <= endSlot; slotNum++) {
@@ -2150,6 +2382,7 @@ function editHistoryEntry(index, sourceList) {
     updateModalDoubleEntryCheck();
     historyDrawer.classList.remove('active');
     confirmationModal.classList.add('active');
+    try { prepareRollPrefixForEdit(item); } catch (e) {}
 }
 
 // Sound Visualizer Animation
@@ -2345,6 +2578,7 @@ function applyDepartment(deptCode) {
     if (navigator.onLine) {
         fetchTodayServerHistory();
     }
+    try { syncRollPrefixFieldsFromStorage(); } catch (e) {}
 }
 
 function updateYearSelects(config) {
@@ -3476,6 +3710,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateSectionSelects(hasSec, currentDept, yrVal);
             refreshSubjectDropdowns('', true);
             refreshAllSlotDropdowns();
+            try { syncRollPrefixFieldsFromStorage(); } catch (e) {}
         });
     }
 
@@ -3488,6 +3723,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const secVal = sectionSelect ? sectionSelect.value : 'A';
             updateSubjectDropdowns(getSubjectsForActiveYear(currentDept, yrVal, secVal), '', true);
             refreshAllSlotDropdowns();
+            try { syncRollPrefixFieldsFromStorage(); } catch (e) {}
         });
     }
 
@@ -3495,6 +3731,7 @@ document.addEventListener('DOMContentLoaded', () => {
         directSectionSelect.addEventListener('change', () => {
             refreshSubjectDropdowns();
             refreshAllSlotDropdowns();
+            try { syncRollPrefixFieldsFromStorage(); } catch (e) {}
         });
     }
 
@@ -3507,6 +3744,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 config ? config.defaultSubject : null
             );
             refreshAllSlotDropdowns();
+            try { syncRollPrefixFieldsFromStorage(); } catch (e) {}
         });
     }
 
@@ -3569,6 +3807,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (directDurationSelect && parseInt(directDurationSelect.value, 10) > 1) {
                 handleMultiSlotVisibility(directDurationSelect, directSlotSelect, directRollInput, directMultiSlotWrapper, directMultiSlotBreakdown);
             }
+            try { updateRollExpandPreview(false); } catch (e) {}
+        });
+        directRollInput.addEventListener('blur', () => {
+            try {
+                const year = directYearSelect ? directYearSelect.value : '';
+                const sec = directSectionSelect ? directSectionSelect.value : '';
+                const prefixEl = document.getElementById('directRollPrefix');
+                const prefix = prefixEl ? prefixEl.value : '';
+                const expanded = applyRollPrefixExpansion(directRollInput.value, year, sec, { prefix: prefix, preferModal: false });
+                if (expanded) directRollInput.value = expanded;
+                updateRollExpandPreview(false);
+                updateDirectDoubleEntryCheck();
+            } catch (e) {}
         });
     }
 
@@ -3577,8 +3828,42 @@ document.addEventListener('DOMContentLoaded', () => {
             if (durationSelect && parseInt(durationSelect.value, 10) > 1) {
                 handleMultiSlotVisibility(durationSelect, slotSelect, rollNumbersInput, modalMultiSlotWrapper, modalMultiSlotBreakdown);
             }
+            try { updateRollExpandPreview(true); } catch (e) {}
+        });
+        rollNumbersInput.addEventListener('blur', () => {
+            try {
+                const year = yearSelect ? yearSelect.value : '';
+                const sec = sectionSelect ? sectionSelect.value : '';
+                const prefixEl = document.getElementById('modalRollPrefix');
+                const prefix = prefixEl ? prefixEl.value : '';
+                const expanded = applyRollPrefixExpansion(rollNumbersInput.value, year, sec, { prefix: prefix, preferModal: true });
+                if (expanded) rollNumbersInput.value = expanded;
+                updateRollExpandPreview(true);
+                updateModalDoubleEntryCheck();
+            } catch (e) {}
         });
     }
+
+    const directRollPrefix = document.getElementById('directRollPrefix');
+    const modalRollPrefix = document.getElementById('modalRollPrefix');
+    if (directRollPrefix) {
+        directRollPrefix.addEventListener('input', () => {
+            const year = directYearSelect ? directYearSelect.value : '';
+            const sec = directSectionSelect ? directSectionSelect.value : '';
+            setStoredRollPrefix(currentDept || 'BCA', year, sec, directRollPrefix.value);
+            updateRollExpandPreview(false);
+        });
+    }
+    if (modalRollPrefix) {
+        modalRollPrefix.addEventListener('input', () => {
+            const year = yearSelect ? yearSelect.value : '';
+            const sec = sectionSelect ? sectionSelect.value : '';
+            setStoredRollPrefix(currentDept || 'BCA', year, sec, modalRollPrefix.value);
+            updateRollExpandPreview(true);
+        });
+    }
+
+    try { syncRollPrefixFieldsFromStorage(); } catch (e) {}
 
     // Header Drawer & Theme Toggle
     const tabToday = document.getElementById('historyTabToday');
@@ -3878,7 +4163,7 @@ function initSubjectManager() {
 // Version upgrade check to update stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    const APP_VER = 'v28.94-bca';
+    const APP_VER = 'v28.96-today-edit-prefix';
     if (localStorage.getItem('mgm_app_ver') !== APP_VER) {
         localStorage.removeItem('mgm_cloud_subjects');
         localStorage.setItem('mgm_app_ver', APP_VER);
