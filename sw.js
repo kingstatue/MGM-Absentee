@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mgm-bca-absentee-informer-v153-today-edit-prefix';
+const CACHE_NAME = 'mgm-bca-absentee-informer-v154-prefix-above';
 
 const ASSETS_TO_CACHE = [
   './',

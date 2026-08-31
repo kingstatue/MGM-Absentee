@@ -24,7 +24,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <link rel="stylesheet" href="styles.css?v=v29.06-bca">
+  <link rel="stylesheet" href="styles.css?v=v29.07-bca">
   <script>
     // Auto-update on first open after GitHub Pages deploy (runs before app.js)
     (function () {
@@ -344,13 +344,13 @@
           </div>
 
           <div class="form-group form-group-full">
-            <label for="directRollInput">Absent Roll Numbers</label>
-            <textarea id="directRollInput" class="form-input mark-roll-input" rows="3" placeholder="e.g. 09, 17 or full 26709, 26717 (blank = NIL)"></textarea>
             <div class="roll-prefix-bar" id="directRollPrefixBar">
               <label for="directRollPrefix">Section prefix</label>
               <input type="text" id="directRollPrefix" class="form-input roll-prefix-input" maxlength="10" placeholder="e.g. 267 or S0" autocomplete="off" spellcheck="false">
               <span class="roll-prefix-hint">Short digits (2–3) expand using this prefix</span>
             </div>
+            <label for="directRollInput">Absent Roll Numbers</label>
+            <textarea id="directRollInput" class="form-input mark-roll-input" rows="3" placeholder="e.g. 09, 17 or full 26709, 26717 (blank = NIL)"></textarea>
             <div class="roll-expand-preview" id="directRollExpandPreview" hidden></div>
           </div>
 
@@ -562,13 +562,13 @@
           </div>
 
           <div class="form-group form-group-full" style="margin-bottom: 12px;">
-            <label for="rollNumbersInput">Absent Roll Numbers</label>
-            <textarea id="rollNumbersInput" class="form-input mark-roll-input" rows="3" placeholder="e.g. 09, 17 or full 26709 (blank = NIL)"></textarea>
             <div class="roll-prefix-bar" id="modalRollPrefixBar">
               <label for="modalRollPrefix">Section prefix</label>
               <input type="text" id="modalRollPrefix" class="form-input roll-prefix-input" maxlength="10" placeholder="e.g. 267 or S0" autocomplete="off" spellcheck="false">
               <span class="roll-prefix-hint">Short digits (2–3) expand using this prefix</span>
             </div>
+            <label for="rollNumbersInput">Absent Roll Numbers</label>
+            <textarea id="rollNumbersInput" class="form-input mark-roll-input" rows="3" placeholder="e.g. 09, 17 or full 26709 (blank = NIL)"></textarea>
             <div class="roll-expand-preview" id="modalRollExpandPreview" hidden></div>
           </div>
 
@@ -1018,7 +1018,7 @@
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js?v=v29.06-bca"></script>
-  <script src="app.js?v=v29.06-bca"></script>
+  <script src="parser.js?v=v29.07-bca"></script>
+  <script src="app.js?v=v29.07-bca"></script>
 </body>
 </html>
