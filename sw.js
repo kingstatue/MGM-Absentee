@@ -1,4 +1,5 @@
-const CACHE_NAME = 'mgm-bca-absentee-informer-v156-keyboard-fix';
+const CACHE_PREFIX = 'mgm-bca-absentee-informer';
+const CACHE_NAME = 'mgm-bca-absentee-informer-v158-isolate';
 
 const ASSETS_TO_CACHE = [
   './',
@@ -11,6 +12,18 @@ const ASSETS_TO_CACHE = [
   './icon-192.png',
   './icon-512.png'
 ];
+
+function isOwnCache(name) {
+  return String(name || '').indexOf(CACHE_PREFIX) === 0;
+}
+
+function isOtherAppPath(pathname) {
+  const p = String(pathname || '');
+  return p.indexOf('/att_College_app/') !== -1
+    || p.indexOf('/atbo/') !== -1
+    || p.indexOf('/MGMEC_absentee/') !== -1
+    || p.indexOf('/mgmec/') !== -1;
+}
 
 // Install Event - Precache core app assets & skip waiting
 self.addEventListener('install', (event) => {
@@ -25,14 +38,14 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate Event - Purge old caches & claim clients immediately
+// Activate — purge ONLY this app's old caches (never touch Day College / Evening caches)
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            console.log('[PWA SW] Deleting old cache:', cache);
+          if (isOwnCache(cache) && cache !== CACHE_NAME) {
+            console.log('[PWA SW] Deleting old BCA cache:', cache);
             return caches.delete(cache);
           }
         })
@@ -55,6 +68,9 @@ self.addEventListener('fetch', (event) => {
 
   // Bypass cache for external APIs (Google Apps Script webhooks)
   if (url.origin !== location.origin && !url.hostname.includes('fonts.g')) return;
+
+  // Never intercept sibling apps if co-hosted on the same origin
+  if (isOtherAppPath(url.pathname)) return;
 
   const isNavigation = event.request.mode === 'navigate' || (event.request.headers.get('accept') && event.request.headers.get('accept').includes('text/html'));
 

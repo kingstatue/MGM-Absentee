@@ -30,6 +30,37 @@ const STREAM_WEBHOOK_URLS = {
 
 const DEFAULT_GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzsk5c_tKkt5ysv7ZsNUBMAl4G13vxpeC_p-2fNcbH_Sj3eTm2YwxLFJ-mAh8VgD-i8oQ/exec';
 
+/** Storage namespace for Allstreams BCA app — must not collide with Day College (mgm_*) or Evening (mgmec_*). */
+function asLsGet(primary, legacy) {
+    try {
+        let v = localStorage.getItem(primary);
+        if (v != null && v !== '') return v;
+        if (legacy) {
+            v = localStorage.getItem(legacy);
+            if (v != null && v !== '') {
+                try { localStorage.setItem(primary, v); } catch (e2) {}
+                return v;
+            }
+        }
+    } catch (e) {}
+    return null;
+}
+
+function asSsGet(primary, legacy) {
+    try {
+        let v = sessionStorage.getItem(primary);
+        if (v != null && v !== '') return v;
+        if (legacy) {
+            v = sessionStorage.getItem(legacy);
+            if (v != null && v !== '') {
+                try { sessionStorage.setItem(primary, v); } catch (e2) {}
+                return v;
+            }
+        }
+    } catch (e) {}
+    return null;
+}
+
 function getWebhookUrl(deptCode) {
     const dept = (deptCode || currentDept || 'BCA').toString().trim().toUpperCase();
     if (STREAM_WEBHOOK_URLS && STREAM_WEBHOOK_URLS[dept] && !STREAM_WEBHOOK_URLS[dept].includes('YOUR_')) {
@@ -49,39 +80,41 @@ function getAuthPayload() {
 
 function setAuthSession(passcode, role, deptCode, remember) {
     const pass = (passcode || '').trim();
-    try { sessionStorage.setItem('mgm_auth_pass', pass); } catch (e) {}
+    try { sessionStorage.setItem('mgm_bca_auth_pass', pass); } catch (e) {}
     // Always keep a durable session copy for API calls (mobile PWA).
     // "Remember" only controls auto-login / prefill — do NOT wipe session on uncheck.
-    try { localStorage.setItem('mgm_session_pass', pass); } catch (e) {}
+    try { localStorage.setItem('mgm_bca_session_pass', pass); } catch (e) {}
     if (deptCode) {
-        try { localStorage.setItem('mgm_auth_stream', deptCode); } catch (e) {}
+        try { localStorage.setItem('mgm_bca_auth_stream', deptCode); } catch (e) {}
         currentDept = deptCode;
     }
     if (remember) {
-        try { localStorage.setItem('mgm_remember_pass', pass); } catch (e) {}
-        try { localStorage.setItem('mgm_remember_checked', '1'); } catch (e) {}
+        try { localStorage.setItem('mgm_bca_remember_pass', pass); } catch (e) {}
+        try { localStorage.setItem('mgm_bca_remember_checked', '1'); } catch (e) {}
     } else {
-        try { localStorage.removeItem('mgm_remember_pass'); } catch (e) {}
-        try { localStorage.removeItem('mgm_remember_checked'); } catch (e) {}
+        try { localStorage.removeItem('mgm_bca_remember_pass'); } catch (e) {}
+        try { localStorage.removeItem('mgm_bca_remember_checked'); } catch (e) {}
     }
     if (role) {
         currentRole = role;
-        localStorage.setItem('mgm_role', role);
+        try { localStorage.setItem('mgm_bca_role', role); } catch (e) {}
     }
 }
 
 function clearAuthSession() {
-    try { sessionStorage.removeItem('mgm_auth_pass'); } catch (e) {}
-    try { localStorage.removeItem('mgm_session_pass'); } catch (e) {}
-    try { localStorage.removeItem('mgm_remember_pass'); } catch (e) {}
-    try { localStorage.removeItem('mgm_auth_stream'); } catch (e) {}
+    try { sessionStorage.removeItem('mgm_bca_auth_pass'); } catch (e) {}
+    try { localStorage.removeItem('mgm_bca_session_pass'); } catch (e) {}
+    try { localStorage.removeItem('mgm_bca_remember_pass'); } catch (e) {}
+    try { localStorage.removeItem('mgm_bca_auth_stream'); } catch (e) {}
+    try { localStorage.removeItem('mgm_bca_remember_checked'); } catch (e) {}
+    // Do NOT remove legacy mgm_* auth keys — Day College still uses those on the same origin
 }
 
 function restoreAuthSessionFromRemember() {
     try {
-        const remembered = localStorage.getItem('mgm_session_pass') ||
-            localStorage.getItem('mgm_remember_pass') || '';
-        if (remembered) sessionStorage.setItem('mgm_auth_pass', remembered);
+        const remembered = asLsGet('mgm_bca_session_pass', 'mgm_session_pass') ||
+            asLsGet('mgm_bca_remember_pass', 'mgm_remember_pass') || '';
+        if (remembered) sessionStorage.setItem('mgm_bca_auth_pass', remembered);
     } catch (e) {}
 }
 
@@ -90,7 +123,7 @@ function syncLocalPasscodeFromLogin(deptCode, role, passcode) {
     const pass = (passcode || '').trim();
     if (!pass || !deptCode) return;
     try {
-        const raw = JSON.parse(localStorage.getItem('mgm_custom_passcodes') || '{}');
+        const raw = JSON.parse(asLsGet('mgm_bca_custom_passcodes', 'mgm_custom_passcodes') || '{}');
         if (role === 'ADMIN') {
             raw.ADMIN = pass;
         } else if (role === 'HOD') {
@@ -98,7 +131,7 @@ function syncLocalPasscodeFromLogin(deptCode, role, passcode) {
         } else if (role === 'TEACHER') {
             raw['teacher' + deptCode] = pass;
         }
-        localStorage.setItem('mgm_custom_passcodes', JSON.stringify(raw));
+        localStorage.setItem('mgm_bca_custom_passcodes', JSON.stringify(raw));
     } catch (e) {}
 }
 
@@ -427,14 +460,24 @@ function normalizeRollNumbers(rollInput) {
 
 /** localStorage key for roll prefix per stream + year + section */
 function rollPrefixStorageKey(stream, year, section) {
-    return 'mgm_roll_prefix_' + String(stream || currentDept || 'BCA') + '_' +
+    return 'mgm_bca_roll_prefix_' + String(stream || currentDept || 'BCA') + '_' +
         String(year || '').trim() + '_' + String(section || '').trim();
 }
 
 function getStoredRollPrefix(stream, year, section) {
     if (!year || !section) return '';
     try {
-        return String(localStorage.getItem(rollPrefixStorageKey(stream, year, section)) || '').trim();
+        const key = rollPrefixStorageKey(stream, year, section);
+        let v = String(localStorage.getItem(key) || '').trim();
+        if (v) return v;
+        // Migrate once from old shared Day-College key if present
+        const legacy = 'mgm_roll_prefix_' + String(stream || currentDept || 'BCA') + '_' +
+            String(year || '').trim() + '_' + String(section || '').trim();
+        v = String(localStorage.getItem(legacy) || '').trim();
+        if (v) {
+            try { localStorage.setItem(key, v); } catch (e2) {}
+        }
+        return v;
     } catch (e) {
         return '';
     }
@@ -4057,22 +4100,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function forceAppUpdate() {
     showCustomToast('🔄 Checking for App Updates...', 'All attendance history & offline logs remain 100% safe.');
-    if ('caches' in window) {
-        caches.keys().then(names => {
-            return Promise.all(names.map(name => caches.delete(name)));
-        }).then(() => {
-            if (navigator.serviceWorker) {
-                navigator.serviceWorker.getRegistrations().then(regs => {
-                    regs.forEach(reg => reg.unregister());
-                    setTimeout(() => window.location.reload(true), 500);
-                });
-            } else {
-                setTimeout(() => window.location.reload(true), 500);
-            }
-        });
-    } else {
-        setTimeout(() => window.location.reload(true), 500);
-    }
+    const OWN_CACHE_PREFIX = 'mgm-bca-absentee-informer';
+    const reloadSoon = () => setTimeout(() => window.location.reload(true), 500);
+    const clearOwn = () => {
+        if (!('caches' in window)) return Promise.resolve();
+        return caches.keys().then(names => Promise.all(
+            names.filter(n => String(n || '').indexOf(OWN_CACHE_PREFIX) === 0).map(n => caches.delete(n))
+        ));
+    };
+    const unregisterOwn = () => {
+        if (!navigator.serviceWorker || !navigator.serviceWorker.getRegistration) return Promise.resolve();
+        // Only this page's SW scope — never unregister College / Evening workers
+        return navigator.serviceWorker.getRegistration().then(reg => (reg ? reg.unregister() : undefined));
+    };
+    clearOwn().then(unregisterOwn).then(reloadSoon).catch(reloadSoon);
 }
 
 function populateModalSectionOptions() {
@@ -4267,10 +4308,10 @@ function initSubjectManager() {
 // Version upgrade check to update stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    const APP_VER = 'v28.96-today-edit-prefix';
-    if (localStorage.getItem('mgm_app_ver') !== APP_VER) {
-        localStorage.removeItem('mgm_cloud_subjects');
-        localStorage.setItem('mgm_app_ver', APP_VER);
+    const APP_VER = 'v29.10-isolate';
+    if (asLsGet('mgm_bca_app_ver', 'mgm_app_ver') !== APP_VER) {
+        try { localStorage.removeItem('mgm_bca_cloud_subjects'); } catch (e) {}
+        try { localStorage.setItem('mgm_bca_app_ver', APP_VER); } catch (e) {}
     }
 })();
 
@@ -5018,7 +5059,8 @@ function initPasscodeManager() {
     if (resetBtn) {
         resetBtn.addEventListener('click', () => {
             if (confirm('Reset Teacher & HOD passcodes to defaults?')) {
-                localStorage.removeItem('mgm_custom_passcodes');
+                localStorage.removeItem('mgm_bca_custom_passcodes');
+                // Do not remove mgm_custom_passcodes — Day College may still use it
                 const store = getPasscodeStore();
                 if (passTeacher_BCA) passTeacher_BCA.value = store.teacher.BCA;
                 if (passHOD_BCA) passHOD_BCA.value = store.hod.BCA;
@@ -5031,7 +5073,7 @@ function initPasscodeManager() {
 
 function initThemeToggle() {
     const themeToggleBtn = document.getElementById('themeToggle');
-    const savedTheme = localStorage.getItem('mgm_theme') || 'dark';
+    const savedTheme = asLsGet('mgm_bca_theme', 'mgm_theme') || 'dark';
 
     document.documentElement.setAttribute('data-theme', savedTheme);
     updateThemeIcon(savedTheme);
@@ -5040,7 +5082,7 @@ function initThemeToggle() {
         themeToggleBtn.addEventListener('click', () => {
             const currentTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
             document.documentElement.setAttribute('data-theme', currentTheme);
-            localStorage.setItem('mgm_theme', currentTheme);
+            try { localStorage.setItem('mgm_bca_theme', currentTheme); } catch (e) {}
             updateThemeIcon(currentTheme);
         });
     }
@@ -5650,7 +5692,7 @@ function initRegisterScannerUI() {
 
     // Load stored API key if exists
     try {
-        const storedKey = localStorage.getItem('mgm_gemini_api_key') || '';
+        const storedKey = asLsGet('mgm_bca_gemini_api_key', 'mgm_gemini_api_key') || '';
         if (storedKey && apiKeyInput) apiKeyInput.value = storedKey;
     } catch (e) {}
 
@@ -5750,7 +5792,7 @@ function initRegisterScannerUI() {
         apiKeyInput.addEventListener('change', () => {
             const k = apiKeyInput.value.trim();
             if (k) {
-                try { localStorage.setItem('mgm_gemini_api_key', k); } catch (e) {}
+                try { localStorage.setItem('mgm_bca_gemini_api_key', k); } catch (e) {}
             }
         });
     }
@@ -5770,7 +5812,7 @@ function initRegisterScannerUI() {
                 return;
             }
 
-            try { localStorage.setItem('mgm_gemini_api_key', apiKey); } catch (e) {}
+            try { localStorage.setItem('mgm_bca_gemini_api_key', apiKey); } catch (e) {}
 
             const monthHint = document.getElementById('scannerMonthSelect') ? document.getElementById('scannerMonthSelect').value : 'July & August 2026';
 

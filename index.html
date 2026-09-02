@@ -24,35 +24,39 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <link rel="stylesheet" href="styles.css?v=v29.09-bca">
+  <link rel="stylesheet" href="styles.css?v=v29.10-isolate">
   <script>
     // Auto-update on first open after GitHub Pages deploy (runs before app.js)
     (function () {
-      var EXPECTED = 'v29.04-bca';
+      var EXPECTED = 'v29.10-isolate';
       var KEY = 'mgm_bca_shell_ver';
       var reloading = false;
 
       function hardReload() {
         if (reloading || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
         reloading = true;
+        var OWN_CACHE_PREFIX = 'mgm-bca-absentee-informer';
         var finish = function () {
-          try { sessionStorage.setItem('mgm_just_updated', EXPECTED); } catch (e) {}
+          try { sessionStorage.setItem('mgm_bca_just_updated', EXPECTED); } catch (e) {}
           window.location.reload();
         };
         try {
           var p = Promise.resolve();
           if (window.caches && caches.keys) {
             p = caches.keys().then(function (names) {
-              return Promise.all(names.map(function (n) { return caches.delete(n); }));
+              return Promise.all(names.filter(function (n) {
+                return String(n || '').indexOf(OWN_CACHE_PREFIX) === 0;
+              }).map(function (n) { return caches.delete(n); }));
             });
           }
           p.then(function () {
-            if (!navigator.serviceWorker || !navigator.serviceWorker.getRegistrations) {
+            if (!navigator.serviceWorker || !navigator.serviceWorker.getRegistration) {
               finish();
               return;
             }
-            return navigator.serviceWorker.getRegistrations().then(function (regs) {
-              return Promise.all(regs.map(function (r) { return r.unregister(); }));
+            // Only this page's SW — never unregister College / Evening
+            return navigator.serviceWorker.getRegistration().then(function (reg) {
+              return reg ? reg.unregister() : undefined;
             }).then(finish).catch(finish);
           }).catch(finish);
         } catch (e) {
@@ -92,7 +96,7 @@
       // 2) Register SW with versioned URL so GitHub Pages cannot keep old sw.js forever
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          var swUrl = './sw.js?v=v156-bca';
+          var swUrl = './sw.js?v=v158-isolate';
           navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' })
             .then(function (reg) {
               if (navigator.onLine) {
@@ -165,14 +169,17 @@
       (function () {
         function mgmForceRefresh() {
           var done = function () { window.location.reload(); };
+          var OWN_CACHE_PREFIX = 'mgm-bca-absentee-informer';
           try {
             if (window.caches && caches.keys) {
               caches.keys().then(function (names) {
-                return Promise.all(names.map(function (n) { return caches.delete(n); }));
+                return Promise.all(names.filter(function (n) {
+                  return String(n || '').indexOf(OWN_CACHE_PREFIX) === 0;
+                }).map(function (n) { return caches.delete(n); }));
               }).then(function () {
-                if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
-                  return navigator.serviceWorker.getRegistrations().then(function (regs) {
-                    regs.forEach(function (r) { r.unregister(); });
+                if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+                  return navigator.serviceWorker.getRegistration().then(function (reg) {
+                    if (reg) return reg.unregister();
                   });
                 }
               }).then(done).catch(done);
@@ -1018,7 +1025,7 @@
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js?v=v29.09-bca"></script>
-  <script src="app.js?v=v29.09-bca"></script>
+  <script src="parser.js?v=v29.10-isolate"></script>
+  <script src="app.js?v=v29.10-isolate"></script>
 </body>
 </html>

@@ -1,8 +1,10 @@
 {
+  "id": "/mgm-bca-allstreams-absentee/",
   "name": "MGM BCA Absentee Informer",
-  "short_name": "BCA Informer",
+  "short_name": "BCA Allstreams",
   "description": "Absentee logging portal for MGM College BCA faculty",
-  "start_url": "./index.html",
+  "start_url": "./index.html?app=bca",
+  "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0f172a",
