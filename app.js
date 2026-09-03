@@ -358,6 +358,8 @@ async function postWithRetry(url, payload) {
 // State Management
 let currentDept = 'BCA';
 let currentRole = 'ADMIN';
+/** Set when editing from History — used to gate bulk-past same-slot peer subjects. */
+let editingOriginalEntry = null;
 let isHODAuthenticated = true;
 let currentHODData = null;
 let currentHODYearFilter = 'ALL';
@@ -721,6 +723,43 @@ function isSectionOverlap(sec1, sec2) {
     return false;
 }
 
+function subjectsAreSame(subj1, subj2) {
+    const a = String(subj1 || '').trim().toLowerCase();
+    const b = String(subj2 || '').trim().toLowerCase();
+    if (!a || !b) return false;
+    return a === b;
+}
+
+function isSameAttendanceIdentity(a, b) {
+    if (!a || !b) return false;
+    return normalizeHistoryDate(a.date) === normalizeHistoryDate(b.date)
+        && String(a.year || '') === String(b.year || '')
+        && normalizeSectionCode(a.section) === normalizeSectionCode(b.section)
+        && subjectsAreSame(a.subject, b.subject)
+        && (parseInt(a.slot, 10) || 1) === (parseInt(b.slot, 10) || 1)
+        && (a.stream || 'BCA') === (b.stream || 'BCA');
+}
+
+/** Bulk Past Generator rows (shortage backfill). */
+function isBulkPastEntry(entry) {
+    if (!entry) return false;
+    if (entry.bulkPast === true) return true;
+    return String(entry.timestamp || '') === 'Bulk Past Entry';
+}
+
+/**
+ * Gate for shortage backfill / history edit:
+ * When EDITING an existing row, a different subject on the same slot is NOT a conflict.
+ * New daily Mark Absentees (no editOrig) stays strict.
+ */
+function shouldIgnoreOtherSubjectSlotConflict(editOrig, otherEntry, incomingSubject) {
+    if (!editOrig || !otherEntry) return false;
+    const peerSubj = (otherEntry && typeof otherEntry === 'object') ? otherEntry.subject : otherEntry;
+    const incoming = incomingSubject || editOrig.subject;
+    if (subjectsAreSame(peerSubj, incoming)) return false;
+    return true;
+}
+
 function checkDoubleEntryLive(dateVal, yearVal, sectionVal, subjectVal, slotVal, rollVal, alertBoxElem, submitBtnTextElem) {
     if (!alertBoxElem) return null;
 
@@ -729,6 +768,7 @@ function checkDoubleEntryLive(dateVal, yearVal, sectionVal, subjectVal, slotVal,
     const cleanSubject = (subjectVal || '').trim();
     const cleanYear = yearVal || 'First Year';
     const cleanStream = currentDept || 'BCA';
+    const skipSelf = editingOriginalEntry;
 
     const localHistory = readAllHistory();
     
@@ -738,6 +778,7 @@ function checkDoubleEntryLive(dateVal, yearVal, sectionVal, subjectVal, slotVal,
         if (normalizeHistoryDate(item.date) !== cleanDate) return false;
         if (!isYearMatching(item.year, cleanYear)) return false;
         if (parseInt(item.slot, 10) !== cleanSlot) return false;
+        if (skipSelf && isSameAttendanceIdentity(item, skipSelf)) return false;
 
         const sec1 = item.section || 'A';
         const sec2 = sectionVal || 'A';
@@ -751,6 +792,11 @@ function checkDoubleEntryLive(dateVal, yearVal, sectionVal, subjectVal, slotVal,
         // If BOTH are Combined AND BOTH are Elective/Language subjects with different names, they are parallel electives!
         if (isComb1 && isComb2 && isElec1 && isElec2 && cleanSubject.length > 0 && item.subject.trim().toLowerCase() !== cleanSubject.toLowerCase()) {
             return false; // Not a conflict!
+        }
+
+        // Bulk-past edit only: other subjects on this slot are allowed
+        if (shouldIgnoreOtherSubjectSlotConflict(skipSelf, item, cleanSubject)) {
+            return false;
         }
 
         return true; // Conflict or Match found!
@@ -1371,34 +1417,57 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         // Local Storage conflict check (Instant 0ms via BCA storage)
         const history = readAllHistory();
         const cleanStream = currentDept || 'BCA';
-        const existingEntry = history.find(item => {
+        const editOrig = editingOriginalEntry;
+
+        // Prefer same-subject row (edit/update own paper) over a peer on the same slot
+        let existingEntry = history.find(item => {
             if ((item.stream || 'BCA') !== cleanStream) return false;
-            if (item.date !== cleanDate) return false;
+            if (normalizeHistoryDate(item.date) !== normalizeHistoryDate(cleanDate)) return false;
             if (item.year !== yearVal) return false;
             if (parseInt(item.slot, 10) !== cleanSlot) return false;
-
             const sec1 = item.section || 'A';
             const sec2 = cleanSection || 'A';
             if (!isSectionOverlap(sec1, sec2)) return false;
-
-            // Combined/ALL Parallel Electives (e.g. Kannada vs Sanskrit) are allowed concurrently in the same slot
-            const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || sec1.toLowerCase().includes('combin');
-            const isComb2 = cleanSection === 'ALL' || (cleanSection || '').toUpperCase() === 'ALL' || (cleanSection || '').toLowerCase().includes('combin');
-            const isElec1 = isElectiveOrLanguageSubject(item.subject);
-            const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
-
-            if (isComb1 && isComb2 && isElec1 && isElec2 && (item.subject || '').trim().toLowerCase() !== cleanSubject.toLowerCase()) {
-                return false; // Parallel elective -> allowed concurrently, no conflict modal needed!
-            }
-
-            return true; // Conflict or match!
+            return subjectsAreSame(item.subject, cleanSubject);
         });
 
-        let isUpdate = !!existingEntry;
+        if (!existingEntry) {
+            existingEntry = history.find(item => {
+                if ((item.stream || 'BCA') !== cleanStream) return false;
+                if (normalizeHistoryDate(item.date) !== normalizeHistoryDate(cleanDate)) return false;
+                if (item.year !== yearVal) return false;
+                if (parseInt(item.slot, 10) !== cleanSlot) return false;
+
+                const sec1 = item.section || 'A';
+                const sec2 = cleanSection || 'A';
+                if (!isSectionOverlap(sec1, sec2)) return false;
+
+                // Combined/ALL Parallel Electives (e.g. Kannada vs Sanskrit) are allowed concurrently in the same slot
+                const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || sec1.toLowerCase().includes('combin');
+                const isComb2 = cleanSection === 'ALL' || (cleanSection || '').toUpperCase() === 'ALL' || (cleanSection || '').toLowerCase().includes('combin');
+                const isElec1 = isElectiveOrLanguageSubject(item.subject);
+                const isElec2 = isElectiveOrLanguageSubject(cleanSubject);
+
+                if (isComb1 && isComb2 && isElec1 && isElec2 && (item.subject || '').trim().toLowerCase() !== cleanSubject.toLowerCase()) {
+                    return false; // Parallel elective -> allowed concurrently, no conflict modal needed!
+                }
+
+                // Bulk-past edit only: other subjects on this slot are allowed
+                if (shouldIgnoreOtherSubjectSlotConflict(editOrig, item, cleanSubject)) {
+                    return false;
+                }
+
+                return true; // Conflict or match!
+            });
+        }
+
+        let isUpdate = !!existingEntry || !!editOrig;
         let finalRolls = formattedRolls;
 
-        // If a conflict/match exists for this slot, ask user via Conflict Dialog Modal!
-        if (existingEntry) {
+        // Quiet update when editing own subject from History (bulk multi-subject Slot 1 OK)
+        const editingOwnSubject = !!(editOrig && existingEntry && subjectsAreSame(existingEntry.subject, cleanSubject));
+
+        if (existingEntry && !editingOwnSubject) {
             const userChoice = await showSlotConflictDialog({
                 date: cleanDate,
                 year: yearVal,
@@ -1419,6 +1488,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
             }
             // If 'replace', finalRolls stays formattedRolls
         }
+        // editingOwnSubject → save directly, no merge/replace dialog
 
         const prevRollsArr = existingEntry ? normalizeRollNumbers(existingEntry.rollNumbers) : [];
         const diff = computeRollDiff(prevRollsArr.join(', '), finalRolls);
@@ -1457,9 +1527,11 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         const recordPayload = {
             ...payload,
             offline: isOffline,
+            bulkPast: !!(editOrig && isBulkPastEntry(editOrig)),
             timestamp: timestamp
         };
         saveToLocalHistory(recordPayload);
+        editingOriginalEntry = null;
 
         // 3. Clear text box instantly (0ms) & reset inputs
         clearAllRollTextBoxes();
@@ -1802,6 +1874,7 @@ function clearAllRollTextBoxes() {
 
 function resetAllInputs() {
     try {
+        editingOriginalEntry = null;
         clearTranscript();
         clearAllRollTextBoxes();
 
@@ -2479,6 +2552,18 @@ function editHistoryEntry(index, sourceList) {
     const item = list[index];
     if (!item) return;
 
+    editingOriginalEntry = {
+        date: item.date,
+        year: item.year,
+        section: item.section,
+        subject: item.subject,
+        slot: item.slot,
+        stream: item.stream || currentDept || 'BCA',
+        rollNumbers: item.rollNumbers,
+        bulkPast: isBulkPastEntry(item),
+        timestamp: item.timestamp || ''
+    };
+
     dateInput.value = item.date || getTodayISOString();
     rollNumbersInput.value = item.rollNumbers === 'NIL' ? '' : (Array.isArray(item.rollNumbers) ? item.rollNumbers.join(', ') : item.rollNumbers);
     yearSelect.value = item.year || 'First Year';
@@ -3103,7 +3188,8 @@ async function executeBulkPastGenerator() {
     const yearVal = document.getElementById('bulkYearSelect').value;
     const secVal = document.getElementById('bulkSectionSelect').value;
     const subjVal = document.getElementById('bulkSubjectInput').value;
-    const slotVal = document.getElementById('bulkSlotSelect').value;
+    // Slot ignored for bulk shortage backfill — always Slot 1 (no cross-staff conflict)
+    const slotVal = '1';
     const startVal = document.getElementById('bulkStartDate').value;
     const endVal = document.getElementById('bulkEndDate').value;
     const checkedDays = Array.from(document.querySelectorAll('.bulkDayCheck:checked')).map(c => parseInt(c.value, 10));
@@ -3155,8 +3241,9 @@ async function executeBulkPastGenerator() {
                 year: yearVal,
                 section: secVal,
                 subject: subjVal,
-                slot: String(parseInt(slotVal, 10) || 1),
+                slot: '1',
                 rollNumbers: 'NIL',
+                bulkPast: true,
                 offline: false,
                 timestamp: 'Bulk Past Entry'
             });
@@ -3186,6 +3273,7 @@ async function executeBulkPastGenerator() {
             section: item.section,
             subject: item.subject,
             slot: item.slot,
+            bulkPast: true,
             changesSummary: 'Bulk Past Class Entry'
         });
         try {
@@ -4308,7 +4396,7 @@ function initSubjectManager() {
 // Version upgrade check to update stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    const APP_VER = 'v29.10-isolate';
+    const APP_VER = 'v29.11-bulk';
     if (asLsGet('mgm_bca_app_ver', 'mgm_app_ver') !== APP_VER) {
         try { localStorage.removeItem('mgm_bca_cloud_subjects'); } catch (e) {}
         try { localStorage.setItem('mgm_bca_app_ver', APP_VER); } catch (e) {}

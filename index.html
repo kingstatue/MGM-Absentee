@@ -24,11 +24,11 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <link rel="stylesheet" href="styles.css?v=v29.10-isolate">
+  <link rel="stylesheet" href="styles.css?v=v29.11-bulk">
   <script>
     // Auto-update on first open after GitHub Pages deploy (runs before app.js)
     (function () {
-      var EXPECTED = 'v29.10-isolate';
+      var EXPECTED = 'v29.11-bulk';
       var KEY = 'mgm_bca_shell_ver';
       var reloading = false;
 
@@ -96,7 +96,7 @@
       // 2) Register SW with versioned URL so GitHub Pages cannot keep old sw.js forever
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          var swUrl = './sw.js?v=v158-isolate';
+          var swUrl = './sw.js?v=v159-bulk';
           navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' })
             .then(function (reg) {
               if (navigator.onLine) {
@@ -804,7 +804,8 @@
           <button class="icon-btn" id="closeBulkModalBtn" aria-label="Close modal">&times;</button>
         </div>
         <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px; line-height: 1.4;">
-          Auto-generate conducted class entries for past dates (e.g. 21-Jul to 10-Aug). All generated classes default to <strong>NIL (All Present)</strong> so you only need to edit absentees for dates students missed.
+          Auto-generate conducted class entries for past dates. Defaults to <strong>NIL (All Present)</strong> — edit absentees later.
+          Slot is not required here so every staff subject for the same section can be stored for shortage (no slot fights between teachers).
         </p>
 
         <form id="bulkGeneratorForm" onsubmit="return false;">
@@ -828,25 +829,12 @@
             </div>
           </div>
 
-          <div class="form-row">
-            <div class="form-group">
-              <label for="bulkSubjectInput">Subject</label>
-              <select id="bulkSubjectInput" class="form-select" required></select>
-            </div>
-            <div class="form-group">
-              <label for="bulkSlotSelect">Slot / Time Period</label>
-              <select id="bulkSlotSelect" class="form-select" required>
-                <option value="1">Slot 1 (9-9.55)</option>
-                <option value="2">Slot 2 (10-10.55)</option>
-                <option value="3">Slot 3 (11.10-12.05)</option>
-                <option value="4">Slot 4 (12.10-1.05)</option>
-                <option value="5">Slot 5 (1.05-2)</option>
-                <option value="6">Slot 6 (2-2.55)</option>
-                <option value="7">Slot 7 (3-3.55)</option>
-                <option value="8">Slot 8 (4-4.55)</option>
-              </select>
-            </div>
+          <div class="form-group">
+            <label for="bulkSubjectInput">Subject</label>
+            <select id="bulkSubjectInput" class="form-select" required></select>
           </div>
+          <!-- Slot hidden: bulk shortage backfill auto-uses Slot 1; daily Mark Absentees still enforces slots -->
+          <input type="hidden" id="bulkSlotSelect" value="1" />
 
           <div class="form-row">
             <div class="form-group">
@@ -1025,7 +1013,7 @@
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js?v=v29.10-isolate"></script>
-  <script src="app.js?v=v29.10-isolate"></script>
+  <script src="parser.js?v=v29.11-bulk"></script>
+  <script src="app.js?v=v29.11-bulk"></script>
 </body>
 </html>
