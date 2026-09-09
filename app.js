@@ -748,20 +748,6 @@ function isBulkPastEntry(entry) {
     return String(entry.timestamp || '') === 'Bulk Past Entry';
 }
 
-/**
- * Gate for shortage backfill / history edit:
- * When EDITING a bulk-past row, a different subject on the same slot is NOT a conflict.
- * New daily Mark Absentees (no editOrig) and regular history edits stay strict.
- */
-function shouldIgnoreOtherSubjectSlotConflict(editOrig, otherEntry, incomingSubject) {
-    if (!editOrig || !otherEntry) return false;
-    if (!isBulkPastEntry(editOrig)) return false;
-    const peerSubj = (otherEntry && typeof otherEntry === 'object') ? otherEntry.subject : otherEntry;
-    const incoming = incomingSubject || editOrig.subject;
-    if (subjectsAreSame(peerSubj, incoming)) return false;
-    return true;
-}
-
 function checkDoubleEntryLive(dateVal, yearVal, sectionVal, subjectVal, slotVal, rollVal, alertBoxElem, submitBtnTextElem) {
     if (!alertBoxElem) return null;
 
@@ -794,11 +780,6 @@ function checkDoubleEntryLive(dateVal, yearVal, sectionVal, subjectVal, slotVal,
         // If BOTH are Combined AND BOTH are Elective/Language subjects with different names, they are parallel electives!
         if (isComb1 && isComb2 && isElec1 && isElec2 && cleanSubject.length > 0 && item.subject.trim().toLowerCase() !== cleanSubject.toLowerCase()) {
             return false; // Not a conflict!
-        }
-
-        // Bulk-past edit only: other subjects on this slot are allowed
-        if (shouldIgnoreOtherSubjectSlotConflict(skipSelf, item, cleanSubject)) {
-            return false;
         }
 
         return true; // Conflict or Match found!
@@ -1454,11 +1435,6 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
                     return false; // Parallel elective -> allowed concurrently, no conflict modal needed!
                 }
 
-                // Bulk-past edit only: other subjects on this slot are allowed
-                if (shouldIgnoreOtherSubjectSlotConflict(editOrig, item, cleanSubject)) {
-                    return false;
-                }
-
                 return true; // Conflict or match!
             });
         }
@@ -1466,7 +1442,7 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
         let isUpdate = !!existingEntry || !!editOrig;
         let finalRolls = formattedRolls;
 
-        // Quiet update when editing own subject from History (bulk multi-subject Slot 1 OK)
+        // Quiet update when editing own subject from History
         const editingOwnSubject = !!(editOrig && existingEntry && subjectsAreSame(existingEntry.subject, cleanSubject));
 
         if (existingEntry && !editingOwnSubject) {
@@ -1763,11 +1739,11 @@ function isYearMatching(year1, year2) {
 
 function isSubjectMatching(sub1, sub2) {
     if (!sub1 || !sub2) return true;
-    const s1 = String(sub1).toLowerCase().trim();
-    const s2 = String(sub2).toLowerCase().trim();
+    const s1 = String(sub1).toLowerCase().replace(/\s+/g, ' ').trim();
+    const s2 = String(sub2).toLowerCase().replace(/\s+/g, ' ').trim();
     if (s1 === 'all' || s2 === 'all') return true;
-    if (s1 === s2) return true;
-    return s1.includes(s2) || s2.includes(s1);
+    // Exact paper only — "DBMS" must not count "DBMS Lab", "FOC Lab" must not count "FOC".
+    return s1 === s2;
 }
 
 function updateAvailableSlots(dept, dateVal, yearVal, sectionVal, slotSelectEl) {
@@ -3275,12 +3251,57 @@ function closeBulkGeneratorModal() {
     if (modal) modal.classList.remove('active');
 }
 
+/** Bulk only: another paper already occupies this date+section+slot (regular submit unchanged). */
+function collectBulkSlotConflicts(generatedItems) {
+    const history = readAllHistory();
+    const conflicts = [];
+    const seen = {};
+    (generatedItems || []).forEach(item => {
+        const stream = item.stream || currentDept || 'BCA';
+        const date = normalizeHistoryDate(item.date);
+        const slot = parseInt(item.slot, 10) || 1;
+        const occupant = history.find(h => {
+            if ((h.stream || 'BCA') !== stream) return false;
+            if (normalizeHistoryDate(h.date) !== date) return false;
+            if (!isYearMatching(h.year, item.year)) return false;
+            if ((parseInt(h.slot, 10) || 1) !== slot) return false;
+            if (subjectsAreSame(h.subject, item.subject)) return false;
+            if (!isSectionOverlap(h.section || 'A', item.section || 'A')) return false;
+            return true;
+        });
+        if (!occupant) return;
+        const key = date + '|' + String(occupant.subject || '').toLowerCase();
+        if (seen[key]) return;
+        seen[key] = true;
+        conflicts.push({
+            date: date,
+            slot: slot,
+            existingSubject: occupant.subject,
+            existingSection: occupant.section
+        });
+    });
+    return conflicts;
+}
+
+function alertBulkSlotConflicts(conflicts, newSubject, slotVal) {
+    const lines = conflicts.slice(0, 8).map(c =>
+        '• ' + c.date + ' — ' + (c.existingSubject || 'Subject') + ' (Sec ' + (c.existingSection || '?') + ')'
+    );
+    const extra = conflicts.length > 8 ? '\n… and ' + (conflicts.length - 8) + ' more date(s)' : '';
+    alert(
+        'Cannot generate ' + newSubject + ' on Slot ' + slotVal + '.\n\n' +
+        'That slot already has another subject on ' + conflicts.length + ' date(s):\n\n' +
+        lines.join('\n') + extra + '\n\n' +
+        'Choose a different slot. Generating the same subject on this slot is allowed.'
+    );
+}
+
 async function executeBulkPastGenerator() {
     const yearVal = document.getElementById('bulkYearSelect').value;
     const secVal = document.getElementById('bulkSectionSelect').value;
     const subjVal = document.getElementById('bulkSubjectInput').value;
-    // Slot ignored for bulk shortage backfill — always Slot 1 (no cross-staff conflict)
-    const slotVal = '1';
+    const slotEl = document.getElementById('bulkSlotSelect');
+    const slotVal = slotEl ? String(parseInt(slotEl.value, 10) || 1) : '1';
     const startVal = document.getElementById('bulkStartDate').value;
     const endVal = document.getElementById('bulkEndDate').value;
     const checkedDays = Array.from(document.querySelectorAll('.bulkDayCheck:checked')).map(c => parseInt(c.value, 10));
@@ -3332,7 +3353,7 @@ async function executeBulkPastGenerator() {
                 year: yearVal,
                 section: secVal,
                 subject: subjVal,
-                slot: '1',
+                slot: slotVal,
                 rollNumbers: 'NIL',
                 bulkPast: true,
                 offline: false,
@@ -3344,6 +3365,15 @@ async function executeBulkPastGenerator() {
 
     if (generatedItems.length === 0) {
         alert('No matching class days found in the selected date range.');
+        if (btnText) btnText.textContent = '⚡ Generate Past Classes';
+        if (spinner) spinner.style.display = 'none';
+        if (submitBtn) submitBtn.disabled = false;
+        return;
+    }
+
+    const bulkConflicts = collectBulkSlotConflicts(generatedItems);
+    if (bulkConflicts.length > 0) {
+        alertBulkSlotConflicts(bulkConflicts, subjVal, slotVal);
         if (btnText) btnText.textContent = '⚡ Generate Past Classes';
         if (spinner) spinner.style.display = 'none';
         if (submitBtn) submitBtn.disabled = false;
@@ -3380,7 +3410,7 @@ async function executeBulkPastGenerator() {
 
     closeBulkGeneratorModal();
 
-    showCustomToast(`⚡ Created ${generatedItems.length} Past Classes!`, `Added for ${yearVal} Sec ${secVal} (${subjVal}). You can now edit absentees.`);
+    showCustomToast(`⚡ Created ${generatedItems.length} Past Classes!`, `Added for ${yearVal} Sec ${secVal} (${subjVal}) Slot ${slotVal}. You can now edit absentees.`);
     renderHistoryList();
 }
 
