@@ -28,7 +28,7 @@
   <script>
     // Auto-update on first open after GitHub Pages deploy (runs before app.js)
     (function () {
-      var EXPECTED = 'v29.14-history-fetch';
+      var EXPECTED = 'v29.15-bulk-slot-keep';
       var KEY = 'mgm_bca_shell_ver';
       var reloading = false;
 
@@ -96,7 +96,7 @@
       // 2) Register SW with versioned URL so GitHub Pages cannot keep old sw.js forever
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          var swUrl = './sw.js?v=v161-sync-badge';
+          var swUrl = './sw.js?v=v163-bulk-slot-keep';
           navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' })
             .then(function (reg) {
               if (navigator.onLine) {
@@ -1014,6 +1014,6 @@
   <datalist id="subjectDatalist"></datalist>
 
   <script src="parser.js?v=v29.13-sync-badge"></script>
-  <script src="app.js?v=v29.14-history-fetch"></script>
+  <script src="app.js?v=v29.15-bulk-slot-keep"></script>
 </body>
 </html>

@@ -312,6 +312,7 @@ function submitViaJSONP(url, payload) {
             slot: String(payload.slot || 1),
             subject: payload.subject || '',
             rollNumbers: payload.rollNumbers || 'NIL',
+            bulkPast: payload.bulkPast ? 'true' : '',
             callback: cbName
         });
         appendAuthToParams(params);
@@ -749,11 +750,12 @@ function isBulkPastEntry(entry) {
 
 /**
  * Gate for shortage backfill / history edit:
- * When EDITING an existing row, a different subject on the same slot is NOT a conflict.
- * New daily Mark Absentees (no editOrig) stays strict.
+ * When EDITING a bulk-past row, a different subject on the same slot is NOT a conflict.
+ * New daily Mark Absentees (no editOrig) and regular history edits stay strict.
  */
 function shouldIgnoreOtherSubjectSlotConflict(editOrig, otherEntry, incomingSubject) {
     if (!editOrig || !otherEntry) return false;
+    if (!isBulkPastEntry(editOrig)) return false;
     const peerSubj = (otherEntry && typeof otherEntry === 'object') ? otherEntry.subject : otherEntry;
     const incoming = incomingSubject || editOrig.subject;
     if (subjectsAreSame(peerSubj, incoming)) return false;
@@ -1485,8 +1487,16 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
 
             if (userChoice.action === 'merge') {
                 finalRolls = userChoice.mergedRolls;
+            } else if (userChoice.action === 'replace' && existingEntry && !subjectsAreSame(existingEntry.subject, cleanSubject)) {
+                removeLocalHistoryReplacedSlot({
+                    date: cleanDate,
+                    year: yearVal,
+                    section: cleanSection,
+                    slot: cleanSlot,
+                    subject: cleanSubject,
+                    stream: currentDept || 'BCA'
+                }, existingEntry);
             }
-            // If 'replace', finalRolls stays formattedRolls
         }
         // editingOwnSubject → save directly, no merge/replace dialog
 
@@ -1507,7 +1517,8 @@ async function submitData(dateVal, rollNumbersRaw, yearVal, sectionVal, subjectV
             addedRollNumbers: diff.addedRolls.length > 0 ? diff.addedRolls.join(', ') : 'NIL',
             deletedRollNumbers: diff.deletedRolls.length > 0 ? diff.deletedRolls.join(', ') : 'NIL',
             retainedRollNumbers: diff.retainedRolls.length > 0 ? diff.retainedRolls.join(', ') : 'NIL',
-            changesSummary: isUpdate ? '✏️ Replaced previous entry' : 'Initial Submission'
+            changesSummary: isUpdate ? '✏️ Replaced previous entry' : 'Initial Submission',
+            bulkPast: !!(editOrig && isBulkPastEntry(editOrig))
         };
 
         const isOffline = await isNetworkOffline();
@@ -1980,7 +1991,8 @@ async function deleteData(dateVal, yearVal, sectionVal, subjectVal, slotVal) {
         rollNumbers: 'NIL',
         previousRollNumbers: prevStr,
         deletedRollNumbers: prevStr,
-        changesSummary: `Deleted Raw Data row (section formulas refresh; was: ${prevStr})`
+        changesSummary: `Deleted Raw Data row (section formulas refresh; was: ${prevStr})`,
+        bulkPast: !!(targetItem && isBulkPastEntry(targetItem)) || !!(typeof editingOriginalEntry !== 'undefined' && editingOriginalEntry && isBulkPastEntry(editingOriginalEntry))
     };
 
     console.log('Sending Delete Payload:', payload);
@@ -2192,6 +2204,37 @@ function updateTodayBadge() {
     }
 }
 
+/** Drop other-subject local cards on this slot after a regular Replace (sheet overwrites). */
+function removeLocalHistoryReplacedSlot(incoming, existingEntry) {
+    if (!incoming || !existingEntry) return;
+    const stream = incoming.stream || existingEntry.stream || currentDept || 'BCA';
+    const date = normalizeHistoryDate(incoming.date || existingEntry.date);
+    const year = incoming.year || existingEntry.year;
+    const slot = parseInt(incoming.slot != null ? incoming.slot : existingEntry.slot, 10) || 1;
+    const incomingSec = incoming.section || existingEntry.section || 'A';
+    const incomingSubj = incoming.subject || '';
+    let history = readAllHistory();
+
+    history = history.filter(item => {
+        if ((item.stream || 'BCA') !== stream) return true;
+        if (normalizeHistoryDate(item.date) !== date) return true;
+        if (item.year !== year) return true;
+        if ((parseInt(item.slot, 10) || 1) !== slot) return true;
+        if (!isSectionOverlap(item.section || 'A', incomingSec)) return true;
+
+        const sec1 = item.section || 'A';
+        const isComb1 = sec1 === 'ALL' || sec1.toUpperCase() === 'ALL' || String(sec1).toLowerCase().includes('combin');
+        const isComb2 = incomingSec === 'ALL' || String(incomingSec).toUpperCase() === 'ALL' || String(incomingSec).toLowerCase().includes('combin');
+        if (isComb1 && isComb2 && isElectiveOrLanguageSubject(item.subject) && isElectiveOrLanguageSubject(incomingSubj) && !subjectsAreSame(item.subject, incomingSubj)) {
+            return true;
+        }
+        if (subjectsAreSame(item.subject, incomingSubj)) return true;
+        return false;
+    });
+
+    localStorage.setItem('mgm_bca_attendance_history', JSON.stringify(history));
+}
+
 // Local log + durable offline queue (offline rows survive past midnight)
 function saveToLocalHistory(entry) {
     const today = getTodayISOString();
@@ -2263,7 +2306,8 @@ async function syncOfflineEntries() {
                 section: item.section,
                 subject: item.subject,
                 slot: String(parseInt(item.slot, 10) || 1),
-                changesSummary: item.changesSummary || 'Synced from phone (was pending)'
+                changesSummary: item.changesSummary || 'Synced from phone (was pending)',
+                bulkPast: isBulkPastEntry(item)
             });
 
             try {
