@@ -24,7 +24,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <link rel="stylesheet" href="styles.css?v=v29.11-bulk">
+  <link rel="stylesheet" href="styles.css?v=v29.13-sync-badge">
   <script>
     // Auto-update on first open after GitHub Pages deploy (runs before app.js)
     (function () {
@@ -96,7 +96,7 @@
       // 2) Register SW with versioned URL so GitHub Pages cannot keep old sw.js forever
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          var swUrl = './sw.js?v=v159-bulk';
+          var swUrl = './sw.js?v=v161-sync-badge';
           navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' })
             .then(function (reg) {
               if (navigator.onLine) {
@@ -1013,7 +1013,7 @@
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js?v=v29.11-bulk"></script>
-  <script src="app.js?v=v29.11-bulk"></script>
+  <script src="parser.js?v=v29.13-sync-badge"></script>
+  <script src="app.js?v=v29.13-sync-badge"></script>
 </body>
 </html>
