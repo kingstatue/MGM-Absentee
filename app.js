@@ -2109,61 +2109,6 @@ function getTodayEntries() {
     return [...pendingOtherDays, ...todayItems].slice(0, 120);
 }
 
-/** True when timestamp is a status placeholder, not a real clock time. */
-function isPlaceholderHistoryTime(ts) {
-    const s = String(ts || '').trim();
-    if (!s) return true;
-    const u = s.toLowerCase();
-    return u === 'from sheet' ||
-        u === 'bulk past entry' ||
-        u.indexOf('pending') !== -1 ||
-        u.indexOf('synced from phone') !== -1;
-}
-
-/** Prefer local submit clock time; else sheet Timestamp; never keep "From Sheet". */
-function resolveHistoryTimestamp(serverTs, prevItem) {
-    if (prevItem && prevItem.timestamp && !isPlaceholderHistoryTime(prevItem.timestamp)) {
-        return String(prevItem.timestamp);
-    }
-    const raw = serverTs != null ? String(serverTs).trim() : '';
-    if (raw && !isPlaceholderHistoryTime(raw)) return raw;
-    try {
-        if (raw && /^\d{4}-\d{2}-\d{2}/.test(raw)) {
-            const d = new Date(raw);
-            if (!isNaN(d.getTime())) {
-                return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            }
-        }
-    } catch (e) {}
-    return '';
-}
-
-function mapServerHistoryEntry(e, stream, fallbackDate) {
-    return {
-        stream: stream || 'BCA',
-        date: normalizeHistoryDate(e.date) || e.date || fallbackDate || getTodayISOString(),
-        year: e.year || 'First Year',
-        section: e.section || 'A',
-        subject: e.subject || 'Subject',
-        slot: parseInt(e.slot, 10) || 1,
-        rollNumbers: e.rollNumbers || 'NIL',
-        offline: false,
-        timestamp: resolveHistoryTimestamp(e.timestamp || e.time || e.submittedAt || '', null)
-    };
-}
-
-function mergeServerHistoryEntry(sEntry, prev) {
-    if (prev && typeof isBulkPastEntry === 'function' && isBulkPastEntry(prev)) {
-        sEntry.bulkPast = true;
-        if (String(prev.timestamp || '') === 'Bulk Past Entry') {
-            sEntry.timestamp = prev.timestamp;
-            return sEntry;
-        }
-    }
-    sEntry.timestamp = resolveHistoryTimestamp(sEntry.timestamp, prev);
-    return sEntry;
-}
-
 function updateTodayBadge() {
     const badge = document.getElementById('todayCountBadge');
     const entries = getTodayEntries();
@@ -2339,7 +2284,17 @@ function fetchTodayServerHistory() {
         try { delete window[cbName]; } catch (e) {}
 
         if (data && data.result === 'success' && Array.isArray(data.entries)) {
-            const serverEntries = data.entries.map(e => mapServerHistoryEntry(e, stream, dateVal));
+            const serverEntries = data.entries.map(e => ({
+                stream: stream,
+                date: dateVal,
+                year: e.year || 'First Year',
+                section: e.section || 'A',
+                subject: e.subject || 'Subject',
+                slot: parseInt(e.slot, 10) || 1,
+                rollNumbers: e.rollNumbers || 'NIL',
+                offline: false,
+                timestamp: 'From Sheet'
+            }));
 
             const history = readAllHistory();
             const byKey = new Map();
@@ -2361,8 +2316,8 @@ function fetchTodayServerHistory() {
             // Sheet is source of truth for today's list (cross-device)
             serverEntries.forEach(sEntry => {
                 const k = historyMatchKey(sEntry);
-                const prev = byKey.get(k);
-                byKey.set(k, mergeServerHistoryEntry(sEntry, prev));
+                // Sheet already has this row → clear pending badge (do not keep "waiting to sync")
+                byKey.set(k, sEntry);
             });
 
             const merged = compactAttendanceHistory(Array.from(byKey.values()));
@@ -2411,7 +2366,17 @@ function fetchAllServerHistory() {
         try { delete window[cbName]; } catch (e) {}
 
         if (data && data.result === 'success' && Array.isArray(data.entries)) {
-            const serverEntries = data.entries.map(e => mapServerHistoryEntry(e, stream, null));
+            const serverEntries = data.entries.map(e => ({
+                stream: stream,
+                date: e.date || getTodayISOString(),
+                year: e.year || 'First Year',
+                section: e.section || 'A',
+                subject: e.subject || 'Subject',
+                slot: parseInt(e.slot, 10) || 1,
+                rollNumbers: e.rollNumbers || 'NIL',
+                offline: false,
+                timestamp: 'From Sheet'
+            }));
 
             const history = readAllHistory();
             const byKey = new Map();
@@ -2425,8 +2390,7 @@ function fetchAllServerHistory() {
             // Sheet is source of truth for all entries
             serverEntries.forEach(sEntry => {
                 const k = historyMatchKey(sEntry);
-                const prev = byKey.get(k);
-                byKey.set(k, mergeServerHistoryEntry(Object.assign({}, sEntry), prev));
+                byKey.set(k, sEntry);
             });
 
             const merged = compactAttendanceHistory(Array.from(byKey.values()));
@@ -2542,19 +2506,15 @@ function renderHistoryList() {
             ? ' · ' + escapeHTML(item.date)
             : '';
 
-        const timeShown = (!isPlaceholderHistoryTime(item.timestamp) && item.timestamp)
-            ? String(item.timestamp)
-            : '';
-
         const statusBadge = item.offline 
-            ? '<span class="badge badge-warning" style="background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3);">Pending Sync</span>'
+            ? '<span class="badge badge-warning" style="background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3);">Offline (Pending Sync)</span>'
             : '<span class="badge badge-success">Synced to Sheet</span>';
 
         return (
         '<div class="history-card">' +
             '<div class="history-top">' +
                 '<span class="history-title">' + escapeHTML(item.year) + ' Sec ' + escapeHTML(item.section) + dateLabel + '</span>' +
-                '<span class="history-time">' + escapeHTML(timeShown) + '</span>' +
+                '<span class="history-time">' + escapeHTML(item.timestamp || '') + '</span>' +
             '</div>' +
             '<div class="history-details">' +
                 '<span>Subject: <strong>' + escapeHTML(item.subject) + '</strong></span>' +
@@ -4436,7 +4396,7 @@ function initSubjectManager() {
 // Version upgrade check to update stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    const APP_VER = 'v29.13-sync-badge';
+    const APP_VER = 'v29.11-bulk';
     if (asLsGet('mgm_bca_app_ver', 'mgm_app_ver') !== APP_VER) {
         try { localStorage.removeItem('mgm_bca_cloud_subjects'); } catch (e) {}
         try { localStorage.setItem('mgm_bca_app_ver', APP_VER); } catch (e) {}
@@ -5386,14 +5346,10 @@ function fetchServerHistoryForShortage(stream, period, fVal, tVal, callback) {
                     slot: String(parseInt(srv.slot, 10) || 1),
                     rollNumbers: formattedRolls,
                     offline: false,
-                    timestamp: resolveHistoryTimestamp(srv.timestamp || srv.time || '', null)
+                    timestamp: srv.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
                 };
                 const k = entryKey(srvObj);
-                if (!k) return;
-                const prev = byKey.get(k);
-                if (prev) {
-                    byKey.set(k, mergeServerHistoryEntry(srvObj, prev));
-                } else {
+                if (k && !byKey.has(k)) {
                     byKey.set(k, srvObj);
                 }
             });
