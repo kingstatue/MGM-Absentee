@@ -2330,8 +2330,8 @@ function fetchTodayServerHistory() {
 
     const timeout = setTimeout(() => {
         isFetchingServerHistory = false;
-        try { delete window[cbName]; } catch (e) {}
-    }, 6000);
+        // Keep callback so a late JSONP response can still apply
+    }, 25000);
 
     window[cbName] = function (data) {
         clearTimeout(timeout);
@@ -2344,6 +2344,13 @@ function fetchTodayServerHistory() {
             const history = readAllHistory();
             const byKey = new Map();
 
+            // Empty sheet result must not wipe local Today cards
+            if (serverEntries.length === 0) {
+                renderHistoryList();
+                updateSyncButtonState();
+                return;
+            }
+
             // Keep offline queue (any date) + other streams / other dates
             history.forEach(item => {
                 const k = historyMatchKey(item);
@@ -2352,7 +2359,7 @@ function fetchTodayServerHistory() {
                     return;
                 }
                 const itemStream = item.stream || 'BCA';
-                if (itemStream !== stream || item.date !== dateVal) {
+                if (itemStream !== stream || normalizeHistoryDate(item.date) !== dateVal) {
                     byKey.set(k, item);
                 }
                 // today's synced rows for this stream come from server below
@@ -2402,8 +2409,8 @@ function fetchAllServerHistory() {
 
     const timeout = setTimeout(() => {
         isFetchingAllServerHistory = false;
-        try { delete window[cbName]; } catch (e) {}
-    }, 8000);
+        // Keep callback so a late JSONP response can still apply
+    }, 25000);
 
     window[cbName] = function (data) {
         clearTimeout(timeout);
@@ -5354,9 +5361,9 @@ function fetchServerHistoryForShortage(stream, period, fVal, tVal, callback) {
     const timeout = setTimeout(() => {
         if (done) return;
         done = true;
-        try { delete window[cbName]; } catch (e) {}
+        // Keep callback so a late JSONP response can still apply
         if (callback) callback();
-    }, 4500);
+    }, 20000);
 
     window[cbName] = function (res) {
         if (done) return;
