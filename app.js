@@ -6337,9 +6337,49 @@ function updateIaSubjectDropdown() {
     if (prev && allSubjs.indexOf(prev) !== -1) subjSelect.value = prev;
 }
 
+function iaSubjectKeyPart(subject) {
+    return String(subject || '').trim().toLowerCase();
+}
+
+function iaSubjectsLooselyEqual(a, b) {
+    const s1 = iaSubjectKeyPart(a);
+    const s2 = iaSubjectKeyPart(b);
+    if (!s1 || !s2) return false;
+    if (s1 === s2) return true;
+    if (typeof extractSubjNameAndSection === 'function') {
+        const b1 = extractSubjNameAndSection(a).name.trim().toLowerCase();
+        const b2 = extractSubjNameAndSection(b).name.trim().toLowerCase();
+        if (b1 && b2 && b1 === b2) return true;
+    }
+    return false;
+}
+
 function getIaMark(yearStr, sectionStr, subject, roll) {
     const store = readInternalMarksStore();
-    return store[iaRecordKey(yearStr, sectionStr, subject, roll)] || { ia1: '', ia2: '' };
+    const exact = store[iaRecordKey(yearStr, sectionStr, subject, roll)];
+    if (exact) return exact;
+    // Combined / elective marks are often saved under ALL — still show on section report
+    if (sectionStr && sectionStr !== 'ALL') {
+        const allSec = store[iaRecordKey(yearStr, 'ALL', subject, roll)];
+        if (allSec) return allSec;
+    }
+    const rollU = String(roll || '').trim().toUpperCase();
+    const year = yearStr || '';
+    let found = null;
+    Object.keys(store).forEach(function (k) {
+        if (found) return;
+        const parts = k.split('|');
+        if (parts.length < 5) return;
+        if (parts[0] !== 'BCA' || parts[1] !== year || parts[4] !== rollU) return;
+        const keySec = parts[2] || '';
+        const keySub = parts[3] || '';
+        const secOk = keySec === (sectionStr || '') ||
+            keySec === 'ALL' ||
+            (typeof sectionsEqualForSubject === 'function' && sectionsEqualForSubject(keySec, sectionStr));
+        if (!secOk) return;
+        if (iaSubjectsLooselyEqual(keySub, subject)) found = store[k];
+    });
+    return found || { ia1: '', ia2: '' };
 }
 
 function upsertIaMark(yearStr, sectionStr, subject, roll, ia1, ia2, name, regNo) {
@@ -6398,11 +6438,16 @@ function collectIaSubjectAttendance(yearStr, sectionStr, rollObj) {
 function listIaReportSubjects(yearStr, sectionStr) {
     const fromConfig = getSubjectsForActiveYear(currentDept || 'BCA', yearStr, sectionStr) || [];
     const store = readInternalMarksStore();
-    const prefix = 'BCA|' + yearStr + '|' + sectionStr + '|';
     const fromMarks = [];
     Object.keys(store).forEach(k => {
-        if (k.indexOf(prefix) !== 0) return;
-        const subj = k.split('|')[3];
+        const parts = k.split('|');
+        if (parts.length < 5 || parts[0] !== 'BCA' || parts[1] !== yearStr) return;
+        const keySec = parts[2] || '';
+        const secOk = keySec === (sectionStr || '') ||
+            keySec === 'ALL' ||
+            (typeof sectionsEqualForSubject === 'function' && sectionsEqualForSubject(keySec, sectionStr));
+        if (!secOk) return;
+        const subj = parts[3];
         if (subj) fromMarks.push(subj);
     });
     const history = readAllHistory();
@@ -6420,8 +6465,16 @@ function listIaReportSubjects(yearStr, sectionStr) {
         if (!name) return;
         const low = name.toLowerCase();
         if (seen.has(low)) return;
+        // Prefer nicer casing from config/history over lowercase mark keys
+        let display = name;
+        if (fromMarks.indexOf(name) !== -1 && name === low) {
+            const nicer = [].concat(fromConfig, fromHist).find(function (x) {
+                return String(x || '').trim().toLowerCase() === low;
+            });
+            if (nicer) display = String(nicer).trim();
+        }
         seen.add(low);
-        out.push(name);
+        out.push(display);
     });
     return out.sort((a, b) => a.localeCompare(b));
 }
@@ -6717,15 +6770,116 @@ function buildIaClassMarksSheetHtml(yearStr, sectionStr, subject, rollObjects, s
 }
 
 function downloadHtmlAsExcel(innerHtml, filename) {
-    const html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"></head><body>' + innerHtml + '</body></html>';
+    const html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Report</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>' + innerHtml + '</body></html>';
     const blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' });
+    const fname = filename || 'MGM_Internal_Marks.xls';
+    // IE / legacy Edge
+    if (window.navigator && typeof window.navigator.msSaveOrOpenBlob === 'function') {
+        window.navigator.msSaveOrOpenBlob(blob, fname);
+        return;
+    }
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = filename || 'MGM_Internal_Marks.xls';
+    a.download = fname;
+    a.rel = 'noopener';
     document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1500);
+    // Data-URL is more reliable on many mobile browsers than blob:+download
+    const reader = new FileReader();
+    reader.onload = function () {
+        a.href = reader.result;
+        a.click();
+        document.body.removeChild(a);
+    };
+    reader.onerror = function () {
+        a.href = URL.createObjectURL(blob);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+    };
+    reader.readAsDataURL(blob);
+}
+
+function buildAcademicPerformanceExcelTable(yearStr, sectionStr, semester, rollObj, subjects) {
+    const attMap = collectIaSubjectAttendance(yearStr, sectionStr, rollObj);
+    const monthSet = {};
+    Object.keys(attMap).forEach(function (subj) {
+        Object.keys(attMap[subj].months || {}).forEach(function (mk) {
+            if (monthBelongsToSemester(mk, semester)) monthSet[mk] = true;
+        });
+    });
+    let monthKeys = Object.keys(monthSet).sort();
+    if (monthKeys.length === 0) {
+        Object.keys(attMap).forEach(function (subj) {
+            Object.keys(attMap[subj].months || {}).forEach(function (mk) { monthSet[mk] = true; });
+        });
+        monthKeys = Object.keys(monthSet).sort();
+    }
+    if (monthKeys.length > 4) monthKeys = monthKeys.slice(-4);
+    while (monthKeys.length < 4) monthKeys.push('');
+
+    const td = 'border:1px solid #000;padding:4px 6px;font-size:12px;';
+    const th = td + 'font-weight:700;background:#eee;';
+    let headMonths = '';
+    monthKeys.forEach(function (mk) {
+        const lab = mk ? formatShortageMonthLabel(mk) : '';
+        headMonths += '<th style="' + th + '">' + escapeHTML(lab) + ' Held</th><th style="' + th + '">' + escapeHTML(lab) + ' Att</th>';
+    });
+
+    let bodyRows = '';
+    const rowSubjects = subjects.slice();
+    while (rowSubjects.length < 12) rowSubjects.push('');
+    rowSubjects.forEach(function (subj) {
+        let ia1 = '', ia2 = '';
+        if (subj) {
+            const rec = getIaMark(yearStr, sectionStr, subj, rollObj.code);
+            ia1 = clampIaMark(rec.ia1);
+            ia2 = clampIaMark(rec.ia2);
+        }
+        let attCells = '';
+        monthKeys.forEach(function (mk) {
+            let held = '', att = '';
+            if (subj && mk && attMap[subj] && attMap[subj].months[mk]) {
+                held = attMap[subj].months[mk].held;
+                att = Math.max(0, held - (attMap[subj].months[mk].missed || 0));
+            } else if (subj && mk && typeof iaSubjectsLooselyEqual === 'function') {
+                // Match attendance under a slightly different subject label
+                Object.keys(attMap).forEach(function (attSubj) {
+                    if (!iaSubjectsLooselyEqual(attSubj, subj)) return;
+                    if (!attMap[attSubj].months[mk]) return;
+                    held = attMap[attSubj].months[mk].held;
+                    att = Math.max(0, held - (attMap[attSubj].months[mk].missed || 0));
+                });
+            }
+            attCells += '<td style="' + td + 'text-align:center;">' + held + '</td><td style="' + td + 'text-align:center;">' + att + '</td>';
+        });
+        bodyRows += '<tr>' +
+            '<td style="' + td + 'text-align:left;">' + escapeHTML(subj) + '</td>' +
+            '<td style="' + td + 'text-align:center;font-weight:700;">' + escapeHTML(String(ia1)) + '</td>' +
+            '<td style="' + td + 'text-align:center;font-weight:700;">' + escapeHTML(String(ia2)) + '</td>' +
+            attCells + '</tr>';
+    });
+
+    const roster = getStudentRosterEntry(yearStr, sectionStr, rollObj.code);
+    const classLabel = escapeHTML(shortageClassLabel(yearStr, sectionStr));
+    const nameBit = roster.name ? (' | Name: ' + escapeHTML(roster.name)) : '';
+    const regBit = roster.regNo ? (' | REG.No: ' + escapeHTML(roster.regNo)) : '';
+    const colCount = 3 + (monthKeys.length * 2);
+
+    return '<table style="width:100%;border-collapse:collapse;border:1px solid #000;margin-bottom:22px;font-family:Times New Roman,Times,serif;">' +
+        '<tr><td colspan="' + colCount + '" style="' + td + 'font-weight:800;text-align:center;">MAHATMA GANDHI MEMORIAL COLLEGE, UDUPI-2</td></tr>' +
+        '<tr><td colspan="' + colCount + '" style="' + td + 'font-weight:800;text-align:center;">' + escapeHTML(semester) + ' Semester — Academic Performance</td></tr>' +
+        '<tr><td colspan="' + colCount + '" style="' + td + '">CLASS: ' + classLabel + ' | ROLL: ' + escapeHTML(rollObj.code) + nameBit + regBit + '</td></tr>' +
+        '<tr><th style="' + th + '">Subject</th><th style="' + th + '">Test I (/10)</th><th style="' + th + '">Test II (/10)</th>' + headMonths + '</tr>' +
+        bodyRows +
+        '</table>';
+}
+
+function buildAcademicPerformanceExcelHtml(yearStr, sectionStr, semester, rollObjects) {
+    const subjects = listIaReportSubjects(yearStr, sectionStr);
+    let html = '';
+    rollObjects.forEach(function (rObj) {
+        html += buildAcademicPerformanceExcelTable(yearStr, sectionStr, semester, rObj, subjects);
+    });
+    return html;
 }
 
 function buildAcademicPerformancePage(yearStr, sectionStr, semester, rollObj, subjects) {
@@ -7020,7 +7174,8 @@ function initInternalMarksModule() {
             }
             const subj = subjectSelect ? subjectSelect.value : '';
             if (subj && rolls.length) saveIaMarksFromGrid(yr, sec, subj);
-            const pages = buildAcademicPerformancePagesHtml(yr, sec, sem, rolls);
+            // Flat Excel layout (no rowspan) so mobile Sheets/Excel show Test I / Test II marks
+            const pages = buildAcademicPerformanceExcelHtml(yr, sec, sem, rolls);
             downloadHtmlAsExcel(pages, 'MGM_Academic_Performance_' + sem + '_Sem.xls');
         });
     }
