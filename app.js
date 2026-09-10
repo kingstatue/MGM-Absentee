@@ -6435,6 +6435,49 @@ function collectIaSubjectAttendance(yearStr, sectionStr, rollObj) {
     return bySubj;
 }
 
+/** Lab / practical paper (final report order only). */
+function isIaLabSubject(subj) {
+    return /\b(lab|practical)\b/i.test(String(subj || ''));
+}
+
+/** Core English (not Optional English). */
+function isIaEnglishCoreSubject(subj) {
+    const s = String(subj || '').trim().toLowerCase();
+    if (!s) return false;
+    if (/\boptional\s*english\b/i.test(s)) return false;
+    return /\benglish\b/i.test(s);
+}
+
+/** Parallel Combined language electives (Kannada / Hindi / Sanskrit). */
+function isIaLanguageElectiveSubject(subj) {
+    return /\b(kannada|kanada|kanad|hindi|hindhi|sanskrit|sanskrith|sanskritha|sanskrut|sanskrutha|sanskritam)\b/i.test(String(subj || ''));
+}
+
+/**
+ * Final Academic Performance subject order only (does not change attendance / marks entry).
+ * 1st & 2nd Year: language elective → English → other theory → labs
+ * 3rd Year: theory subjects → labs
+ */
+function iaFinalReportSubjectRank(subj, yearStr) {
+    const lab = isIaLabSubject(subj);
+    if (yearStr === 'Third Year') {
+        return lab ? 2 : 1;
+    }
+    if (isIaLanguageElectiveSubject(subj)) return 1;
+    if (isIaEnglishCoreSubject(subj)) return 2;
+    if (lab) return 4;
+    return 3;
+}
+
+function sortIaFinalReportSubjects(subjects, yearStr) {
+    return (subjects || []).slice().sort(function (a, b) {
+        const ra = iaFinalReportSubjectRank(a, yearStr);
+        const rb = iaFinalReportSubjectRank(b, yearStr);
+        if (ra !== rb) return ra - rb;
+        return String(a).localeCompare(String(b));
+    });
+}
+
 function listIaReportSubjects(yearStr, sectionStr) {
     const fromConfig = getSubjectsForActiveYear(currentDept || 'BCA', yearStr, sectionStr) || [];
     const store = readInternalMarksStore();
@@ -6476,7 +6519,7 @@ function listIaReportSubjects(yearStr, sectionStr) {
         seen.add(low);
         out.push(display);
     });
-    return out.sort((a, b) => a.localeCompare(b));
+    return sortIaFinalReportSubjects(out, yearStr);
 }
 
 function renderIaMarksGrid(yearStr, sectionStr, subject, rollObjects) {
