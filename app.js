@@ -4005,6 +4005,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initHODPortal();
     initShortageCalculator();
+    initInternalMarksModule();
 
     // Voice Actions
     if (micBtn) micBtn.addEventListener('click', toggleListening);
@@ -5356,6 +5357,8 @@ function initShortageCalculator() {
     const subTabShortage = document.getElementById('subTabShortageCalculator');
     const dailyContainer = document.getElementById('hodDailyInformerContainer');
     const shortageContainer = document.getElementById('hodShortageContainer');
+    const marksContainer = document.getElementById('hodInternalMarksContainer');
+    const subTabMarks = document.getElementById('subTabInternalMarks');
 
     const startRollInput = document.getElementById('shortageStartRoll');
     const endRollInput = document.getElementById('shortageEndRoll');
@@ -5376,15 +5379,19 @@ function initShortageCalculator() {
         subTabDaily.addEventListener('click', () => {
             subTabDaily.classList.add('active');
             subTabShortage.classList.remove('active');
+            if (subTabMarks) subTabMarks.classList.remove('active');
             dailyContainer.style.display = 'block';
             shortageContainer.style.display = 'none';
+            if (marksContainer) marksContainer.style.display = 'none';
         });
 
         subTabShortage.addEventListener('click', () => {
             subTabShortage.classList.add('active');
             subTabDaily.classList.remove('active');
+            if (subTabMarks) subTabMarks.classList.remove('active');
             shortageContainer.style.display = 'block';
             dailyContainer.style.display = 'none';
+            if (marksContainer) marksContainer.style.display = 'none';
             updateShortageSubjectDropdown();
         });
     }
@@ -6120,6 +6127,903 @@ function downloadOfficialShortageExcel(meta, shortageList) {
     a.click();
     document.body.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1500);
+}
+
+
+// ==========================================
+// INTERNAL MARKS (2 tests, max 10) + ACADEMIC PERFORMANCE REPORT
+// Attendance / shortage logic above is unchanged.
+// ==========================================
+
+const IA_MAX_MARKS = 10;
+const IA_MARKS_STORE_KEY = 'mgm_bca_internal_marks';
+let currentIaRollObjects = [];
+
+function readInternalMarksStore() {
+    try {
+        const raw = localStorage.getItem(IA_MARKS_STORE_KEY);
+        const obj = raw ? JSON.parse(raw) : {};
+        return obj && typeof obj === 'object' ? obj : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function writeInternalMarksStore(store) {
+    try {
+        localStorage.setItem(IA_MARKS_STORE_KEY, JSON.stringify(store || {}));
+    } catch (e) {}
+}
+
+function iaRecordKey(yearStr, sectionStr, subject, roll) {
+    return [
+        'BCA',
+        yearStr || '',
+        sectionStr || '',
+        String(subject || '').trim().toLowerCase(),
+        String(roll || '').trim().toUpperCase()
+    ].join('|');
+}
+
+function clampIaMark(val) {
+    if (val === '' || val == null) return '';
+    const s = String(val).trim();
+    if (!s) return '';
+    if (/^ab(s(ent)?)?$/i.test(s)) return 'AB';
+    const n = parseFloat(s);
+    if (isNaN(n)) return '';
+    if (n < 0) return 0;
+    if (n > IA_MAX_MARKS) return IA_MAX_MARKS;
+    return Math.round(n * 10) / 10;
+}
+
+function iaMarkIsNumeric(val) {
+    const v = clampIaMark(val);
+    return v !== '' && v !== 'AB' && !isNaN(parseFloat(v));
+}
+
+function iaInternalTotal(ia1, ia2) {
+    const a = clampIaMark(ia1);
+    const b = clampIaMark(ia2);
+    const n1 = iaMarkIsNumeric(a) ? parseFloat(a) : null;
+    const n2 = iaMarkIsNumeric(b) ? parseFloat(b) : null;
+    if (n1 == null && n2 == null) return '';
+    return (n1 || 0) + (n2 || 0);
+}
+
+const IA_ROSTER_KEY = 'mgm_bca_student_roster';
+
+function readStudentRoster() {
+    try {
+        const raw = localStorage.getItem(IA_ROSTER_KEY);
+        const obj = raw ? JSON.parse(raw) : {};
+        return obj && typeof obj === 'object' ? obj : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function writeStudentRoster(store) {
+    try { localStorage.setItem(IA_ROSTER_KEY, JSON.stringify(store || {})); } catch (e) {}
+}
+
+function iaRosterKey(yearStr, sectionStr, roll) {
+    return ['BCA', yearStr || '', sectionStr || '', String(roll || '').trim().toUpperCase()].join('|');
+}
+
+function getStudentRosterEntry(yearStr, sectionStr, roll) {
+    const store = readStudentRoster();
+    return store[iaRosterKey(yearStr, sectionStr, roll)] || { name: '', regNo: '' };
+}
+
+function setStudentRosterEntry(yearStr, sectionStr, roll, name, regNo) {
+    const store = readStudentRoster();
+    const prev = store[iaRosterKey(yearStr, sectionStr, roll)] || {};
+    store[iaRosterKey(yearStr, sectionStr, roll)] = {
+        name: name != null ? String(name).trim() : (prev.name || ''),
+        regNo: regNo != null ? String(regNo).trim() : (prev.regNo || '')
+    };
+    writeStudentRoster(store);
+}
+
+function parseMarksRollNumbers(sRollStr, eRollStr) {
+    const sStr = (sRollStr || '').trim();
+    const eStr = (eRollStr || '').trim();
+    let rawInput = '';
+    if (sStr && eStr) {
+        if (!sStr.includes('-') && !sStr.includes(',')) {
+            const eParts = eStr.split(',').map(p => p.trim());
+            const firstEndPart = eParts[0];
+            if (firstEndPart && !firstEndPart.includes('-')) {
+                const remainingEParts = eParts.slice(1).join(', ');
+                rawInput = sStr + '-' + firstEndPart + (remainingEParts ? ', ' + remainingEParts : '');
+            } else {
+                rawInput = sStr + ', ' + eStr;
+            }
+        } else {
+            rawInput = sStr + ', ' + eStr;
+        }
+    } else {
+        rawInput = sStr || eStr;
+    }
+
+    const rollObjects = [];
+    const seenNums = new Set();
+    rawInput.split(',').forEach(part => {
+        part = part.trim();
+        if (!part) return;
+        if (part.includes('-')) {
+            const bits = part.split('-').map(p => p.trim());
+            const startPart = bits[0];
+            const endPart = bits[1];
+            const prefixMatch = startPart.match(/^([A-Za-z]+)?(\d+)$/);
+            const prefix = prefixMatch && prefixMatch[1] ? prefixMatch[1].toUpperCase() : '';
+            const padLen = prefixMatch && prefixMatch[2] ? prefixMatch[2].length : 0;
+            const sNum = parseInt(String(startPart).replace(/\D/g, ''), 10);
+            const eNum = parseInt(String(endPart).replace(/\D/g, ''), 10);
+            if (!isNaN(sNum) && !isNaN(eNum)) {
+                const minNum = Math.min(sNum, eNum);
+                const maxNum = Math.max(sNum, eNum);
+                for (let num = minNum; num <= maxNum; num++) {
+                    if (!seenNums.has(num)) {
+                        seenNums.add(num);
+                        const code = prefix ? prefix + String(num).padStart(padLen, '0') : String(num);
+                        rollObjects.push({ code: code, num: num });
+                    }
+                }
+            }
+        } else {
+            const prefixMatch = part.match(/^([A-Za-z]+)?(\d+)$/);
+            const prefix = prefixMatch && prefixMatch[1] ? prefixMatch[1].toUpperCase() : '';
+            const padLen = prefixMatch && prefixMatch[2] ? prefixMatch[2].length : 0;
+            const num = parseInt(part.replace(/\D/g, ''), 10);
+            if (!isNaN(num) && !seenNums.has(num)) {
+                seenNums.add(num);
+                const code = prefix ? prefix + String(num).padStart(padLen, '0') : String(num);
+                rollObjects.push({ code: code, num: num });
+            }
+        }
+    });
+    return rollObjects;
+}
+
+function defaultIaSemester(yearStr) {
+    const iso = typeof getTodayISOString === 'function' ? getTodayISOString() : '';
+    const m = parseInt((iso || '').substring(5, 7), 10) || (new Date().getMonth() + 1);
+    const odd = m >= 6 && m <= 11;
+    if (yearStr === 'First Year') return odd ? 'I' : 'II';
+    if (yearStr === 'Second Year') return odd ? 'III' : 'IV';
+    return odd ? 'V' : 'VI';
+}
+
+function monthBelongsToSemester(ym, sem) {
+    const mo = parseInt(String(ym || '').substring(5, 7), 10);
+    if (!mo) return false;
+    const odd = (sem === 'I' || sem === 'III' || sem === 'V');
+    if (odd) return mo >= 6 && mo <= 11;
+    return mo === 12 || mo <= 5;
+}
+
+function updateIaSubjectDropdown() {
+    const yrSelect = document.getElementById('iaYearSelect');
+    const secSelect = document.getElementById('iaSectionSelect');
+    const subjSelect = document.getElementById('iaSubjectSelect');
+    if (!subjSelect) return;
+    const yr = yrSelect ? yrSelect.value : 'First Year';
+    const sec = secSelect ? secSelect.value : 'A';
+    const subjects = getSubjectsForActiveYear(currentDept || 'BCA', yr, sec);
+    const history = readAllHistory();
+    const historySubjs = new Set();
+    history.forEach(item => {
+        if (!item.subject) return;
+        if (item.year && !isYearMatching(item.year, yr)) return;
+        if (item.section && !sectionsEqualForSubject(item.section, sec)) return;
+        historySubjs.add(item.subject.trim());
+    });
+    const store = readInternalMarksStore();
+    const prefix = 'BCA|' + yr + '|' + sec + '|';
+    Object.keys(store).forEach(k => {
+        if (k.indexOf(prefix) !== 0) return;
+        const parts = k.split('|');
+        if (parts[3]) historySubjs.add(parts[3]);
+    });
+    const allSubjs = Array.from(new Set([].concat(subjects, Array.from(historySubjs)))).filter(Boolean).sort();
+    const prev = subjSelect.value;
+    let html = '<option value="">Select subject</option>';
+    allSubjs.forEach(sub => {
+        html += '<option value="' + escapeHTML(sub) + '">' + escapeHTML(sub) + '</option>';
+    });
+    subjSelect.innerHTML = html;
+    if (prev && allSubjs.indexOf(prev) !== -1) subjSelect.value = prev;
+}
+
+function getIaMark(yearStr, sectionStr, subject, roll) {
+    const store = readInternalMarksStore();
+    return store[iaRecordKey(yearStr, sectionStr, subject, roll)] || { ia1: '', ia2: '' };
+}
+
+function upsertIaMark(yearStr, sectionStr, subject, roll, ia1, ia2, name, regNo) {
+    const store = readInternalMarksStore();
+    store[iaRecordKey(yearStr, sectionStr, subject, roll)] = {
+        ia1: clampIaMark(ia1),
+        ia2: clampIaMark(ia2),
+        updated: new Date().toISOString()
+    };
+    writeInternalMarksStore(store);
+    if (name != null || regNo != null) {
+        setStudentRosterEntry(yearStr, sectionStr, roll, name, regNo);
+    }
+}
+
+function iaAbsenteeMatchesRoll(absentStr, rObj) {
+    const cleanR = String(absentStr).trim().toUpperCase();
+    const rNum = parseInt(cleanR.replace(/\D/g, ''), 10);
+    if (cleanR === rObj.code) return true;
+    if (!isNaN(rNum) && rNum === rObj.num) return true;
+    if (!isNaN(rNum) && rNum > 0) {
+        const str1 = String(rNum);
+        const str2 = String(rObj.num);
+        if (str1.length >= 2 && str2.length >= 2) {
+            return str1.endsWith(str2) || str2.endsWith(str1);
+        }
+    }
+    return false;
+}
+
+function collectIaSubjectAttendance(yearStr, sectionStr, rollObj) {
+    const history = readAllHistory();
+    const bySubj = {};
+    history.forEach(item => {
+        if (!isYearMatching(item.year, yearStr)) return;
+        if (item.section && !sectionsEqualForSubject(item.section, sectionStr)) return;
+        if (item.stream && String(item.stream).toUpperCase() !== 'BCA') return;
+        const subj = String(item.subject || '').trim();
+        if (!subj) return;
+        const dateStr = normalizeHistoryDate(item.date) || getTodayISOString();
+        const mk = dateStr.substring(0, 7);
+        if (!bySubj[subj]) bySubj[subj] = { months: {}, held: 0, missed: 0 };
+        bySubj[subj].held++;
+        if (!bySubj[subj].months[mk]) bySubj[subj].months[mk] = { held: 0, missed: 0 };
+        bySubj[subj].months[mk].held++;
+        const rolls = normalizeRollNumbers(item.rollNumbers);
+        const missed = rolls.some(r => iaAbsenteeMatchesRoll(r, rollObj));
+        if (missed) {
+            bySubj[subj].missed++;
+            bySubj[subj].months[mk].missed++;
+        }
+    });
+    return bySubj;
+}
+
+function listIaReportSubjects(yearStr, sectionStr) {
+    const fromConfig = getSubjectsForActiveYear(currentDept || 'BCA', yearStr, sectionStr) || [];
+    const store = readInternalMarksStore();
+    const prefix = 'BCA|' + yearStr + '|' + sectionStr + '|';
+    const fromMarks = [];
+    Object.keys(store).forEach(k => {
+        if (k.indexOf(prefix) !== 0) return;
+        const subj = k.split('|')[3];
+        if (subj) fromMarks.push(subj);
+    });
+    const history = readAllHistory();
+    const fromHist = [];
+    history.forEach(item => {
+        if (!item.subject) return;
+        if (!isYearMatching(item.year, yearStr)) return;
+        if (item.section && !sectionsEqualForSubject(item.section, sectionStr)) return;
+        fromHist.push(item.subject.trim());
+    });
+    const seen = new Set();
+    const out = [];
+    [].concat(fromConfig, fromMarks, fromHist).forEach(s => {
+        const name = String(s || '').trim();
+        if (!name) return;
+        const low = name.toLowerCase();
+        if (seen.has(low)) return;
+        seen.add(low);
+        out.push(name);
+    });
+    return out.sort((a, b) => a.localeCompare(b));
+}
+
+function renderIaMarksGrid(yearStr, sectionStr, subject, rollObjects) {
+    const tbody = document.getElementById('iaMarksTableBody');
+    const card = document.getElementById('iaMarksEntryCard');
+    const heading = document.getElementById('iaEntryHeading');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    rollObjects.forEach(rObj => {
+        const rec = getIaMark(yearStr, sectionStr, subject, rObj.code);
+        const roster = getStudentRosterEntry(yearStr, sectionStr, rObj.code);
+        const ia1 = rec.ia1 === '' || rec.ia1 == null ? '' : rec.ia1;
+        const ia2 = rec.ia2 === '' || rec.ia2 == null ? '' : rec.ia2;
+        const total = iaInternalTotal(ia1, ia2);
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+            '<td style="font-weight:700;">' + escapeHTML(rObj.code) + '</td>' +
+            '<td><input type="text" class="form-input ia-meta-input" data-roll="' + escapeHTML(rObj.code) + '" data-which="regNo" placeholder="U05MG…" value="' + escapeHTML(roster.regNo || '') + '" /></td>' +
+            '<td><input type="text" class="form-input ia-meta-input" data-roll="' + escapeHTML(rObj.code) + '" data-which="name" placeholder="Name" value="' + escapeHTML(roster.name || '') + '" /></td>' +
+            '<td><input type="text" inputmode="decimal" class="form-input ia-mark-input" data-roll="' + escapeHTML(rObj.code) + '" data-which="ia1" placeholder="0–10 / AB" value="' + escapeHTML(String(ia1)) + '" /></td>' +
+            '<td><input type="text" inputmode="decimal" class="form-input ia-mark-input" data-roll="' + escapeHTML(rObj.code) + '" data-which="ia2" placeholder="0–10 / AB" value="' + escapeHTML(String(ia2)) + '" /></td>' +
+            '<td class="ia-total-cell" data-roll="' + escapeHTML(rObj.code) + '">' + (total === '' ? '' : total) + '</td>';
+        tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll('.ia-mark-input').forEach(inp => {
+        inp.addEventListener('input', () => {
+            const roll = inp.getAttribute('data-roll');
+            const rowInputs = tbody.querySelectorAll('.ia-mark-input[data-roll="' + roll + '"]');
+            let a = '', b = '';
+            rowInputs.forEach(el => {
+                if (el.getAttribute('data-which') === 'ia1') a = el.value;
+                if (el.getAttribute('data-which') === 'ia2') b = el.value;
+            });
+            const cell = tbody.querySelector('.ia-total-cell[data-roll="' + roll + '"]');
+            if (cell) {
+                const tot = iaInternalTotal(a, b);
+                cell.textContent = tot === '' ? '' : tot;
+            }
+        });
+    });
+    if (card) card.style.display = 'block';
+    if (heading) heading.textContent = subject + ' — ' + yearStr + ' Sec ' + sectionStr + ' (' + rollObjects.length + ' students)';
+}
+
+function collectIaGridRows() {
+    const tbody = document.getElementById('iaMarksTableBody');
+    if (!tbody) return [];
+    const byRoll = {};
+    tbody.querySelectorAll('.ia-mark-input, .ia-meta-input').forEach(inp => {
+        const roll = inp.getAttribute('data-roll');
+        if (!byRoll[roll]) byRoll[roll] = { roll: roll, ia1: '', ia2: '', name: '', regNo: '' };
+        const which = inp.getAttribute('data-which');
+        byRoll[roll][which] = inp.value;
+    });
+    return Object.keys(byRoll).map(k => byRoll[k]);
+}
+
+function iaLooksLikeRegNo(s) {
+    const t = String(s || '').trim();
+    if (!t) return false;
+    if (/^u\d/i.test(t)) return true;
+    if (/mg\d/i.test(t)) return true;
+    return /^[A-Za-z0-9\/-]{8,}$/.test(t) && /\d/.test(t) && /[A-Za-z]/.test(t);
+}
+
+function iaLooksLikeHeader(parts) {
+    const joined = parts.join(' ').toLowerCase();
+    return joined.indexOf('roll') !== -1 || joined.indexOf('name') !== -1 || joined.indexOf('reg') !== -1 || joined.indexOf('sl') !== -1;
+}
+
+function iaFindRollObject(token, rollObjects) {
+    const clean = String(token || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!clean || !rollObjects || !rollObjects.length) return null;
+    const num = parseInt(clean.replace(/\D/g, ''), 10);
+    for (let i = 0; i < rollObjects.length; i++) {
+        const rObj = rollObjects[i];
+        if (rObj.code === clean) return rObj;
+        if (!isNaN(num) && rObj.num === num) return rObj;
+        if (!isNaN(num) && num > 0) {
+            const str1 = String(num);
+            const str2 = String(rObj.num);
+            if (str1.length >= 2 && str2.length >= 2 && (str1.endsWith(str2) || str2.endsWith(str1))) return rObj;
+        }
+    }
+    return null;
+}
+
+function parseIaClassListText(text) {
+    const rows = [];
+    String(text || '').split(/\r?\n/).forEach(function (line) {
+        line = line.trim();
+        if (!line) return;
+        const parts = (line.indexOf('\t') !== -1 ? line.split('\t') : line.split(',')).map(function (p) { return p.trim(); }).filter(function (p) { return p !== ''; });
+        if (parts.length < 2) return;
+        if (iaLooksLikeHeader(parts)) return;
+
+        let roll = '', regNo = '', name = '';
+        const firstNum = parseInt(String(parts[0]).replace(/\D/g, ''), 10);
+        const firstIsSerial = parts.length >= 3 && !isNaN(firstNum) && firstNum > 0 && firstNum <= 200 && String(parts[0]).replace(/\D/g, '').length <= 3;
+
+        if (firstIsSerial) {
+            roll = parts[1] || '';
+            if (parts.length >= 4) {
+                regNo = parts[2] || '';
+                name = parts.slice(3).join(' ');
+            } else if (parts.length === 3) {
+                if (iaLooksLikeRegNo(parts[2])) regNo = parts[2];
+                else name = parts[2];
+            }
+        } else {
+            roll = parts[0];
+            if (parts.length === 2) {
+                name = parts[1];
+            } else if (iaLooksLikeRegNo(parts[1])) {
+                regNo = parts[1];
+                name = parts.slice(2).join(' ');
+            } else {
+                name = parts.slice(1).join(' ');
+            }
+        }
+        if (!roll) return;
+        rows.push({ roll: roll, regNo: regNo, name: name });
+    });
+    return rows;
+}
+
+function applyIaClassListToGrid(text, yearStr, sectionStr, rollObjects) {
+    const parsed = parseIaClassListText(text);
+    if (!parsed.length) return 0;
+    const tbody = document.getElementById('iaMarksTableBody');
+    let filled = 0;
+    parsed.forEach(function (row) {
+        const rObj = iaFindRollObject(row.roll, rollObjects);
+        const rollCode = rObj ? rObj.code : String(row.roll || '').trim().toUpperCase();
+        if (!rollCode) return;
+        setStudentRosterEntry(yearStr, sectionStr, rollCode, row.name, row.regNo);
+        if (tbody) {
+            const nameInp = tbody.querySelector('.ia-meta-input[data-roll="' + rollCode + '"][data-which="name"]');
+            const regInp = tbody.querySelector('.ia-meta-input[data-roll="' + rollCode + '"][data-which="regNo"]');
+            if (nameInp && row.name) nameInp.value = row.name;
+            if (regInp && row.regNo) regInp.value = row.regNo;
+            if (nameInp || regInp) filled++;
+        } else {
+            filled++;
+        }
+    });
+    return filled;
+}
+
+function saveIaMarksFromGrid(yearStr, sectionStr, subject) {
+    const rows = collectIaGridRows();
+    rows.forEach(row => {
+        upsertIaMark(yearStr, sectionStr, subject, row.roll, row.ia1, row.ia2, row.name, row.regNo);
+    });
+    const targetUrl = getWebhookUrl('BCA');
+    if (targetUrl && typeof postWithRetry === 'function') {
+        const payload = withAuth({
+            action: 'save_internal_marks',
+            stream: 'BCA',
+            year: yearStr,
+            section: sectionStr,
+            subject: subject,
+            max: IA_MAX_MARKS,
+            marks: rows.map(r => ({
+                roll: r.roll,
+                ia1: clampIaMark(r.ia1),
+                ia2: clampIaMark(r.ia2),
+                name: r.name || '',
+                regNo: r.regNo || ''
+            }))
+        });
+        postWithRetry(targetUrl, payload).catch(function () {});
+    }
+    return rows.length;
+}
+
+function fetchIaMarksFromSheet(yearStr, sectionStr, subject, callback) {
+    const targetUrl = getWebhookUrl('BCA');
+    if (!targetUrl) {
+        if (callback) callback();
+        return;
+    }
+    const cbName = 'mgm_bca_ia_marks_cb_' + Date.now() + '_' + Math.floor(Math.random() * 1e6);
+    let done = false;
+    const timeout = setTimeout(function () {
+        if (done) return;
+        done = true;
+        if (callback) callback();
+    }, 12000);
+    window[cbName] = function (res) {
+        if (done) return;
+        done = true;
+        clearTimeout(timeout);
+        try { delete window[cbName]; } catch (e) {}
+        if (res && (res.result === 'success' || res.status === 'ok') && Array.isArray(res.marks)) {
+            const store = readInternalMarksStore();
+            res.marks.forEach(function (m) {
+                const roll = String(m.roll || '').trim().toUpperCase();
+                const subj = m.subject || subject;
+                if (!roll) return;
+                store[iaRecordKey(yearStr, sectionStr, subj, roll)] = {
+                    ia1: clampIaMark(m.ia1),
+                    ia2: clampIaMark(m.ia2),
+                    updated: m.updated || new Date().toISOString()
+                };
+                if (m.name || m.regNo) {
+                    setStudentRosterEntry(yearStr, sectionStr, roll, m.name || '', m.regNo || '');
+                }
+            });
+            writeInternalMarksStore(store);
+        }
+        if (callback) callback();
+    };
+    const params = new URLSearchParams({
+        action: 'get_internal_marks',
+        stream: 'BCA',
+        year: yearStr,
+        section: sectionStr,
+        subject: subject,
+        callback: cbName
+    });
+    appendAuthToParams(params);
+    const scriptEl = document.createElement('script');
+    scriptEl.src = targetUrl + (targetUrl.indexOf('?') >= 0 ? '&' : '?') + params.toString();
+    scriptEl.onerror = function () {
+        if (done) return;
+        done = true;
+        clearTimeout(timeout);
+        try { delete window[cbName]; } catch (e) {}
+        if (callback) callback();
+    };
+    document.body.appendChild(scriptEl);
+}
+
+function iaAcademicYearLabel() {
+    const ay = shortageAcademicYearParts();
+    return '20' + ay.startYY + '-' + ay.endYY;
+}
+
+function buildOfficialIaMarksTable(yearStr, sectionStr, subject, rollObjects, semester) {
+    const sem = semester || defaultIaSemester(yearStr);
+    const classBit = 'BCA (' + (sectionStr === 'ALL' ? 'Combined' : sectionStr) + ')';
+    const title = 'Internal Marks ' + iaAcademicYearLabel() + ', ' + sem + ' Sem. ' + classBit;
+    const td = 'border:1px solid #000;padding:4px 6px;font-size:12px;';
+    let rows = '';
+    rollObjects.forEach(function (rObj, idx) {
+        const rec = getIaMark(yearStr, sectionStr, subject, rObj.code);
+        const roster = getStudentRosterEntry(yearStr, sectionStr, rObj.code);
+        const ia1 = clampIaMark(rec.ia1);
+        const ia2 = clampIaMark(rec.ia2);
+        const internal = iaInternalTotal(ia1, ia2);
+        rows += '<tr>' +
+            '<td style="' + td + 'text-align:center;">' + (idx + 1) + '</td>' +
+            '<td style="' + td + 'text-align:center;font-weight:700;">' + escapeHTML(rObj.code) + '</td>' +
+            '<td style="' + td + '">' + escapeHTML(roster.regNo || '') + '</td>' +
+            '<td style="' + td + 'text-align:left;">' + escapeHTML(roster.name || '') + '</td>' +
+            '<td style="' + td + 'text-align:center;font-weight:700;">' + escapeHTML(String(ia1)) + '</td>' +
+            '<td style="' + td + 'text-align:center;font-weight:700;">' + escapeHTML(String(ia2)) + '</td>' +
+            '<td style="' + td + '"></td><td style="' + td + '"></td>' +
+            '<td style="' + td + 'text-align:center;font-weight:700;">' + (internal === '' ? '' : internal) + '</td>' +
+            '</tr>';
+    });
+    return '<div style="font-family:\'Times New Roman\',Times,serif;color:#000;background:#fff;">' +
+        '<table style="width:100%;border-collapse:collapse;border:1px solid #000;">' +
+        '<tr><td colspan="6" style="' + td + 'font-size:14px;font-weight:800;text-align:left;">' + escapeHTML(title) + '</td>' +
+        '<td colspan="3" style="' + td + 'font-size:13px;font-weight:700;text-align:right;">Subject: ' + escapeHTML(subject || '') + '</td></tr>' +
+        '<tr>' +
+        '<th rowspan="2" style="' + td + 'width:40px;">Sl.<br>No</th>' +
+        '<th rowspan="2" style="' + td + '">Roll<br>No.</th>' +
+        '<th rowspan="2" style="' + td + '">REG.No.</th>' +
+        '<th rowspan="2" style="' + td + 'text-align:left;">Name</th>' +
+        '<th colspan="2" style="' + td + '">INT MARKS OUT OF</th>' +
+        '<th style="' + td + '"></th><th style="' + td + '"></th>' +
+        '<th rowspan="2" style="' + td + '">Internal</th>' +
+        '</tr>' +
+        '<tr>' +
+        '<th style="' + td + '">10<br>I TEST</th>' +
+        '<th style="' + td + '">10<br>II TEST</th>' +
+        '<th style="' + td + '"></th><th style="' + td + '"></th>' +
+        '</tr>' +
+        rows +
+        '</table></div>';
+}
+
+function buildIaClassMarksSheetHtml(yearStr, sectionStr, subject, rollObjects, semester) {
+    const table = buildOfficialIaMarksTable(yearStr, sectionStr, subject, rollObjects, semester);
+    return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Internal Marks</title>' +
+        '<style>body{font-family:Times New Roman,Times,serif;margin:14px;color:#000;} .no-print{margin-bottom:12px;} @media print{.no-print{display:none!important;} @page{size:A4 landscape;margin:8mm;}}</style></head><body>' +
+        '<div class="no-print"><button type="button" onclick="window.print()">Print</button></div>' +
+        table + '</body></html>';
+}
+
+function downloadHtmlAsExcel(innerHtml, filename) {
+    const html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"></head><body>' + innerHtml + '</body></html>';
+    const blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename || 'MGM_Internal_Marks.xls';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1500);
+}
+
+function buildAcademicPerformancePage(yearStr, sectionStr, semester, rollObj, subjects) {
+    const attMap = collectIaSubjectAttendance(yearStr, sectionStr, rollObj);
+    const monthSet = {};
+    Object.keys(attMap).forEach(function (subj) {
+        Object.keys(attMap[subj].months || {}).forEach(function (mk) {
+            if (monthBelongsToSemester(mk, semester)) monthSet[mk] = true;
+        });
+    });
+    let monthKeys = Object.keys(monthSet).sort();
+    if (monthKeys.length === 0) {
+        Object.keys(attMap).forEach(function (subj) {
+            Object.keys(attMap[subj].months || {}).forEach(function (mk) { monthSet[mk] = true; });
+        });
+        monthKeys = Object.keys(monthSet).sort();
+    }
+    if (monthKeys.length > 4) monthKeys = monthKeys.slice(-4);
+    while (monthKeys.length < 4) monthKeys.push('');
+
+    let monthHead = '';
+    let pairHead = '';
+    monthKeys.forEach(function (mk) {
+        const lab = mk ? formatShortageMonthLabel(mk) : '';
+        monthHead += '<th colspan="2" style="border:1px solid #000;padding:3px 4px;font-size:11px;">' + escapeHTML(lab) + '</th>';
+        pairHead += '<th style="border:1px solid #000;padding:2px 4px;font-size:10px;width:28px;">1</th><th style="border:1px solid #000;padding:2px 4px;font-size:10px;width:28px;">2</th>';
+    });
+
+    let bodyRows = '';
+    const rowSubjects = subjects.slice();
+    while (rowSubjects.length < 12) rowSubjects.push('');
+    rowSubjects.forEach(function (subj) {
+        let ia1 = '', ia2 = '';
+        if (subj) {
+            const rec = getIaMark(yearStr, sectionStr, subj, rollObj.code);
+            ia1 = clampIaMark(rec.ia1);
+            ia2 = clampIaMark(rec.ia2);
+        }
+        let attCells = '';
+        monthKeys.forEach(function (mk) {
+            let held = '', att = '';
+            if (subj && mk && attMap[subj] && attMap[subj].months[mk]) {
+                held = attMap[subj].months[mk].held;
+                att = Math.max(0, held - (attMap[subj].months[mk].missed || 0));
+            }
+            attCells += '<td style="border:1px solid #000;padding:3px 4px;text-align:center;font-size:11px;">' + held + '</td>' +
+                '<td style="border:1px solid #000;padding:3px 4px;text-align:center;font-size:11px;">' + att + '</td>';
+        });
+        bodyRows += '<tr><td style="border:1px solid #000;padding:3px 6px;font-size:12px;">' + escapeHTML(subj) + '</td>' +
+            '<td style="border:1px solid #000;padding:3px 4px;text-align:center;font-size:12px;">' + escapeHTML(String(ia1)) + '</td>' +
+            '<td style="border:1px solid #000;padding:3px 4px;text-align:center;font-size:12px;">' + escapeHTML(String(ia2)) + '</td>' +
+            attCells + '</tr>';
+    });
+
+    const roster = getStudentRosterEntry(yearStr, sectionStr, rollObj.code);
+    const classLabel = escapeHTML(shortageClassLabel(yearStr, sectionStr));
+    const nameLine = roster.name ? (' &nbsp; <strong>NAME:</strong> ' + escapeHTML(roster.name)) : '';
+    const regLine = roster.regNo ? (' &nbsp; <strong>REG.No:</strong> ' + escapeHTML(roster.regNo)) : '';
+    return '<div class="ap-page" style="page-break-after:always;margin-bottom:18px;">' +
+        '<div style="text-align:center;font-weight:800;font-size:15px;margin-bottom:2px;">MAHATMA GANDHI MEMORIAL COLLEGE, UDUPI-2</div>' +
+        '<div style="text-align:center;font-weight:800;font-size:16px;">' + escapeHTML(semester) + ' Semester</div>' +
+        '<div style="text-align:center;font-weight:700;font-size:15px;margin-bottom:8px;">Academic Performance</div>' +
+        '<div style="font-size:13px;margin-bottom:8px;"><strong>CLASS:</strong> ' + classLabel +
+        ' &nbsp; <strong>ROLL:</strong> ' + escapeHTML(rollObj.code) + nameLine + regLine + '</div>' +
+        '<table style="width:100%;border-collapse:collapse;border:1px solid #000;font-family:Times New Roman,Times,serif;">' +
+        '<tr><th rowspan="3" style="border:1px solid #000;padding:4px;font-size:12px;width:28%;">Subject</th>' +
+        '<th colspan="2" style="border:1px solid #000;padding:4px;font-size:12px;">Test / Assignment</th>' +
+        '<th colspan="8" style="border:1px solid #000;padding:4px;font-size:12px;">Attendance *</th></tr>' +
+        '<tr><th colspan="2" style="border:1px solid #000;padding:3px;font-size:11px;"></th>' + monthHead + '</tr>' +
+        '<tr><th style="border:1px solid #000;padding:3px;font-size:11px;">I</th><th style="border:1px solid #000;padding:3px;font-size:11px;">II</th>' + pairHead + '</tr>' +
+        bodyRows +
+        '<tr><td style="border:1px solid #000;padding:14px 6px 6px;font-size:12px;">Signature of the Parent</td><td style="border:1px solid #000;"></td><td style="border:1px solid #000;"></td><td colspan="8" style="border:1px solid #000;"></td></tr>' +
+        '<tr><td style="border:1px solid #000;padding:14px 6px 6px;font-size:12px;">Signature of the Academic Advisor</td><td colspan="10" style="border:1px solid #000;"></td></tr>' +
+        '</table>' +
+        '<div style="font-size:11px;margin-top:6px;font-style:italic;">* 1. Maximum Classes held &nbsp;&nbsp; 2. Number of Classes attended &nbsp;&nbsp; Tests: Max 10 each</div>' +
+        '</div>';
+}
+
+function printHtmlInNewWindow(html) {
+    const w = window.open('', '_blank');
+    if (!w) {
+        alert('Please allow pop-ups to print.');
+        return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(function () {
+        try { w.print(); } catch (e) {}
+    }, 400);
+}
+
+function printAcademicPerformanceReport(yearStr, sectionStr, semester, rollObjects) {
+    const pages = buildAcademicPerformancePagesHtml(yearStr, sectionStr, semester, rollObjects);
+    const html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Academic Performance</title>' +
+        '<style>body{font-family:Times New Roman,Times,serif;color:#000;background:#fff;margin:12px;} .no-print{margin-bottom:12px;} @media print{.no-print{display:none!important;} .ap-page{page-break-after:always;} @page{size:A4 portrait;margin:10mm;}}</style></head><body>' +
+        '<div class="no-print"><button type="button" onclick="window.print()">Print</button></div>' +
+        pages + '</body></html>';
+    printHtmlInNewWindow(html);
+}
+
+function buildAcademicPerformancePagesHtml(yearStr, sectionStr, semester, rollObjects) {
+    const subjects = listIaReportSubjects(yearStr, sectionStr);
+    let pages = '';
+    rollObjects.forEach(function (rObj) {
+        pages += buildAcademicPerformancePage(yearStr, sectionStr, semester, rObj, subjects);
+    });
+    return pages;
+}
+
+function initInternalMarksModule() {
+    const subTabMarks = document.getElementById('subTabInternalMarks');
+    const marksContainer = document.getElementById('hodInternalMarksContainer');
+    const subTabDaily = document.getElementById('subTabDailyInformer');
+    const subTabShortage = document.getElementById('subTabShortageCalculator');
+    const dailyContainer = document.getElementById('hodDailyInformerContainer');
+    const shortageContainer = document.getElementById('hodShortageContainer');
+    const yearSelect = document.getElementById('iaYearSelect');
+    const sectionSelect = document.getElementById('iaSectionSelect');
+    const subjectSelect = document.getElementById('iaSubjectSelect');
+    const semSelect = document.getElementById('iaSemesterSelect');
+    const startRoll = document.getElementById('iaStartRoll');
+    const endRoll = document.getElementById('iaEndRoll');
+    const loadBtn = document.getElementById('iaLoadRollsBtn');
+    const saveBtn = document.getElementById('iaSaveMarksBtn');
+    const applyListBtn = document.getElementById('iaApplyClassListBtn');
+    const classListPaste = document.getElementById('iaClassListPaste');
+    const printClassBtn = document.getElementById('iaPrintClassBtn');
+    const excelClassBtn = document.getElementById('iaExcelClassBtn');
+    const printFinalBtn = document.getElementById('iaPrintFinalBtn');
+    const excelFinalBtn = document.getElementById('iaExcelFinalBtn');
+
+    if (subTabMarks && marksContainer) {
+        subTabMarks.addEventListener('click', function () {
+            subTabMarks.classList.add('active');
+            if (subTabDaily) subTabDaily.classList.remove('active');
+            if (subTabShortage) subTabShortage.classList.remove('active');
+            marksContainer.style.display = 'block';
+            if (dailyContainer) dailyContainer.style.display = 'none';
+            if (shortageContainer) shortageContainer.style.display = 'none';
+            updateIaSubjectDropdown();
+            if (yearSelect && semSelect) semSelect.value = defaultIaSemester(yearSelect.value);
+        });
+    }
+
+    const refreshSubj = function () {
+        updateIaSubjectDropdown();
+        if (yearSelect && semSelect) semSelect.value = defaultIaSemester(yearSelect.value);
+    };
+    if (yearSelect) yearSelect.addEventListener('change', refreshSubj);
+    if (sectionSelect) sectionSelect.addEventListener('change', updateIaSubjectDropdown);
+    updateIaSubjectDropdown();
+    if (yearSelect && semSelect) semSelect.value = defaultIaSemester(yearSelect.value);
+
+    if (loadBtn) {
+        loadBtn.addEventListener('click', function () {
+            const yr = yearSelect ? yearSelect.value : 'First Year';
+            const sec = sectionSelect ? sectionSelect.value : 'A';
+            const subj = subjectSelect ? subjectSelect.value : '';
+            const sRoll = startRoll ? startRoll.value.trim() : '';
+            const eRoll = endRoll ? endRoll.value.trim() : '';
+            if (!subj) {
+                alert('Please select a subject for internal marks entry.');
+                if (subjectSelect) subjectSelect.focus();
+                return;
+            }
+            if (!sRoll && !eRoll) {
+                alert('Please enter Roll No. range (e.g. S0001 to S0060).');
+                if (startRoll) startRoll.focus();
+                return;
+            }
+            const rolls = parseMarksRollNumbers(sRoll, eRoll);
+            if (rolls.length === 0) {
+                alert('Invalid roll numbers. Example: S0001-S0060');
+                return;
+            }
+            currentIaRollObjects = rolls;
+            const btnText = document.getElementById('iaLoadRollsBtnText');
+            if (btnText) btnText.textContent = 'Loading…';
+            fetchIaMarksFromSheet(yr, sec, subj, function () {
+                renderIaMarksGrid(yr, sec, subj, rolls);
+                if (btnText) btnText.textContent = '📋 Load Students for Marks Entry';
+            });
+        });
+    }
+
+    if (applyListBtn) {
+        applyListBtn.addEventListener('click', function () {
+            const yr = yearSelect ? yearSelect.value : 'First Year';
+            const sec = sectionSelect ? sectionSelect.value : 'A';
+            const text = classListPaste ? classListPaste.value : '';
+            if (!String(text || '').trim()) {
+                alert('Paste the class list first (from Excel: Roll, REG.No, Name).');
+                if (classListPaste) classListPaste.focus();
+                return;
+            }
+            if (!currentIaRollObjects.length) {
+                alert('Load students first, then paste the class list.');
+                return;
+            }
+            const n = applyIaClassListToGrid(text, yr, sec, currentIaRollObjects);
+            if (typeof showCustomToast === 'function') {
+                showCustomToast('Class list applied', n + ' name(s) filled. Saved for this section — all subjects.');
+            } else {
+                alert('Filled ' + n + ' name(s). They will be reused for every subject.');
+            }
+        });
+    }
+
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function () {
+            const yr = yearSelect ? yearSelect.value : 'First Year';
+            const sec = sectionSelect ? sectionSelect.value : 'A';
+            const subj = subjectSelect ? subjectSelect.value : '';
+            if (!subj || currentIaRollObjects.length === 0) {
+                alert('Load students first, then save marks.');
+                return;
+            }
+            const n = saveIaMarksFromGrid(yr, sec, subj);
+            if (typeof showCustomToast === 'function') {
+                showCustomToast('Internal marks saved', n + ' students · ' + subj + ' (max 10 per test)');
+            } else {
+                alert('Saved marks for ' + n + ' students.');
+            }
+        });
+    }
+
+    if (printClassBtn) {
+        printClassBtn.addEventListener('click', function () {
+            const yr = yearSelect ? yearSelect.value : 'First Year';
+            const sec = sectionSelect ? sectionSelect.value : 'A';
+            const subj = subjectSelect ? subjectSelect.value : '';
+            const sem = semSelect ? semSelect.value : defaultIaSemester(yr);
+            if (!subj || currentIaRollObjects.length === 0) {
+                alert('Load students first.');
+                return;
+            }
+            saveIaMarksFromGrid(yr, sec, subj);
+            printHtmlInNewWindow(buildIaClassMarksSheetHtml(yr, sec, subj, currentIaRollObjects, sem));
+        });
+    }
+
+    if (excelClassBtn) {
+        excelClassBtn.addEventListener('click', function () {
+            const yr = yearSelect ? yearSelect.value : 'First Year';
+            const sec = sectionSelect ? sectionSelect.value : 'A';
+            const subj = subjectSelect ? subjectSelect.value : '';
+            const sem = semSelect ? semSelect.value : defaultIaSemester(yr);
+            if (!subj || currentIaRollObjects.length === 0) {
+                alert('Load students first.');
+                return;
+            }
+            saveIaMarksFromGrid(yr, sec, subj);
+            const table = buildOfficialIaMarksTable(yr, sec, subj, currentIaRollObjects, sem);
+            const fname = 'MGM_Internal_Marks_' + String(subj).replace(/[^\w]+/g, '_') + '.xls';
+            downloadHtmlAsExcel(table, fname);
+        });
+    }
+
+    if (printFinalBtn) {
+        printFinalBtn.addEventListener('click', function () {
+            const yr = yearSelect ? yearSelect.value : 'First Year';
+            const sec = sectionSelect ? sectionSelect.value : 'A';
+            const sem = semSelect ? semSelect.value : 'I';
+            const sRoll = startRoll ? startRoll.value.trim() : '';
+            const eRoll = endRoll ? endRoll.value.trim() : '';
+            let rolls = currentIaRollObjects;
+            if (!rolls.length) rolls = parseMarksRollNumbers(sRoll, eRoll);
+            if (!rolls.length) {
+                alert('Enter a roll range and load students (or print after loading).');
+                return;
+            }
+            const subj = subjectSelect ? subjectSelect.value : '';
+            if (subj && rolls.length) saveIaMarksFromGrid(yr, sec, subj);
+            printAcademicPerformanceReport(yr, sec, sem, rolls);
+        });
+    }
+
+    if (excelFinalBtn) {
+        excelFinalBtn.addEventListener('click', function () {
+            const yr = yearSelect ? yearSelect.value : 'First Year';
+            const sec = sectionSelect ? sectionSelect.value : 'A';
+            const sem = semSelect ? semSelect.value : 'I';
+            const sRoll = startRoll ? startRoll.value.trim() : '';
+            const eRoll = endRoll ? endRoll.value.trim() : '';
+            let rolls = currentIaRollObjects;
+            if (!rolls.length) rolls = parseMarksRollNumbers(sRoll, eRoll);
+            if (!rolls.length) {
+                alert('Enter a roll range and load students first.');
+                return;
+            }
+            const subj = subjectSelect ? subjectSelect.value : '';
+            if (subj && rolls.length) saveIaMarksFromGrid(yr, sec, subj);
+            const pages = buildAcademicPerformancePagesHtml(yr, sec, sem, rolls);
+            downloadHtmlAsExcel(pages, 'MGM_Academic_Performance_' + sem + '_Sem.xls');
+        });
+    }
 }
 
 
