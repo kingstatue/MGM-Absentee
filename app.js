@@ -2580,13 +2580,77 @@ function historySectionFilterMatches(itemSection, filterVal) {
     return historySectionsEquivalent(itemSection, filterVal);
 }
 
+function historySubjectFilterMatches(itemSubject, filterVal) {
+    if (!filterVal || filterVal === 'ALL') return true;
+    if (typeof subjectsAreSame === 'function') return subjectsAreSame(itemSubject, filterVal);
+    return String(itemSubject || '').trim().toLowerCase() === String(filterVal || '').trim().toLowerCase();
+}
+
+/** Subject options for history drawer only — built from current year/section/date slice. */
+function populateHistorySubjectFilter() {
+    const subjectFilter = document.getElementById('allHistorySubjectFilter');
+    if (!subjectFilter) return;
+
+    const yearFilter = document.getElementById('allHistoryYearFilter');
+    const sectionFilter = document.getElementById('allHistorySectionFilter');
+    const dateFilter = document.getElementById('allHistoryDateFilter');
+    const selYear = yearFilter ? yearFilter.value : 'ALL';
+    const selSection = sectionFilter ? sectionFilter.value : 'ALL';
+    const selDate = (currentHistoryTabMode === 'ALL' && dateFilter && dateFilter.value)
+        ? normalizeHistoryDate(dateFilter.value)
+        : '';
+    const prev = subjectFilter.value || 'ALL';
+
+    let base = (currentHistoryTabMode === 'ALL')
+        ? readAllHistory().filter(item => (item.stream || 'BCA') === currentDept)
+        : getTodayEntries();
+
+    const subjects = [];
+    const seen = new Set();
+    base.forEach(item => {
+        if (selYear && selYear !== 'ALL' && isYearMatching(item.year, selYear) === false) return;
+        if (!historySectionFilterMatches(item.section, selSection)) return;
+        if (selDate && selDate !== '' && normalizeHistoryDate(item.date) !== selDate) return;
+        const subj = String(item.subject || '').trim();
+        if (!subj) return;
+        const low = subj.toLowerCase();
+        if (seen.has(low)) return;
+        seen.add(low);
+        subjects.push(subj);
+    });
+    subjects.sort((a, b) => a.localeCompare(b));
+
+    subjectFilter.innerHTML = '';
+    const allOpt = document.createElement('option');
+    allOpt.value = 'ALL';
+    allOpt.textContent = 'All Subjects';
+    subjectFilter.appendChild(allOpt);
+    subjects.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s;
+        subjectFilter.appendChild(opt);
+    });
+
+    let keep = 'ALL';
+    if (prev && prev !== 'ALL') {
+        const match = Array.from(subjectFilter.options).find(o =>
+            o.value === prev || historySubjectFilterMatches(o.value, prev)
+        );
+        if (match) keep = match.value;
+    }
+    subjectFilter.value = keep;
+}
+
 function getActiveDrawerEntries() {
     const yearFilter = document.getElementById('allHistoryYearFilter');
     const sectionFilter = document.getElementById('allHistorySectionFilter');
+    const subjectFilter = document.getElementById('allHistorySubjectFilter');
     const dateFilter = document.getElementById('allHistoryDateFilter');
 
     const selYear = yearFilter ? yearFilter.value : 'ALL';
     const selSection = sectionFilter ? sectionFilter.value : 'ALL';
+    const selSubject = subjectFilter ? subjectFilter.value : 'ALL';
     const selDate = (currentHistoryTabMode === 'ALL' && dateFilter && dateFilter.value)
         ? normalizeHistoryDate(dateFilter.value)
         : '';
@@ -2598,6 +2662,7 @@ function getActiveDrawerEntries() {
     const matched = base.filter(item => {
         if (selYear && selYear !== 'ALL' && isYearMatching(item.year, selYear) === false) return false;
         if (!historySectionFilterMatches(item.section, selSection)) return false;
+        if (!historySubjectFilterMatches(item.subject, selSubject)) return false;
         if (selDate && selDate !== '' && normalizeHistoryDate(item.date) !== selDate) return false;
         return true;
     });
@@ -2638,6 +2703,7 @@ function updateHistoryTabStyles() {
 
 function renderHistoryList() {
     pruneOldHistory();
+    try { populateHistorySubjectFilter(); } catch (e) {}
     const displayEntries = getActiveDrawerEntries();
     updateTodayBadge();
     updateSyncButtonState();
@@ -4814,22 +4880,34 @@ document.addEventListener('DOMContentLoaded', () => {
     const tabAll = document.getElementById('historyTabAll');
     const yearFilterEl = document.getElementById('allHistoryYearFilter');
     const sectionFilterEl = document.getElementById('allHistorySectionFilter');
+    const subjectFilterEl = document.getElementById('allHistorySubjectFilter');
     const dateFilterEl = document.getElementById('allHistoryDateFilter');
     const clearFilterBtn = document.getElementById('clearAllHistoryFilterBtn');
 
     try { populateHistorySectionFilter(); } catch (e) {}
+    try { populateHistorySubjectFilter(); } catch (e) {}
 
     if (yearFilterEl) yearFilterEl.addEventListener('change', () => {
         try { populateHistorySectionFilter(); } catch (e) {}
+        try { populateHistorySubjectFilter(); } catch (e) {}
         renderHistoryList();
     });
-    if (sectionFilterEl) sectionFilterEl.addEventListener('change', () => renderHistoryList());
-    if (dateFilterEl) dateFilterEl.addEventListener('change', () => renderHistoryList());
+    if (sectionFilterEl) sectionFilterEl.addEventListener('change', () => {
+        try { populateHistorySubjectFilter(); } catch (e) {}
+        renderHistoryList();
+    });
+    if (subjectFilterEl) subjectFilterEl.addEventListener('change', () => renderHistoryList());
+    if (dateFilterEl) dateFilterEl.addEventListener('change', () => {
+        try { populateHistorySubjectFilter(); } catch (e) {}
+        renderHistoryList();
+    });
     if (clearFilterBtn) clearFilterBtn.addEventListener('click', () => {
         if (yearFilterEl) yearFilterEl.value = 'ALL';
         if (sectionFilterEl) sectionFilterEl.value = 'ALL';
+        if (subjectFilterEl) subjectFilterEl.value = 'ALL';
         if (dateFilterEl) dateFilterEl.value = '';
         try { populateHistorySectionFilter(); } catch (e) {}
+        try { populateHistorySubjectFilter(); } catch (e) {}
         renderHistoryList();
     });
 
