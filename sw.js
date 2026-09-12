@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'mgm-bca-absentee-informer';
-const CACHE_NAME = 'mgm-bca-absentee-informer-v181-year-aliases';
+const CACHE_NAME = 'mgm-bca-absentee-informer-v182-space-hdr';
 
 const ASSETS_TO_CACHE = [
   './',
