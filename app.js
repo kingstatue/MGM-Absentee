@@ -3953,28 +3953,44 @@ function parsePaperPasteText(text) {
 function renderPaperPastePreview(parsed) {
     const box = document.getElementById('paperPastePreview');
     if (!box) return;
-    if (!parsed.rows.length) {
-        box.style.display = 'block';
-        box.innerHTML = '<div style="color:#f87171;padding:8px;">Nothing to load. Check header blocks (Year | Section | Subject) and date lines.</div>';
+    box.hidden = false;
+    box.style.display = 'block';
+
+    if (!parsed || !parsed.rows || !parsed.rows.length) {
+        box.innerHTML =
+            '<div class="paper-paste-preview-title">Parsed preview</div>' +
+            '<div class="paper-paste-preview-empty">Nothing to load. Check header blocks (Year | Section | Subject) and date lines.</div>';
+        try { box.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
         return;
     }
-    let html = '';
-    if (parsed.errors.length) {
-        html += '<div style="color:#fbbf24;margin-bottom:6px;">' + parsed.errors.map(e => escapeHTML(e)).join('<br>') + '</div>';
+
+    let html = '<div class="paper-paste-preview-title">Parsed preview (' + parsed.rows.length + ' class' + (parsed.rows.length === 1 ? '' : 'es') + ')</div>';
+    if (parsed.errors && parsed.errors.length) {
+        html += '<div class="paper-paste-preview-warn">' + parsed.errors.map(e => escapeHTML(e)).join('<br>') + '</div>';
     }
-    html += '<table class="ia-marks-table" style="font-size:0.74rem;"><thead><tr><th>Date</th><th>Year</th><th>Sec</th><th>Subject</th><th>Slot</th><th>Absentees</th></tr></thead><tbody>';
+    html += '<div class="paper-paste-preview-scroll"><table class="paper-paste-preview-table"><thead><tr>' +
+        '<th>Date</th><th>Year</th><th>Sec</th><th>Subject</th><th>Slot</th><th>Absentees</th>' +
+        '</tr></thead><tbody>';
     parsed.rows.forEach(r => {
-        html += '<tr><td>' + escapeHTML(r.date) + '</td><td>' + escapeHTML(r.year) + '</td><td>' + escapeHTML(r.section) + '</td><td>' + escapeHTML(r.subject) + '</td><td>' + escapeHTML(r.slot) + '</td><td>' + escapeHTML(r.rolls || 'NIL') + '</td></tr>';
+        html += '<tr><td>' + escapeHTML(r.date) + '</td><td>' + escapeHTML(r.year) + '</td><td>' +
+            escapeHTML(r.section) + '</td><td>' + escapeHTML(r.subject) + '</td><td>' +
+            escapeHTML(r.slot) + '</td><td>' + escapeHTML(r.rolls || 'NIL') + '</td></tr>';
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     box.innerHTML = html;
-    box.style.display = 'block';
+    try { box.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e2) {}
 }
 
 function openPaperPasteModal() {
     const modal = document.getElementById('paperPasteModal');
     if (!modal) return;
     paperPasteCloneSelect('directSlotSelect', 'paperPasteSlot');
+    const box = document.getElementById('paperPastePreview');
+    if (box) {
+        box.hidden = true;
+        box.style.display = 'none';
+        box.innerHTML = '';
+    }
     modal.classList.add('active');
 }
 
@@ -5190,7 +5206,7 @@ function initSubjectManager() {
 // Version upgrade check to update stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    const APP_VER = 'v29.17-flex-paste';
+    const APP_VER = 'v29.30-paste-preview';
     if (asLsGet('mgm_bca_app_ver', 'mgm_app_ver') !== APP_VER) {
         try { localStorage.removeItem('mgm_bca_cloud_subjects'); } catch (e) {}
         try { localStorage.setItem('mgm_bca_app_ver', APP_VER); } catch (e) {}
