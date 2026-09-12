@@ -24,11 +24,11 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 
-  <link rel="stylesheet" href="styles.css?v=v29.30-paste-preview">
+  <link rel="stylesheet" href="styles.css?v=v29.31-paste-prefix">
   <script>
     // Auto-update on first open after GitHub Pages deploy (runs before app.js)
     (function () {
-      var EXPECTED = 'v29.30-paste-preview';
+      var EXPECTED = 'v29.31-paste-prefix';
       var KEY = 'mgm_bca_shell_ver';
       var reloading = false;
 
@@ -96,7 +96,7 @@
       // 2) Register SW with versioned URL so GitHub Pages cannot keep old sw.js forever
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-          var swUrl = './sw.js?v=v178-paste-preview';
+          var swUrl = './sw.js?v=v179-paste-prefix';
           navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' })
             .then(function (reg) {
               if (navigator.onLine) {
@@ -1024,7 +1024,9 @@
         <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px; line-height: 1.45;">
           Use a <strong>header block</strong> for Year · Section · Subject, then one line per class:
           <strong>Date · Absentee rolls</strong> (or NIL). Dates can be <strong>1/8</strong>, <strong>1 Aug</strong>, or <strong>2026-08-01</strong>.
-          Slot is optional on each line — uses <strong>Default Slot</strong> below (or write <em>Slot 2</em> to override).
+          Slot is optional — uses <strong>Default Slot</strong> (or write <em>Slot 2</em>).
+          Short rolls (<strong>09, 17</strong>) expand with <strong>Default Prefix</strong> or a header like
+          <em>First Year | A | DBMS | Prefix 25A</em>. Preview shows the full rolls before Load.
           Loads through the same Submit path — conflict checks stay unchanged.
         </p>
         <div class="form-group" style="margin-bottom: 10px;">
@@ -1032,8 +1034,12 @@
           <select id="paperPasteSlot" class="form-select"></select>
         </div>
         <div class="form-group" style="margin-bottom: 10px;">
+          <label for="paperPastePrefix">Default Roll Prefix (for short absentees like 09, 17)</label>
+          <input type="text" id="paperPastePrefix" class="form-input" placeholder="e.g. 25A or S01 — leave blank if typing full rolls" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="form-group" style="margin-bottom: 10px;">
           <label for="paperPasteText">Paste here</label>
-          <textarea id="paperPasteText" class="form-input" rows="9" placeholder="First Year | A | DBMS&#10;1/8  09, 17, 21&#10;5 Aug  05, 12&#10;12/8/26  NIL&#10;&#10;First Year | B | DBMS&#10;1/8  03, 11&#10;5 Aug  Slot 2  07"></textarea>
+          <textarea id="paperPasteText" class="form-input" rows="9" placeholder="First Year | A | DBMS | Prefix 25A&#10;1/8  09, 17, 21&#10;5 Aug  05, 12&#10;12/8/26  NIL&#10;&#10;First Year | B | DBMS&#10;1/8  03, 11&#10;5 Aug  Slot 2  07"></textarea>
         </div>
         <div id="paperPastePreview" class="paper-paste-preview" hidden></div>
         <div class="modal-buttons">
@@ -1186,7 +1192,7 @@
 
   <datalist id="subjectDatalist"></datalist>
 
-  <script src="parser.js?v=v29.30-paste-preview"></script>
-  <script src="app.js?v=v29.30-paste-preview"></script>
+  <script src="parser.js?v=v29.31-paste-prefix"></script>
+  <script src="app.js?v=v29.31-paste-prefix"></script>
 </body>
 </html>
