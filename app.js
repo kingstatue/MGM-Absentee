@@ -3766,11 +3766,21 @@ function paperPasteParseDataLine(line, defaultSlot) {
 }
 
 function paperPasteParseYear(raw) {
-    const s = String(raw || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    let s = String(raw || '').trim().toLowerCase().replace(/\s+/g, ' ');
     if (!s) return '';
-    if (/^(first|1st|i|fy|year 1|1 year|1)$/.test(s) || s.indexOf('first') !== -1) return 'First Year';
-    if (/^(second|2nd|ii|sy|year 2|2 year|2)$/.test(s) || s.indexOf('second') !== -1) return 'Second Year';
-    if (/^(third|3rd|iii|ty|year 3|3 year|3)$/.test(s) || s.indexOf('third') !== -1) return 'Third Year';
+    // Allow "1st Year", "I BCA", "2 B.Com", "III BSC", etc.
+    s = s.replace(/\b(b\.?\s*c\.?\s*a\.?|bca|b\.?\s*com\.?|bcm|b\.?\s*a\.?|ba|b\.?\s*sc\.?|bsc)\b/g, ' ');
+    s = s.replace(/\byears?\b/g, ' ');
+    s = s.replace(/[|.,;:_/+]+/g, ' ').replace(/\s+/g, ' ').trim();
+
+    // Longer tokens first (iii before ii before i)
+    if (/\b(third|3rd|iii|ty)\b/.test(s) || s === '3' || s === 'iii') return 'Third Year';
+    if (/\b(second|2nd|ii|sy)\b/.test(s) || s === '2' || s === 'ii') return 'Second Year';
+    if (/\b(first|1st|fy)\b/.test(s) || s === '1' || s === 'i') return 'First Year';
+
+    if (s.indexOf('third') !== -1) return 'Third Year';
+    if (s.indexOf('second') !== -1) return 'Second Year';
+    if (s.indexOf('first') !== -1) return 'First Year';
     return '';
 }
 
@@ -5307,7 +5317,7 @@ function initSubjectManager() {
 // Version upgrade check to update stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    const APP_VER = 'v29.32-no-dup-today';
+    const APP_VER = 'v29.33-year-aliases';
     if (asLsGet('mgm_bca_app_ver', 'mgm_app_ver') !== APP_VER) {
         try { localStorage.removeItem('mgm_bca_cloud_subjects'); } catch (e) {}
         try { localStorage.setItem('mgm_bca_app_ver', APP_VER); } catch (e) {}
