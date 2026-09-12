@@ -5307,7 +5307,7 @@ function initSubjectManager() {
 // Version upgrade check to update stale cached cloud subjects on GitHub Pages update
 (function checkAppCacheVersion() {
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-    const APP_VER = 'v29.31-paste-prefix';
+    const APP_VER = 'v29.32-no-dup-today';
     if (asLsGet('mgm_bca_app_ver', 'mgm_app_ver') !== APP_VER) {
         try { localStorage.removeItem('mgm_bca_cloud_subjects'); } catch (e) {}
         try { localStorage.setItem('mgm_bca_app_ver', APP_VER); } catch (e) {}
